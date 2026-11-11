@@ -43,8 +43,9 @@ func setCookie(w http.ResponseWriter, name, val string, maxAge int) {
 		HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 }
 
-// newSession stores a fresh session for userID and returns the cookie value.
-func (a *Auth) newSession(ctx context.Context, userID string) (string, error) {
+// newSession stores a fresh session and its login audit row in one transaction and returns the cookie value.
+func (a *Auth) newSession(r *http.Request, userID string) (string, error) {
+	ctx := r.Context()
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
@@ -53,7 +54,10 @@ func (a *Auth) newSession(ctx context.Context, userID string) (string, error) {
 	err := a.db.WithUser(ctx, userID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `INSERT INTO web_sessions(id_hash, user_id, created_at, last_seen_at, expires_at)
 			VALUES ($1, $2, $3, $3, $4)`, hashID(raw), userID, now, now.Add(sessionTTL))
-		return err
+		if err != nil {
+			return err
+		}
+		return a.audit(ctx, tx, r, userID, "login", map[string]any{})
 	})
 	return base64.RawURLEncoding.EncodeToString(raw), err
 }
@@ -86,6 +90,9 @@ func (a *Auth) Require(next http.Handler) http.Handler {
 			}
 			http.Redirect(w, r, "/auth/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 			return
+		}
+		if c, err := r.Cookie(CookieName); err == nil { // sliding expiry: keep the browser cookie as long-lived as the DB row
+			setCookie(w, CookieName, c.Value, int(sessionTTL.Seconds()))
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, p)))
 	})

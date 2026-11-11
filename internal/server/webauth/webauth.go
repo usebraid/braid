@@ -117,7 +117,10 @@ func randStr() string {
 
 // safeNext allows only same-site absolute paths.
 func safeNext(n string) string {
-	if len(n) < 1 || n[0] != '/' || (len(n) > 1 && (n[1] == '/' || n[1] == '\\')) {
+	if n == "" || n[0] != '/' || strings.HasPrefix(n, "//") || strings.ContainsFunc(n, func(c rune) bool { return c < 0x21 || c == 0x7f || c == '\\' }) {
+		return "/"
+	}
+	if u, err := url.Parse(n); err != nil || u.Scheme != "" || u.Host != "" {
 		return "/"
 	}
 	return n
@@ -213,12 +216,11 @@ func (a *Auth) callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "access denied", http.StatusForbidden)
 		return
 	}
-	sess, err := a.newSession(ctx, userID)
+	sess, err := a.newSession(r, userID)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	a.auditSystem(r, userID, "login", map[string]any{})
 	setCookie(w, CookieName, sess, int(sessionTTL.Seconds()))
 	http.Redirect(w, r, safeNext(s.Next), http.StatusFound)
 }

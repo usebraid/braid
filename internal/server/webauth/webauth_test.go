@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/usebraid/braid/internal/server/config"
 	"github.com/usebraid/braid/internal/server/db"
 	"github.com/usebraid/braid/internal/server/httpx"
@@ -222,5 +224,34 @@ func TestDisabledUserCannotLogin(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 403 {
 		t.Fatalf("disabled user got %d", resp.StatusCode)
+	}
+}
+
+func TestSessionCookieRefreshedAndLoginAudited(t *testing.T) {
+	e := start(t, nil)
+	c := e.client(t)
+	login(t, e, c, oidctest.User{Sub: "aud"}).Body.Close()
+	resp, err := c.Get(e.srv.URL + "/api/v1/whoami")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	ok := false
+	for _, ck := range resp.Cookies() {
+		ok = ok || (ck.Name == webauth.CookieName && ck.MaxAge == 604800)
+	}
+	if !ok {
+		t.Fatal("no refreshed session cookie with Max-Age=604800")
+	}
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, e.owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	var n int
+	if err := conn.QueryRow(ctx, `SELECT count(*) FROM audit_log a JOIN users u ON u.id = a.subject_user_id
+		WHERE a.action = 'login' AND u.oidc_sub = 'aud'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("login audit rows = %d, err %v", n, err)
 	}
 }
