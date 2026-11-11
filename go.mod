@@ -2,6 +2,8 @@ module github.com/usebraid/braid
 
 go 1.27
 
+toolchain go1.27.4
+
 require github.com/jackc/pgx/v5 v5.12.0
 
 require (
