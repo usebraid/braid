@@ -1,0 +1,14 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - gosec
+    - errcheck
+    - staticcheck
+    - govet
+    - ineffassign
+    - unused
+    - bodyclose
+    - noctx
+    - errorlint
+    - revive

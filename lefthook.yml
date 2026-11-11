@@ -1,0 +1,8 @@
+pre-commit:
+  commands:
+    check:
+      run: scripts/check.sh
+commit-msg:
+  commands:
+    msg:
+      run: scripts/check-commit-msg.sh {1}

@@ -1,2 +1,6 @@
 .superpowers/
 .DS_Store
+
+/dist/
+/braid
+/braid-server

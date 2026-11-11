@@ -1,0 +1,6 @@
+# Credits
+
+Braid builds on ideas from these MIT-licensed projects. No code is included yet; see `THIRD_PARTY_NOTICES.md`.
+
+- [simple10/agents-observe](https://github.com/simple10/agents-observe) (Joe Johnston): reference for transcript parsing, the event model, hierarchy and replay UI ideas, and the original idea of syncing sessions.
+- [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (Dietrich Gebert): board look and feel and SVG charts, cost/metric logic and price table, band mod as a template, website as a model for usebraid.dev.
