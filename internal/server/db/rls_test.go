@@ -7,9 +7,11 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/usebraid/braid/internal/testdb"
 )
 
 func userExec(f fixture, user, q string, args ...any) error {
@@ -107,5 +109,77 @@ func TestAuditIsolationAndDisabledApprover(t *testing.T) {
 	})
 	if status != "access_denied" {
 		t.Errorf("poll after disable: %s", status)
+	}
+}
+
+// B must get a foreign_key_violation, never a unique_violation, for tuples that exist for A.
+func TestNoUniqueKeyOracle(t *testing.T) {
+	f := setup(t)
+	var fileID int64
+	ownerRead(t, f.owner, `SELECT id FROM source_files`, &fileID) // B cannot see it via RLS; use A's guessable id
+	err := userExec(f, f.userB, `INSERT INTO raw_lines(user_id,source_file_id,"offset",line_hash,line) VALUES ($1,$2,0,'\x01','\x7b7d')`, f.userB, fileID)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
+		t.Fatalf("want 23503, got %v", err)
+	}
+	// source_files(device, path, head_hash) of A must not collide for B either
+	err = userExec(f, f.userB, `INSERT INTO source_files(user_id,device_id,rel_path,head_hash,kind,first_seen,last_seen) VALUES ($1,'00000000-0000-0000-0000-00000000000a','p/a.jsonl','h','append',now(),now())`, f.userB)
+	if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
+		t.Fatalf("source_files: want 23503, got %v", err)
+	}
+}
+
+func TestAuthFunctionsPositive(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	testdb.Exec(t, f.owner, `INSERT INTO web_sessions(id_hash,user_id,created_at,last_seen_at,expires_at) VALUES ('\x51',$1,now()-interval '29 days',now()-interval '29 days',now()+interval '6 days')`, f.userA)
+	testdb.Exec(t, f.owner, `INSERT INTO device_tokens(device_id,user_id,hash,scopes,created_at) VALUES ('00000000-0000-0000-0000-00000000000a',$1,'\x52','{ingest:write}',now()-interval '5 days')`, f.userA)
+	var uid string
+	var admin bool
+	if err := f.d.WithSystem(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT * FROM auth_session('\x51')`).Scan(&uid, &admin)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if uid != f.userA || admin {
+		t.Fatalf("auth_session: %s %v", uid, admin)
+	}
+	var created, expires time.Time
+	var last time.Time
+	// expires_at is capped at created_at + 30 days (1 day from now), not now()+7d
+	ownerRead(t, f.owner, `SELECT created_at, expires_at, last_seen_at FROM web_sessions WHERE id_hash='\x51'`, &created, &expires, &last)
+	if !expires.Equal(created.Add(30 * 24 * time.Hour)) {
+		t.Errorf("expires_at %v not capped at created+30d (%v)", expires, created)
+	}
+	if time.Since(last) > time.Minute {
+		t.Error("last_seen_at not refreshed")
+	}
+	var tok, dev, usr string
+	var scopes []string
+	if err := f.d.WithSystem(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT * FROM auth_device_token('\x52')`).Scan(&tok, &dev, &usr, &scopes)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if dev != "00000000-0000-0000-0000-00000000000a" || usr != f.userA || len(scopes) != 1 || scopes[0] != "ingest:write" {
+		t.Fatalf("auth_device_token: %s %s %v", dev, usr, scopes)
+	}
+	var used time.Time
+	ownerRead(t, f.owner, `SELECT last_used_at FROM device_tokens WHERE hash='\x52'`, &used)
+	if time.Since(used) > time.Minute {
+		t.Error("last_used_at not updated")
+	}
+}
+
+func ownerRead(t *testing.T, ownerURL, q string, dest ...any) {
+	t.Helper()
+	ctx := context.Background()
+	c, err := pgx.Connect(ctx, ownerURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close(ctx) }()
+	if err := c.QueryRow(ctx, q).Scan(dest...); err != nil {
+		t.Fatal(err)
 	}
 }

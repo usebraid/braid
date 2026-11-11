@@ -40,7 +40,7 @@ CREATE TABLE source_files (
   rel_path text NOT NULL, head_hash text NOT NULL, kind text NOT NULL,
   end_offset bigint NOT NULL DEFAULT 0,
   first_seen timestamptz NOT NULL, last_seen timestamptz NOT NULL,
-  UNIQUE (device_id, rel_path, head_hash),
+  UNIQUE (user_id, device_id, rel_path, head_hash),
   UNIQUE (id, user_id),
   FOREIGN KEY (device_id, user_id) REFERENCES devices (id, user_id) ON DELETE CASCADE);
 
@@ -48,7 +48,7 @@ CREATE TABLE raw_lines (
   id bigserial PRIMARY KEY, user_id uuid NOT NULL REFERENCES users ON DELETE CASCADE,
   source_file_id bigint NOT NULL,
   "offset" bigint NOT NULL, line_hash bytea NOT NULL, line bytea NOT NULL, received_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (source_file_id, "offset", line_hash),
+  UNIQUE (user_id, source_file_id, "offset", line_hash),
   FOREIGN KEY (source_file_id, user_id) REFERENCES source_files (id, user_id) ON DELETE CASCADE);
 CREATE INDEX raw_lines_source_offset ON raw_lines (source_file_id, "offset");
 
@@ -56,7 +56,7 @@ CREATE TABLE raw_snapshots (
   id bigserial PRIMARY KEY, user_id uuid NOT NULL REFERENCES users ON DELETE CASCADE,
   source_file_id bigint NOT NULL,
   content_hash bytea NOT NULL, content bytea NOT NULL, received_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (source_file_id, content_hash),
+  UNIQUE (user_id, source_file_id, content_hash),
   FOREIGN KEY (source_file_id, user_id) REFERENCES source_files (id, user_id) ON DELETE CASCADE);
 
 CREATE TABLE audit_log (

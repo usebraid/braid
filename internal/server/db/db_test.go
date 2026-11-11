@@ -177,6 +177,14 @@ func TestDisableRevokesSessionsAndTokens(t *testing.T) {
 	admin := upsert(t, f.d, "sub-admin", true)
 	testdb.Exec(t, f.owner, `INSERT INTO web_sessions(id_hash,user_id,created_at,last_seen_at,expires_at) VALUES ('\x01',$1,now(),now(),now()+interval '1 day')`, f.userA)
 	testdb.Exec(t, f.owner, `INSERT INTO device_tokens(id,device_id,user_id,hash,scopes,created_at) VALUES (gen_random_uuid(),'00000000-0000-0000-0000-00000000000a',$1,'\x02','{ingest:write}',now())`, f.userA)
+	for _, q := range []string{`SELECT count(*) FROM auth_session('\x01')`, `SELECT count(*) FROM auth_device_token('\x02')`} {
+		var c int
+		if err := f.d.WithSystem(context.Background(), func(tx pgx.Tx) error {
+			return tx.QueryRow(context.Background(), q).Scan(&c)
+		}); err != nil || c != 1 {
+			t.Fatalf("%s before disable: %d %v", q, c, err)
+		}
+	}
 	if err := f.d.WithUser(context.Background(), admin, func(tx pgx.Tx) error {
 		_, err := tx.Exec(context.Background(), `SELECT admin_set_disabled($1, true)`, f.userA)
 		return err
@@ -184,15 +192,19 @@ func TestDisableRevokesSessionsAndTokens(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int
-	_ = f.d.WithSystem(context.Background(), func(tx pgx.Tx) error {
+	if err := f.d.WithSystem(context.Background(), func(tx pgx.Tx) error {
 		return tx.QueryRow(context.Background(), `SELECT count(*) FROM auth_session('\x01')`).Scan(&n)
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if n != 0 {
 		t.Error("session of disabled user still valid")
 	}
-	_ = f.d.WithSystem(context.Background(), func(tx pgx.Tx) error {
+	if err := f.d.WithSystem(context.Background(), func(tx pgx.Tx) error {
 		return tx.QueryRow(context.Background(), `SELECT count(*) FROM auth_device_token('\x02')`).Scan(&n)
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if n != 0 {
 		t.Error("token of disabled user still valid")
 	}
