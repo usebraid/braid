@@ -71,6 +71,7 @@ func TestValidPath(t *testing.T) {
 		k Kind
 	}{
 		{"-Users-x-proj/abc.jsonl", KindAppend},
+		{strings.Repeat("a", MaxPathLen-6) + ".jsonl", KindAppend},
 		{"-Users-x-proj/abc/subagents/agent-a1.meta.json", KindSnapshot},
 	}
 	for _, c := range ok {
@@ -94,6 +95,8 @@ func TestValidPath(t *testing.T) {
 		{"", KindAppend},
 		{strings.Repeat("a", MaxPathLen) + ".jsonl", KindAppend},
 		{"a/x.txt", KindAppend},
+		{"a/x\x01.jsonl", KindAppend},
+		{strings.Repeat("a", MaxPathLen-6+1) + ".jsonl", KindAppend},
 	}
 	for _, c := range bad {
 		if err := ValidPath(c.p, c.k); err == nil {
@@ -122,6 +125,11 @@ func TestRequestValidate(t *testing.T) {
 		{Kind: KindSnapshot, Path: "p/a.json", Content: &Line{Text: &txt}, Lines: []Line{{Text: &txt}}},
 		{Kind: KindAppend, Path: "p/a.jsonl", HeadHash: h, Lines: []Line{{}}},
 	}
+	nl := "a\nb"
+	bads = append(bads,
+		FileBatch{Kind: KindAppend, Path: "p/a.jsonl", HeadHash: h, Lines: []Line{{Text: &nl}}},
+		FileBatch{Kind: KindAppend, Path: "p/a.jsonl", HeadHash: h, Lines: []Line{{B64: []byte{0xff, '\n'}}}},
+	)
 	for i, b := range bads {
 		if err := (IngestRequest{Files: []FileBatch{b}}).Validate(); err == nil {
 			t.Errorf("bad[%d] accepted", i)

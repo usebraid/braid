@@ -5,6 +5,7 @@
 package protocol
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -190,8 +191,12 @@ func (r IngestRequest) Validate() error {
 				return fmt.Errorf("files[%d]: append must not carry content", i)
 			}
 			for j, l := range f.Lines {
-				if _, err := l.Bytes(); err != nil {
+				b, err := l.Bytes()
+				if err != nil {
 					return fmt.Errorf("files[%d].lines[%d]: %w", i, j, err)
+				}
+				if bytes.IndexByte(b, '\n') >= 0 { // EndOffset assumes one '\n' per line
+					return fmt.Errorf("files[%d].lines[%d]: embedded newline", i, j)
 				}
 			}
 		case KindSnapshot:
