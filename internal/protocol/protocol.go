@@ -26,6 +26,7 @@ const (
 	MaxCompressedBody   = 8 << 20
 	MaxDecompressedBody = 64 << 20
 	MaxPathLen          = 1024
+	MaxLinesPerRequest  = 20000
 )
 
 // Kind is the sync mode of a file: append-only log or whole-file snapshot.
@@ -36,6 +37,9 @@ const (
 	KindAppend   Kind = "append"
 	KindSnapshot Kind = "snapshot"
 )
+
+// ErrTooManyLines means a request carries more than MaxLinesPerRequest lines in total.
+var ErrTooManyLines = errors.New("protocol: too many lines in request")
 
 // ErrBadLine means a Line has both or neither of Text and B64 set.
 var ErrBadLine = errors.New("protocol: line must set exactly one of text or b64")
@@ -175,6 +179,13 @@ func validHash(h string) bool {
 
 // Validate checks a whole request. An append entry with zero lines is valid.
 func (r IngestRequest) Validate() error {
+	total := 0
+	for _, f := range r.Files {
+		total += len(f.Lines)
+	}
+	if total > MaxLinesPerRequest {
+		return ErrTooManyLines
+	}
 	for i, f := range r.Files {
 		if err := ValidPath(f.Path, f.Kind); err != nil {
 			return fmt.Errorf("files[%d]: %w", i, err)

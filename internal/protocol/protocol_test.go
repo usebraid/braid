@@ -6,6 +6,7 @@ package protocol
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -168,5 +169,22 @@ func TestDeviceCodeRequestValidate(t *testing.T) {
 	bad.OS = strings.Repeat("x", 129)
 	if bad.Validate() == nil {
 		t.Error("long field accepted")
+	}
+}
+
+func TestValidateLineCap(t *testing.T) {
+	txt := "{}"
+	mk := func(n int) IngestRequest {
+		return IngestRequest{Files: []FileBatch{{Kind: KindAppend, Path: "p/a.jsonl", HeadHash: strings.Repeat("a", 64), Lines: make([]Line, n)}}}
+	}
+	ok := mk(MaxLinesPerRequest)
+	for i := range ok.Files[0].Lines {
+		ok.Files[0].Lines[i] = Line{Text: &txt}
+	}
+	if err := ok.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mk(MaxLinesPerRequest + 1).Validate(); !errors.Is(err, ErrTooManyLines) {
+		t.Fatalf("got %v", err)
 	}
 }

@@ -33,6 +33,7 @@ type reply struct {
 type env struct {
 	owner, app               string
 	srv                      *httptest.Server
+	h                        *ingest.Handler
 	tokA, tokB, tokStatsOnly string
 }
 
@@ -66,7 +67,8 @@ func newEnvWithLimit(t *testing.T, perMinute int) *env {
 			SELECT d.id, d.user_id, $2, $3::text[] FROM devices d WHERE d.id = md5($1)::uuid`, u.dev, h[:], u.scopes)
 	}
 	mux := http.NewServeMux()
-	ingest.New(d).Register(mux, httpx.NewLimiter(perMinute, time.Now))
+	e.h = ingest.New(d)
+	e.h.Register(mux, httpx.NewLimiter(perMinute, time.Now))
 	e.srv = httptest.NewServer(mux)
 	t.Cleanup(e.srv.Close)
 	return e
@@ -338,5 +340,71 @@ func TestRateLimit(t *testing.T) {
 	}
 	if codes[3] != 429 {
 		t.Fatalf("codes %v", codes)
+	}
+}
+
+func TestSnapshotRevertRecorded(t *testing.T) {
+	e := newEnv(t)
+	for _, v := range []string{`{"v":1}`, `{"v":2}`, `{"v":1}`, `{"v":1}`} {
+		c := line(v)
+		e.post(t, e.tokA, protocol.IngestRequest{Files: []protocol.FileBatch{{Kind: protocol.KindSnapshot, Path: "p/s.json", Content: &c}}}, nil)
+	}
+	if n := e.countSnapshots(t); n != 3 {
+		t.Fatalf("snapshots: %d, want 3", n)
+	}
+	if f := e.files(t, e.tokA); len(f) != 1 || f[0].ContentHash != protocol.HashHex([]byte(`{"v":1}`)) {
+		t.Fatalf("%+v", f)
+	}
+}
+
+func TestTooManyLines(t *testing.T) {
+	e := newEnv(t)
+	ls := make([]string, protocol.MaxLinesPerRequest+1)
+	resp, _ := e.post(t, e.tokA, appendReq(0, ls...), nil)
+	if resp.StatusCode != 413 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	if n := e.countLines(t); n != 0 {
+		t.Fatalf("stored %d", n)
+	}
+}
+
+func TestConcurrencyCap(t *testing.T) {
+	e := newEnv(t)
+	release := e.h.HoldSlots(ingest.MaxConcurrentIngest)
+	resp, _ := e.post(t, e.tokA, appendReq(0, `{"a":0}`), nil)
+	if resp.StatusCode != 429 {
+		t.Fatalf("full: %d", resp.StatusCode)
+	}
+	release()
+	if resp, _ := e.post(t, e.tokA, appendReq(0, `{"a":0}`), nil); resp.StatusCode != 200 {
+		t.Fatalf("after release: %d", resp.StatusCode)
+	}
+}
+
+func TestOppositeOrderNoDeadlock(t *testing.T) {
+	e := newEnv(t)
+	mk := func(a, b string) protocol.IngestRequest {
+		r := appendReq(0, `{"a":0}`)
+		r.Files = append(r.Files, r.Files[0])
+		r.Files[0].Path, r.Files[1].Path = a, b
+		return r
+	}
+	for i := 0; i < 20; i++ {
+		codes := make(chan int, 2)
+		for _, r := range []protocol.IngestRequest{mk("p/x.jsonl", "p/y.jsonl"), mk("p/y.jsonl", "p/x.jsonl")} {
+			go func() {
+				resp, out := e.post(t, e.tokA, r, nil)
+				if resp.StatusCode == 200 && out.Files[0].Path != r.Files[0].Path {
+					resp.StatusCode = -1 // results must keep request order
+				}
+				codes <- resp.StatusCode
+			}()
+		}
+		for j := 0; j < 2; j++ {
+			if c := <-codes; c != 200 {
+				t.Fatalf("iteration %d: %d", i, c)
+			}
+		}
 	}
 }

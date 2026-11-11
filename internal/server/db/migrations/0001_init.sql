@@ -56,8 +56,9 @@ CREATE TABLE raw_snapshots (
   id bigserial PRIMARY KEY, user_id uuid NOT NULL REFERENCES users ON DELETE CASCADE,
   source_file_id bigint NOT NULL,
   content_hash bytea NOT NULL, content bytea NOT NULL, received_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (user_id, source_file_id, content_hash),
   FOREIGN KEY (source_file_id, user_id) REFERENCES source_files (id, user_id) ON DELETE CASCADE);
+
+CREATE INDEX raw_snapshots_newest ON raw_snapshots (source_file_id, received_at DESC, id DESC);
 
 CREATE TABLE audit_log (
   id bigserial PRIMARY KEY, at timestamptz NOT NULL DEFAULT now(),

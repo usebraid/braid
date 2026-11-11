@@ -4,7 +4,7 @@
 package ingest
 
 import (
-	"bytes"
+	"cmp"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/json"
@@ -12,6 +12,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/usebraid/braid/internal/protocol"
@@ -20,10 +22,16 @@ import (
 )
 
 // Handler serves the ingest endpoints.
-type Handler struct{ db *db.DB }
+type Handler struct {
+	db  *db.DB
+	sem chan struct{} // bounds concurrent ingest requests (memory)
+}
+
+// MaxConcurrentIngest bounds in-flight ingest requests per server.
+const MaxConcurrentIngest = 4
 
 // New returns a Handler on d.
-func New(d *db.DB) *Handler { return &Handler{db: d} }
+func New(d *db.DB) *Handler { return &Handler{db: d, sem: make(chan struct{}, MaxConcurrentIngest)} }
 
 // Register mounts the endpoints; both need scope ingest:write.
 func (h *Handler) Register(mux *http.ServeMux, lim *httpx.Limiter) {
@@ -39,31 +47,35 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		errJSON(w, http.StatusUnsupportedMediaType, "unsupported_encoding")
 		return
 	}
-	body, status, code := readBody(w, r)
-	if code != "" {
-		errJSON(w, status, code)
+	select {
+	case h.sem <- struct{}{}:
+		defer func() { <-h.sem }()
+	default:
+		httpx.TooMany(w, time.Second)
 		return
 	}
 	var req protocol.IngestRequest
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil || req.Validate() != nil {
-		errJSON(w, http.StatusBadRequest, "bad_request")
+	if status, code := readRequest(w, r, &req); code != "" {
+		errJSON(w, status, code)
 		return
 	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		errJSON(w, http.StatusBadRequest, "bad_request")
-		return
+	// Fixed lock order across concurrent requests avoids deadlocks; results go back in request order.
+	order := make([]int, len(req.Files))
+	for i := range order {
+		order[i] = i
 	}
-	resp := protocol.IngestResponse{Files: make([]protocol.FileResult, 0, len(req.Files))}
+	sort.Slice(order, func(i, j int) bool {
+		a, b := req.Files[order[i]], req.Files[order[j]]
+		return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.Path, b.Path), cmp.Compare(a.HeadHash, b.HeadHash)) < 0
+	})
+	resp := protocol.IngestResponse{Files: make([]protocol.FileResult, len(req.Files))}
 	err := h.db.WithUser(r.Context(), dev.UserID, func(tx pgx.Tx) error {
-		resp.Files = resp.Files[:0]
-		for _, f := range req.Files {
-			res, err := storeFile(r, tx, dev, f)
+		for _, i := range order {
+			res, err := storeFile(r, tx, dev, req.Files[i])
 			if err != nil {
 				return err
 			}
-			resp.Files = append(resp.Files, res)
+			resp.Files[i] = res
 		}
 		_, err := tx.Exec(r.Context(), `UPDATE devices SET last_sync_at = now() WHERE id = $1`, dev.DeviceID)
 		return err
@@ -79,36 +91,58 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// readBody returns the decompressed body, or an HTTP status and error code.
-func readBody(w http.ResponseWriter, r *http.Request) ([]byte, int, string) {
+var errTooLarge = errors.New("body too large")
+
+// capReader fails with errTooLarge once more than n bytes were read.
+type capReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *capReader) Read(p []byte) (int, error) {
+	if c.n < 0 {
+		return 0, errTooLarge
+	}
+	if int64(len(p)) > c.n+1 {
+		p = p[:c.n+1]
+	}
+	k, err := c.r.Read(p)
+	c.n -= int64(k)
+	if c.n < 0 {
+		return k, errTooLarge
+	}
+	return k, err
+}
+
+// readRequest streams gzip -> JSON into req and validates it; code is "" on success.
+func readRequest(w http.ResponseWriter, r *http.Request, req *protocol.IngestRequest) (status int, code string) {
+	fail := func(err error) (int, string) {
+		var mb *http.MaxBytesError
+		if errors.Is(err, errTooLarge) || errors.As(err, &mb) || errors.Is(err, protocol.ErrTooManyLines) {
+			return http.StatusRequestEntityTooLarge, "too_large"
+		}
+		return http.StatusBadRequest, "bad_request"
+	}
 	zr, err := gzip.NewReader(http.MaxBytesReader(w, r.Body, protocol.MaxCompressedBody))
 	if err != nil {
-		return nil, statusFor(err), codeFor(err)
+		return fail(err)
 	}
 	defer func() { _ = zr.Close() }()
-	b, err := io.ReadAll(io.LimitReader(zr, protocol.MaxDecompressedBody+1))
-	if err != nil {
-		return nil, statusFor(err), codeFor(err)
+	dec := json.NewDecoder(&capReader{r: zr, n: protocol.MaxDecompressedBody})
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(req); err != nil {
+		return fail(err)
 	}
-	if len(b) > protocol.MaxDecompressedBody {
-		return nil, http.StatusRequestEntityTooLarge, "too_large"
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errors.New("trailing data")
+		}
+		return fail(err)
 	}
-	return b, 0, ""
-}
-
-func statusFor(err error) int {
-	if codeFor(err) == "too_large" {
-		return http.StatusRequestEntityTooLarge
+	if err := req.Validate(); err != nil {
+		return fail(err)
 	}
-	return http.StatusBadRequest
-}
-
-func codeFor(err error) string {
-	var mb *http.MaxBytesError
-	if errors.As(err, &mb) {
-		return "too_large"
-	}
-	return "bad_request"
+	return 0, ""
 }
 
 func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (protocol.FileResult, error) {
@@ -135,8 +169,11 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 			return res, err
 		}
 		h := sha256.Sum256(c)
-		_, err = tx.Exec(ctx, `INSERT INTO raw_snapshots(user_id, source_file_id, content_hash, content)
-			VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, source_file_id, content_hash) DO NOTHING`,
+		// Append-only: skip only if the newest row already has this hash (the file row lock serialises this).
+		_, err = tx.Exec(ctx, `INSERT INTO raw_snapshots(user_id, source_file_id, content_hash, content, received_at)
+			SELECT $1, $2, $3, $4, clock_timestamp()
+			 WHERE NOT EXISTS (SELECT 1 FROM (SELECT content_hash FROM raw_snapshots WHERE source_file_id = $2
+			                    ORDER BY received_at DESC, id DESC LIMIT 1) n WHERE n.content_hash = $3)`,
 			dev.UserID, id, h[:], c)
 		return res, err
 	}

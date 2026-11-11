@@ -93,7 +93,7 @@ Auth: device token. Returns `[{path, head_hash, kind, end_offset, content_hash}]
 ### 3.4 Dedupe
 
 - `raw_lines` unique on `(source_file_id, "offset", line_hash)`, inserted with `ON CONFLICT DO NOTHING`.
-- `raw_snapshots` unique on `(source_file_id, content_hash)`.
+- `raw_snapshots` is append-only: a row is inserted only when `content_hash` differs from the newest row of that file, so a revert (v1 → v2 → v1) is recorded.
 - `line_hash` and `content_hash` are SHA-256 of the raw bytes, computed by the server.
 
 ## 4. Daemon
