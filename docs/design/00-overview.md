@@ -13,6 +13,7 @@ A self-hosted, cross-device dashboard holding the **complete, lossless history**
 - Live view of running sessions including subagents.
 - Session detail as a node canvas of the main session, its subagents and skill phases.
 - KPIs (sessions, agent time, cost, tokens, streak) across all devices and the whole history.
+- Failures: how often and why Claude failed — usage limits (5-hour, weekly, monthly spend), rate limits, server/network errors, refusals, failed tool calls — including time lost until a limit reset.
 - Look & feel of the ponytail board: dark background, vivid palette, gradients, glow.
 - A band inside Claude Code showing the current session plus "today across all devices".
 
@@ -21,7 +22,7 @@ Braid is only considered usable once all sub-projects (section 6) are done.
 ## 2. Hard requirements
 
 1. **Nothing is lost.** Raw data is stored immutably and byte-exact. Offline phases, crashes, token expiry and local transcript cleanup by Claude Code never lose data.
-2. **Zero model-context tokens.** Braid adds nothing to Claude's context: no skills, no hooks that print to stdout or return `additionalContext`. Verified by comparing `/context` with and without Braid installed.
+2. **No token cost.** Braid must not make Claude Code sessions more expensive. Hooks are allowed when they are useful, but must add nothing (or at most a few tokens, justified in the spec) to the model context: no skills, no hook output that reaches the model. Verified by comparing `/context` with and without Braid installed.
 3. **No endpoint without auth**, except `/healthz` and the device-flow entry page. The server may be publicly reachable.
 4. **Import of all existing transcripts** on every device.
 5. **Self-hosting first.** No built-in domain, any standards-compliant OIDC provider, `docker compose up` to start.
@@ -109,7 +110,7 @@ Each sub-project gets its own design spec, implementation plan and execution. Or
 |---|---|---|---|
 | 0 | Facts & scaffold | Transcript format and mod API verified (section 8); repo scaffold, CI and checks become the first tasks of sub-project 1. | this document |
 | 1 | Data path | Daemon (watch, offset/ACK, spool, import, service), ingest API, raw schema, OIDC web login, device flow, keychain, multi-user + RLS, device management, admin, audit log, basic rate limits. | `01-data-path.md` |
-| 2 | Derivation | Parser → sessions, agents, tool calls, skill phases, cost and tokens; `reindex`; full-text search; stats API. | `02-derivation.md` |
+| 2 | Derivation | Parser → sessions, agents, tool calls, skill phases, cost and tokens, failures; `reindex`; full-text search; stats API. | `02-derivation.md` |
 | 3 | Dashboard & live | All views (overview + KPIs, timeline, session canvas, live, devices, audit log, search, admin), WebSocket, light/dark. | `03-dashboard.md` |
 | 4 | Band | Claude Code mod using `braid stats --json`. | `04-band.md` |
 | 5 | Release & website | GoReleaser, signatures, GHCR multi-arch, Homebrew tap, `install.sh`, usebraid.dev modelled on the ponytail website, self-hosting docs. | `05-release.md` |
@@ -129,6 +130,7 @@ Each sub-project gets its own design spec, implementation plan and execution. Or
 - **Lines:** about 25 `type` values (`user`, `assistant`, `attachment`, `system`, `api-request`, `api-request-blob`, `ai-title`, `mode`, `pr-link`, …). Many lines carry no `uuid`, so identity is file + byte offset.
 - **Subagent linkage:** subagents are spawned by the `Agent` tool; `meta.json.toolUseId` equals the `tool_use.id` in the parent transcript. Nesting is possible (`spawnDepth`).
 - **Cost:** one API response spans several `assistant` lines sharing `message.id` and an identical `usage`; usage must be counted once per `message.id`. `usage` includes 5m/1h cache creation, cache reads, thinking tokens, server tool use and `speed`.
+- **Failures:** API failures are `assistant` lines with `isApiErrorMessage: true`, plus `apiError` (e.g. `usage_limit_reached`, `computer_slept`), `error` (`rate_limit`, `server_error`, …), `apiErrorStatus` (HTTP status) and, for limits, `quotaLimits` / `apiErrorParams.rate_limit_info` with `rateLimitType` (e.g. `five_hour`), `resetsAt` (epoch seconds) and `overageStatus`. Refusals appear as `system` lines with subtype `model_refusal_*`. Failed tool calls have `is_error: true` on their `tool_result`.
 - **Skills:** `Skill` tool calls carry `input.skill` (e.g. `superpowers-extended-cc:writing-plans`), which is enough to detect workflow phases.
 - **Mod API:** `register(on, options)` with `$.http.fetch`, `$.fs`, `$.process.run`, `$.session.usage()`, `$.ui.status`; loaded via a plugin `hooks` entry pointing to a JSON file with empty `hooks` and a `modules` list.
 - **Cleanup:** Claude Code deletes old transcripts after `cleanupPeriodDays`. Braid does not change this setting; the spool (see `01-data-path.md`) keeps unsynced data alive.
