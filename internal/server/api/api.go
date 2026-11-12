@@ -103,6 +103,7 @@ func (h *Handler) Register(mux *http.ServeMux, auth *webauth.Auth) {
 	adminMut := func(f http.HandlerFunc) http.Handler {
 		return httpx.RequireSameOrigin(h.cfg.PublicURL, auth.Require(auth.RequireAdmin(f)))
 	}
+	mux.Handle("GET /api/v1/about", user(h.about))
 	mux.Handle("GET /api/v1/me", user(h.me))
 	mux.Handle("PATCH /api/v1/me", mut(h.setTimeZone))
 	mux.Handle("GET /api/v1/devices", user(h.devices))

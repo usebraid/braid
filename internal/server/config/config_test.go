@@ -100,3 +100,21 @@ func TestJoinsAllErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestSourceURL(t *testing.T) {
+	c, err := FromEnv(env(base()))
+	if err != nil || c.SourceURL != DefaultSourceURL {
+		t.Fatalf("%v %q", err, c.SourceURL)
+	}
+	m := base()
+	m["BRAID_SOURCE_URL"] = "https://git.example.org/me/braid-fork/"
+	if c, err = FromEnv(env(m)); err != nil || c.SourceURL != "https://git.example.org/me/braid-fork" {
+		t.Fatalf("%v %q", err, c.SourceURL)
+	}
+	for _, bad := range []string{"http://x.test/a", "https://u:p@x.test/a", "https://x.test/a?q=1", "https://x.test/a#f", "nope"} {
+		m["BRAID_SOURCE_URL"] = bad
+		if _, err := FromEnv(env(m)); err == nil || !strings.Contains(err.Error(), "BRAID_SOURCE_URL") {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

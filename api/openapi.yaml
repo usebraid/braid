@@ -10,6 +10,13 @@ servers:
 security:
   - session: []
 paths:
+  /api/v1/about:
+    get:
+      operationId: getAbout
+      summary: Version of the running server and the link to its source
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/About" } } } }
+        "401": { $ref: "#/components/responses/Error" }
   /api/v1/me:
     get:
       operationId: getMe
@@ -322,6 +329,13 @@ components:
       required: [error]
       properties:
         error: { type: string }
+    About:
+      type: object
+      required: [version, commit, source_url]
+      properties:
+        version: { type: string }
+        commit: { type: string }
+        source_url: { type: string, format: uri, description: Link to exactly this version. }
     Me:
       type: object
       required: [id, email, name, is_admin, time_zone, time_zone_set]

@@ -26,7 +26,12 @@ type Config struct {
 	OIDCAdminGroup    string
 	OIDCAllowedGroups []string
 	TrustedProxies    []netip.Prefix
+	// SourceURL is the https link to the project's source (AGPL §13); forks override it.
+	SourceURL string
 }
+
+// DefaultSourceURL is the upstream repository.
+const DefaultSourceURL = "https://github.com/usebraid/braid"
 
 func splitList(s, sep string) []string {
 	var out []string
@@ -80,6 +85,11 @@ func FromEnv(getenv func(string) string) (Config, error) {
 			errs = append(errs, fmt.Errorf("BRAID_PUBLIC_URL: %w", err))
 		}
 		c.PublicURL = u
+	}
+	c.SourceURL = strings.TrimRight(def("BRAID_SOURCE_URL", DefaultSourceURL), "/")
+	if u, err := url.Parse(c.SourceURL); err != nil || u.Scheme != "https" || u.Host == "" || u.Opaque != "" ||
+		u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(c.SourceURL, "#") {
+		errs = append(errs, errors.New("BRAID_SOURCE_URL: must be an https URL without userinfo, query or fragment"))
 	}
 	c.Listen = def("BRAID_LISTEN", ":8080")
 	c.DatabaseURL = req("BRAID_DATABASE_URL")
