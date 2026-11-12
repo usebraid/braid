@@ -104,3 +104,24 @@ func TestTrigramAndTimeZoneAsApp(t *testing.T) {
 		t.Fatal("is_admin updatable")
 	}
 }
+
+func TestAdminStatsFunctionRequiresAdmin(t *testing.T) {
+	f := setup(t)
+	admin := upsert(t, f.d, "sub-admin", true)
+	call := func(user string) error {
+		return f.d.WithUser(context.Background(), user, func(tx pgx.Tx) error {
+			rows, err := tx.Query(context.Background(), `SELECT user_id FROM admin_stats()`)
+			if err != nil {
+				return err
+			}
+			rows.Close()
+			return rows.Err()
+		})
+	}
+	if err := call(f.userA); err == nil {
+		t.Fatal("non-admin may call admin_stats")
+	}
+	if err := call(admin); err != nil {
+		t.Fatal(err)
+	}
+}

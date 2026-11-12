@@ -114,6 +114,7 @@ func (h *Handler) Register(mux *http.ServeMux, auth *webauth.Auth) {
 	mux.Handle("POST /api/v1/admin/users/{id}/enable", adminMut(h.setDisabled(false)))
 	mux.Handle("DELETE /api/v1/admin/users/{id}", adminMut(h.deleteUser))
 	mux.Handle("GET /api/v1/admin/audit", admin(h.adminAudit))
+	mux.Handle("GET /api/v1/admin/stats", admin(h.adminStats))
 }
 
 var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -479,3 +480,82 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 var errConfirm = errors.New("confirm mismatch")
+
+// AdminUserStats is AdminUser plus the aggregates of the user's derived data (numbers only).
+type AdminUserStats struct {
+	AdminUser
+	Sessions       int64      `json:"sessions"`
+	CostUSD        float64    `json:"cost_usd"`
+	Tokens         int64      `json:"tokens"`
+	LastActivityAt *time.Time `json:"last_activity_at"`
+	DeriveErrors   int64      `json:"derive_errors"`
+	Rebuilding     bool       `json:"rebuilding"`
+}
+
+// AdminTotals sums AdminUserStats.
+type AdminTotals struct {
+	Users       int64   `json:"users"`
+	Devices     int64   `json:"devices"`
+	Sessions    int64   `json:"sessions"`
+	StoredBytes int64   `json:"stored_bytes"`
+	CostUSD     float64 `json:"cost_usd"`
+	Tokens      int64   `json:"tokens"`
+}
+
+// AdminStats is the response of GET /api/v1/admin/stats.
+type AdminStats struct {
+	Users           []AdminUserStats `json:"users"`
+	Totals          AdminTotals      `json:"totals"`
+	RebuildingUsers int              `json:"rebuilding_users"`
+}
+
+func (h *Handler) adminStats(w http.ResponseWriter, r *http.Request) {
+	p, _ := h.as(r)
+	out := AdminStats{Users: []AdminUserStats{}}
+	err := h.db.WithUser(r.Context(), p.UserID, func(tx pgx.Tx) error {
+		users, err := h.listUsers(r.Context(), tx)
+		if err != nil {
+			return err
+		}
+		byID := map[string]*AdminUserStats{}
+		for _, u := range users {
+			out.Users = append(out.Users, AdminUserStats{AdminUser: u})
+		}
+		for i := range out.Users {
+			byID[out.Users[i].ID] = &out.Users[i]
+		}
+		rows, err := tx.Query(r.Context(), `SELECT user_id::text, sessions, cost_usd::float8, tokens, last_activity_at, derive_errors, rebuilding FROM admin_stats()`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			var s AdminUserStats
+			if err := rows.Scan(&id, &s.Sessions, &s.CostUSD, &s.Tokens, &s.LastActivityAt, &s.DeriveErrors, &s.Rebuilding); err != nil {
+				return err
+			}
+			if u := byID[id]; u != nil {
+				u.Sessions, u.CostUSD, u.Tokens, u.LastActivityAt, u.DeriveErrors, u.Rebuilding = s.Sessions, s.CostUSD, s.Tokens, s.LastActivityAt, s.DeriveErrors, s.Rebuilding
+			}
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	t := &out.Totals
+	for _, u := range out.Users {
+		t.Users++
+		t.Devices += int64(u.Devices)
+		t.Sessions += u.Sessions
+		t.StoredBytes += u.StoredBytes
+		t.CostUSD += u.CostUSD
+		t.Tokens += u.Tokens
+		if u.Rebuilding {
+			out.RebuildingUsers++
+		}
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}

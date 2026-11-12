@@ -18,6 +18,7 @@ import (
 
 	"github.com/usebraid/braid/internal/server/db"
 	"github.com/usebraid/braid/internal/server/httpx"
+	"github.com/usebraid/braid/internal/server/ingest"
 	"github.com/usebraid/braid/internal/server/webauth"
 )
 
@@ -31,7 +32,8 @@ type Handler struct {
 func New(d *db.DB) *Handler { return &Handler{db: d, now: time.Now} }
 
 // Register mounts the web routes behind auth; devLim is used by the device routes.
-func (h *Handler) Register(mux *http.ServeMux, auth *webauth.Auth, _ *httpx.Limiter) {
+func (h *Handler) Register(mux *http.ServeMux, auth *webauth.Auth, devLim *httpx.Limiter) {
+	mux.Handle("GET /v1/stats/self", ingest.RequireDevice(h.db, "stats:read:self", devLim, http.HandlerFunc(h.self)))
 	mux.Handle("GET /api/v1/stats/overview", auth.Require(http.HandlerFunc(h.overview)))
 	mux.Handle("GET /api/v1/stats/failures", auth.Require(http.HandlerFunc(h.failures)))
 	mux.Handle("GET /api/v1/stats/search", auth.Require(http.HandlerFunc(h.search)))
