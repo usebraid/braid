@@ -413,7 +413,11 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, u := range users {
 			if strings.EqualFold(u.ID, id) {
-				if confirm != u.Email {
+				want := u.Email
+				if want == "" {
+					want = u.ID // no email on file: the id is the confirmation
+				}
+				if confirm == "" || !strings.EqualFold(confirm, want) {
 					return errConfirm
 				}
 				_, err := tx.Exec(r.Context(), `SELECT admin_delete_user($1::uuid)`, id)

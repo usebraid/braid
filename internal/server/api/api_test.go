@@ -15,6 +15,7 @@ import (
 
 	"github.com/usebraid/braid/internal/server/api"
 	"github.com/usebraid/braid/internal/server/servertest"
+	"github.com/usebraid/braid/internal/testdb"
 )
 
 func do(t *testing.T, e *servertest.Env, c *http.Client, method, path string, body any) (*http.Response, []byte) {
@@ -186,5 +187,30 @@ func TestAdminSelfAndBadIDs(t *testing.T) {
 		if resp, _ := do(t, e, admin, c[0], "/api/v1/admin/users/not-a-uuid"+c[1], nil); resp.StatusCode != 404 {
 			t.Errorf("bad id %s %s: %d", c[0], c[1], resp.StatusCode)
 		}
+	}
+}
+
+func TestDeleteUserWithoutEmailNeedsConfirm(t *testing.T) {
+	e := servertest.Start(t)
+	admin := e.Login(t, "root", "braid-admins")
+	_ = e.Login(t, "noemail")
+	testdb.Exec(t, e.OwnerURL, `UPDATE users SET email = '' WHERE oidc_sub = 'noemail'`)
+	_, b := do(t, e, admin, "GET", "/api/v1/admin/users", nil)
+	var us []api.AdminUser
+	_ = json.Unmarshal(b, &us)
+	var uid string
+	for _, u := range us {
+		if u.Name == "noemail" {
+			uid = u.ID
+		}
+	}
+	if uid == "" {
+		t.Fatalf("%s", b)
+	}
+	if resp, _ := do(t, e, admin, "DELETE", "/api/v1/admin/users/"+uid, nil); resp.StatusCode != 400 {
+		t.Fatalf("unconfirmed delete: %d", resp.StatusCode)
+	}
+	if resp, _ := do(t, e, admin, "DELETE", "/api/v1/admin/users/"+uid+"?confirm="+uid, nil); resp.StatusCode != 204 {
+		t.Fatalf("confirmed delete: %d", resp.StatusCode)
 	}
 }
