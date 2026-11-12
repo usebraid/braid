@@ -5,6 +5,7 @@
 package scan
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -37,23 +38,33 @@ func Classify(relPath string) (protocol.Kind, bool) {
 }
 
 // Walk returns all classified regular files below root, sorted by RelPath.
-// A missing root yields no entries; symlinks are skipped.
+// A missing root yields no entries and no error. A symlinked root is resolved;
+// symlinks below it are skipped. Unreadable entries are skipped: the partial
+// result is returned together with a joined non-nil error naming them.
 func Walk(root string) ([]Entry, error) {
+	base, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
 	var out []Entry
-	err := filepath.WalkDir(root, func(p string, de fs.DirEntry, err error) error {
+	var skipped []error
+	err = filepath.WalkDir(base, func(p string, de fs.DirEntry, err error) error {
 		if err != nil {
-			if p == root && os.IsNotExist(err) {
-				return nil
+			if p == base {
+				return err
 			}
-			if os.IsNotExist(err) { // vanished mid-walk
-				return nil
+			if !os.IsNotExist(err) { // vanished mid-walk is not an error
+				skipped = append(skipped, err)
 			}
-			return err
+			return nil // for a failed dir, WalkDir does not descend
 		}
 		if !de.Type().IsRegular() {
 			return nil // dirs are descended; symlinks and specials skipped
 		}
-		rel, err := filepath.Rel(root, p)
+		rel, err := filepath.Rel(base, p)
 		if err != nil {
 			return err
 		}
@@ -67,5 +78,5 @@ func Walk(root string) ([]Entry, error) {
 		return nil, err
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].RelPath < out[j].RelPath })
-	return out, nil
+	return out, errors.Join(skipped...)
 }
