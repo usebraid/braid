@@ -17,6 +17,25 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } } }
         "401": { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: patchMe
+      summary: Set the user's time zone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [time_zone]
+              additionalProperties: false
+              properties:
+                time_zone: { type: string, minLength: 1, maxLength: 64, description: IANA zone name. }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/devices:
     get:
       operationId: listDevices
@@ -118,12 +137,129 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AuditPage" } } } }
         "403": { $ref: "#/components/responses/Error" }
+  /api/v1/stats/overview:
+    get:
+      operationId: statsOverview
+      summary: Overview KPIs, series and heatmap
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/DeviceFilter"
+        - $ref: "#/components/parameters/ProjectFilter"
+        - $ref: "#/components/parameters/ModelFilter"
+        - $ref: "#/components/parameters/SkillFilter"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Overview" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/stats/sessions:
+    get:
+      operationId: statsSessions
+      summary: Sessions in range, newest first
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/DeviceFilter"
+        - $ref: "#/components/parameters/ProjectFilter"
+        - $ref: "#/components/parameters/ModelFilter"
+        - $ref: "#/components/parameters/SkillFilter"
+        - $ref: "#/components/parameters/Cursor"
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SessionPage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/stats/sessions/{id}:
+    get:
+      operationId: statsSession
+      summary: One session with agents, skill phases and failures
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SessionDetail" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/stats/sessions/{id}/lines:
+    get:
+      operationId: statsSessionLines
+      summary: Transcript lines of one agent of a session
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - { name: agent, in: query, description: Agent id., schema: { type: string, default: main } }
+        - { name: after, in: query, description: Return lines with id above this line id., schema: { type: integer, format: int64, minimum: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LinePage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/stats/failures:
+    get:
+      operationId: statsFailures
+      summary: Failures with aggregates and time lost
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/DeviceFilter"
+        - $ref: "#/components/parameters/ProjectFilter"
+        - $ref: "#/components/parameters/ModelFilter"
+        - $ref: "#/components/parameters/SkillFilter"
+        - $ref: "#/components/parameters/Cursor"
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FailurePage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/stats/search:
+    get:
+      operationId: statsSearch
+      summary: Full-text search over prompts and replies
+      parameters:
+        - { name: q, in: query, required: true, description: 2 to 200 characters., schema: { type: string, minLength: 2, maxLength: 200 } }
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/DeviceFilter"
+        - $ref: "#/components/parameters/ProjectFilter"
+        - $ref: "#/components/parameters/ModelFilter"
+        - $ref: "#/components/parameters/SkillFilter"
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SearchResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/stats:
+    get:
+      operationId: adminStats
+      summary: Per-user derived statistics and totals (admin)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AdminStats" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /v1/stats/self:
+    get:
+      operationId: statsSelf
+      summary: Today's figures and one session, for the device (statusline)
+      security:
+        - device: ["stats:read:self"]
+      parameters:
+        - { name: Braid-Protocol, in: header, required: true, schema: { type: string } }
+        - { name: session, in: query, description: Session id (max 256 characters)., schema: { type: string, maxLength: 256 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Self" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     session:
       type: apiKey
       in: cookie
       name: __Host-braid_session
+    device:
+      type: http
+      scheme: bearer
+      description: Device token with scope stats:read:self.
   parameters:
     Id:
       name: id
@@ -139,6 +275,43 @@ components:
       name: limit
       in: query
       schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    SessionId:
+      name: id
+      in: path
+      required: true
+      description: Free-text session id, not a uuid.
+      schema: { type: string, maxLength: 256 }
+    From:
+      name: from
+      in: query
+      description: Range start (RFC 3339); default 30 days before To.
+      schema: { type: string, format: date-time }
+    To:
+      name: to
+      in: query
+      description: Range end (RFC 3339); default now.
+      schema: { type: string, format: date-time }
+    DeviceFilter:
+      name: device
+      in: query
+      schema: { type: string, format: uuid }
+    ProjectFilter:
+      name: project
+      in: query
+      schema: { type: string, maxLength: 256 }
+    ModelFilter:
+      name: model
+      in: query
+      schema: { type: string, maxLength: 256 }
+    SkillFilter:
+      name: skill
+      in: query
+      schema: { type: string, maxLength: 256 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor from the previous page's next.
+      schema: { type: string }
   responses:
     Error:
       description: Error
@@ -151,12 +324,14 @@ components:
         error: { type: string }
     Me:
       type: object
-      required: [id, email, name, is_admin]
+      required: [id, email, name, is_admin, time_zone, time_zone_set]
       properties:
         id: { type: string, format: uuid }
         email: { type: string }
         name: { type: string }
         is_admin: { type: boolean }
+        time_zone: { type: string, description: Effective zone (UTC when unset). }
+        time_zone_set: { type: boolean }
     Device:
       type: object
       required: [id, name, hostname, os, arch, os_user, daemon_version, created_at, last_seen_at, last_sync_at, revoked_at, stale]
@@ -210,3 +385,263 @@ components:
         last_sync_at: { type: [string, "null"], format: date-time }
         devices: { type: integer }
         stored_bytes: { type: integer, format: int64 }
+    Overview:
+      type: object
+      required: [from, to, time_zone, reindexing, kpi, per_day, per_model, per_project, heatmap]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        time_zone: { type: string }
+        reindexing: { type: boolean }
+        kpi: { $ref: "#/components/schemas/KPI" }
+        per_day: { type: array, items: { $ref: "#/components/schemas/DayPoint" } }
+        per_model: { type: array, items: { $ref: "#/components/schemas/ModelPoint" } }
+        per_project: { type: array, items: { $ref: "#/components/schemas/ProjectPoint" } }
+        heatmap: { type: array, items: { $ref: "#/components/schemas/HeatCell" } }
+    KPI:
+      type: object
+      required: [sessions, agent_ms, total_agent_ms, agent_ms_estimated, cost_usd, cost_unknown_models, tokens, streak_days, failures, time_lost_s]
+      properties:
+        sessions: { type: integer, format: int64 }
+        agent_ms: { type: integer, format: int64 }
+        total_agent_ms: { type: integer, format: int64 }
+        agent_ms_estimated: { type: boolean }
+        cost_usd: { type: number }
+        cost_unknown_models: { type: array, items: { type: string } }
+        tokens: { type: integer, format: int64 }
+        streak_days: { type: integer }
+        failures: { type: integer, format: int64 }
+        time_lost_s: { type: integer, format: int64 }
+    DayPoint:
+      type: object
+      required: [day, cost_usd, tokens, sessions]
+      properties:
+        day: { type: string, format: date }
+        cost_usd: { type: number }
+        tokens: { type: integer, format: int64 }
+        sessions: { type: integer, format: int64 }
+    ModelPoint:
+      type: object
+      required: [model, cost_usd, tokens, messages, price_unknown]
+      properties:
+        model: { type: string }
+        cost_usd: { type: number }
+        tokens: { type: integer, format: int64 }
+        messages: { type: integer, format: int64 }
+        price_unknown: { type: boolean }
+    ProjectPoint:
+      type: object
+      required: [path, name, cost_usd, tokens, sessions, agent_ms]
+      properties:
+        path: { type: string }
+        name: { type: string }
+        cost_usd: { type: number }
+        tokens: { type: integer, format: int64 }
+        sessions: { type: integer, format: int64 }
+        agent_ms: { type: integer, format: int64 }
+    HeatCell:
+      type: object
+      required: [weekday, hour, count]
+      properties:
+        weekday: { type: integer }
+        hour: { type: integer }
+        count: { type: integer, format: int64 }
+    SessionItem:
+      type: object
+      required: [session_id, title, project, project_name, device_id, device_ids, models, started_at, ended_at, is_live, agent_ms, total_agent_ms, agent_ms_estimated, cost_usd, tokens, failures, skills, line_count, git_branch]
+      properties:
+        session_id: { type: string }
+        title: { type: string }
+        project: { type: string }
+        project_name: { type: string }
+        device_id: { type: [string, "null"], format: uuid }
+        device_ids: { type: array, items: { type: string, format: uuid } }
+        models: { type: array, items: { type: string } }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        is_live: { type: boolean }
+        agent_ms: { type: integer, format: int64 }
+        total_agent_ms: { type: integer, format: int64 }
+        agent_ms_estimated: { type: boolean }
+        cost_usd: { type: number }
+        tokens: { type: integer, format: int64 }
+        failures: { type: integer, format: int64 }
+        skills: { type: array, items: { type: string } }
+        line_count: { type: integer, format: int64 }
+        git_branch: { type: string }
+    SessionPage:
+      type: object
+      required: [items, next]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SessionItem" } }
+        next: { type: [string, "null"] }
+    AgentUsage:
+      type: object
+      required: [cost_usd, tokens, input, output, cache_read, cache_write, messages]
+      properties:
+        cost_usd: { type: number }
+        tokens: { type: integer, format: int64 }
+        input: { type: integer, format: int64 }
+        output: { type: integer, format: int64 }
+        cache_read: { type: integer, format: int64 }
+        cache_write: { type: integer, format: int64 }
+        messages: { type: integer, format: int64 }
+    AgentItem:
+      type: object
+      required: [agent_id, agent_type, description, parent_agent_id, spawn_tool_use_id, spawn_depth, started_at, ended_at, finished, duration_ms, duration_estimated, tool_calls, tool_errors, usage]
+      properties:
+        agent_id: { type: string }
+        agent_type: { type: string }
+        description: { type: string }
+        parent_agent_id: { type: [string, "null"] }
+        spawn_tool_use_id: { type: [string, "null"] }
+        spawn_depth: { type: integer }
+        started_at: { type: [string, "null"], format: date-time }
+        ended_at: { type: [string, "null"], format: date-time }
+        finished: { type: [boolean, "null"] }
+        duration_ms: { type: integer, format: int64 }
+        duration_estimated: { type: boolean }
+        tool_calls: { type: object, additionalProperties: { type: integer, format: int64 } }
+        tool_errors: { type: integer, format: int64 }
+        usage: { $ref: "#/components/schemas/AgentUsage" }
+    PhaseItem:
+      type: object
+      required: [agent_id, seq, skill, started_at, ended_at]
+      properties:
+        agent_id: { type: string }
+        seq: { type: integer }
+        skill: { type: string }
+        started_at: { type: [string, "null"], format: date-time }
+        ended_at: { type: [string, "null"], format: date-time }
+    FailureItem:
+      type: object
+      required: [category, detail, occurred_at, session_id, agent_id, limit_type, resets_at, time_lost_s]
+      properties:
+        category: { type: string }
+        detail: { type: string }
+        occurred_at: { type: string, format: date-time }
+        session_id: { type: string }
+        agent_id: { type: string }
+        limit_type: { type: [string, "null"] }
+        resets_at: { type: [string, "null"], format: date-time }
+        time_lost_s: { type: [integer, "null"], format: int64 }
+    SessionDetail:
+      type: object
+      required: [session, agents, skill_phases, failures]
+      properties:
+        session: { $ref: "#/components/schemas/SessionItem" }
+        agents: { type: array, items: { $ref: "#/components/schemas/AgentItem" } }
+        skill_phases: { type: array, items: { $ref: "#/components/schemas/PhaseItem" } }
+        failures: { type: array, items: { $ref: "#/components/schemas/FailureItem" } }
+    LineItem:
+      type: object
+      required: [id, offset, line]
+      properties:
+        id: { type: integer, format: int64 }
+        offset: { type: integer, format: int64 }
+        line: { type: object, description: The raw transcript line. }
+    LinePage:
+      type: object
+      required: [lines, next]
+      properties:
+        lines: { type: array, items: { $ref: "#/components/schemas/LineItem" } }
+        next: { type: [string, "null"] }
+    FailureAgg:
+      type: object
+      required: [key, count, time_lost_s]
+      properties:
+        key: { type: string }
+        count: { type: integer, format: int64 }
+        time_lost_s: { type: integer, format: int64 }
+    FailurePage:
+      type: object
+      required: [items, next, by_category, by_limit_type, by_day, time_lost_s]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/FailureItem" } }
+        next: { type: [string, "null"] }
+        by_category: { type: array, items: { $ref: "#/components/schemas/FailureAgg" } }
+        by_limit_type: { type: array, items: { $ref: "#/components/schemas/FailureAgg" } }
+        by_day: { type: array, items: { $ref: "#/components/schemas/FailureAgg" } }
+        time_lost_s: { type: integer, format: int64 }
+    SearchHit:
+      type: object
+      required: [session_id, agent_id, role, at, title, snippet, rank]
+      properties:
+        session_id: { type: string }
+        agent_id: { type: string }
+        role: { type: string }
+        at: { type: [string, "null"], format: date-time }
+        title: { type: string }
+        snippet: { type: string }
+        rank: { type: number }
+    SearchResult:
+      type: object
+      required: [hits]
+      properties:
+        hits: { type: array, items: { $ref: "#/components/schemas/SearchHit" } }
+    SelfToday:
+      type: object
+      required: [from, to, time_zone, sessions, agent_ms, cost_usd, tokens, failures, time_lost_s]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        time_zone: { type: string }
+        sessions: { type: integer, format: int64 }
+        agent_ms: { type: integer, format: int64 }
+        cost_usd: { type: number }
+        tokens: { type: integer, format: int64 }
+        failures: { type: integer, format: int64 }
+        time_lost_s: { type: integer, format: int64 }
+    SelfSession:
+      type: object
+      required: [session_id, agent_ms, total_agent_ms, cost_usd, tokens, started_at, ended_at]
+      properties:
+        session_id: { type: string }
+        agent_ms: { type: integer, format: int64 }
+        total_agent_ms: { type: integer, format: int64 }
+        cost_usd: { type: number }
+        tokens: { type: integer, format: int64 }
+        started_at: { type: [string, "null"], format: date-time }
+        ended_at: { type: [string, "null"], format: date-time }
+    Self:
+      type: object
+      required: [today, session]
+      properties:
+        today: { $ref: "#/components/schemas/SelfToday" }
+        session: { oneOf: [{ $ref: "#/components/schemas/SelfSession" }, { type: "null" }] }
+    AdminUserStats:
+      type: object
+      required: [id, email, name, is_admin, disabled_at, last_login_at, last_sync_at, devices, stored_bytes, sessions, cost_usd, tokens, last_activity_at, derive_errors, rebuilding]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        name: { type: string }
+        is_admin: { type: boolean }
+        disabled_at: { type: [string, "null"], format: date-time }
+        last_login_at: { type: [string, "null"], format: date-time }
+        last_sync_at: { type: [string, "null"], format: date-time }
+        devices: { type: integer }
+        stored_bytes: { type: integer, format: int64 }
+        sessions: { type: integer, format: int64 }
+        cost_usd: { type: number }
+        tokens: { type: integer, format: int64 }
+        last_activity_at: { type: [string, "null"], format: date-time }
+        derive_errors: { type: integer, format: int64 }
+        rebuilding: { type: boolean }
+    AdminTotals:
+      type: object
+      required: [users, devices, sessions, stored_bytes, cost_usd, tokens]
+      properties:
+        users: { type: integer, format: int64 }
+        devices: { type: integer, format: int64 }
+        sessions: { type: integer, format: int64 }
+        stored_bytes: { type: integer, format: int64 }
+        cost_usd: { type: number }
+        tokens: { type: integer, format: int64 }
+    AdminStats:
+      type: object
+      required: [users, totals, rebuilding_users]
+      properties:
+        users: { type: array, items: { $ref: "#/components/schemas/AdminUserStats" } }
+        totals: { $ref: "#/components/schemas/AdminTotals" }
+        rebuilding_users: { type: integer }
