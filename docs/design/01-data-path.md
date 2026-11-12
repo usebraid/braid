@@ -96,6 +96,8 @@ Auth: device token. Returns `[{path, head_hash, kind, end_offset, content_hash}]
 - `raw_snapshots` is append-only: a row is inserted only when `content_hash` differs from the newest row of that file, so a revert (v1 → v2 → v1) is recorded.
 - `line_hash` and `content_hash` are SHA-256 of the raw bytes, computed by the server.
 
+**Amendment (2026-11-12): store once per user.** File identity is `(user_id, rel_path, head_hash)`, not per device. Origin stays visible without storing content twice: every `raw_lines` and `raw_snapshots` row keeps the `device_id` that delivered it first (a 16-byte reference, not a copy), so the dashboard can show which device a session, agent or line came from, including files that several devices appended to. `GET /v1/files` returns the user's files, so a new device token for the same user (re-login, reinstall, home directory synced between machines) resumes at the existing offsets and sends nothing twice. If a device sends a line at an offset that already holds a *different* line for that identity (two machines appending to the same synced file), the server answers `conflict` for that file and the daemon falls back to a device-scoped identity `(user_id, device_id, rel_path, head_hash)` for it — the rare case where storing separately is the only lossless option.
+
 ## 4. Daemon
 
 Single binary `braid`, runs in user context.
