@@ -33,6 +33,8 @@ func TestAppCannotEscalate(t *testing.T) {
 		"forge token":               `INSERT INTO device_tokens(device_id,user_id,hash,scopes) VALUES (` + devA + `, '` + f.userA + `', '\x77', '{}')`,
 		"insert user":               `INSERT INTO users(oidc_issuer,oidc_sub) VALUES ('i','s')`,
 		"bypass via role":           `SET ROLE braid_owner`,
+		"self-promote via upsert":   `SELECT upsert_oidc_user('i', 'sub-a', 'x', 'x', true) FROM users`,
+		"forge audit for other":     `SELECT write_audit(gen_random_uuid(), gen_random_uuid(), NULL, 'x', NULL, NULL, NULL)`,
 		"disable rls":               `ALTER TABLE raw_lines DISABLE ROW LEVEL SECURITY`,
 	}
 	for name, q := range cases {

@@ -358,7 +358,7 @@ All tests run in `scripts/check.sh` / CI. Integration tests need Postgres via `B
 **Server integration tests**
 
 - Ingest: idempotent resend, gap detection, multi-file batch is atomic, size limits, wrong protocol version → `426`, wrong scope → `403`.
-- RLS isolation: user A cannot read or change B's rows through any `/api/*` or `/v1/*` endpoint, nor through direct SQL as `braid_app` with `app.user_id` set to A. `braid_app` cannot `UPDATE`/`DELETE` raw tables.
+- RLS isolation: user A cannot read or change B's rows through any `/api/*` or `/v1/*` endpoint, nor through direct table access as `braid_app` with `app.user_id` set to A. The pre-identity definer functions (`upsert_oidc_user`, `write_audit`) refuse to act for another user in a scoped session. `braid_app` cannot `UPDATE`/`DELETE` raw tables.
 - Device flow attacks: expired code, reused code, wrong user code until rate limit, polling too fast → `slow_down`, denied code, revoked token → `401`, token of a disabled user → `401`, token unused for 90 days → `401`.
 - OIDC against a mock provider: bad `state`, bad `nonce`, wrong issuer, wrong audience, missing groups claim, allowlist and admin group rules, disabled user.
 - Origin check on cookie-authenticated `POST`/`PATCH`/`DELETE`.
