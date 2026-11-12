@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/usebraid/braid/internal/daemon/client"
@@ -151,7 +152,9 @@ func (e *Engine) isolate(ctx context.Context, req protocol.IngestRequest, metas 
 	return out, okMetas, nil
 }
 
-// resume seeds state from the server once, when no local state was ever built.
+// resume seeds state from the server's view of the user once, when no local state was built or acks
+// were reset (new login). Append rows are only seeded when the server's tail matches the local file;
+// otherwise they are resent from 0 and the server dedupes or answers conflict.
 func (e *Engine) resume(ctx context.Context) error {
 	if _, ok, err := e.State.Setting(ctx, "resumed"); err != nil || ok {
 		return err
@@ -160,17 +163,52 @@ func (e *Engine) resume(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	pick := map[[2]string]protocol.RemoteFile{}
 	for _, r := range remote {
-		if _, ok, err := e.State.Get(ctx, r.Path, r.HeadHash); err != nil {
+		k := [2]string{r.Path, r.HeadHash}
+		if old, ok := pick[k]; !ok || (r.Scope == protocol.ScopeDevice && old.Scope != protocol.ScopeDevice) {
+			pick[k] = r // a device-scoped entry wins over the per-user one
+		}
+	}
+	for _, r := range pick {
+		row, ok, err := e.State.Get(ctx, r.Path, r.HeadHash)
+		if err != nil {
 			return err
-		} else if ok {
+		}
+		if ok && (row.AckedOffset != 0 || row.ContentHash != "") {
 			continue
 		}
-		if err := e.State.Put(ctx, state.File{RelPath: r.Path, HeadHash: r.HeadHash, Kind: r.Kind, AckedOffset: r.EndOffset, ContentHash: r.ContentHash}); err != nil {
+		if !ok {
+			row = state.File{RelPath: r.Path, HeadHash: r.HeadHash, Kind: r.Kind}
+		}
+		if r.Kind == protocol.KindAppend && !e.tailMatches(r, row.SpoolPath) {
+			continue
+		}
+		row.AckedOffset, row.ContentHash, row.DeviceScoped = r.EndOffset, r.ContentHash, r.Scope == protocol.ScopeDevice
+		if err := e.State.Put(ctx, row); err != nil {
 			return err
 		}
 	}
 	return e.State.SetSetting(ctx, "resumed", "1")
+}
+
+// tailMatches reports whether the local file (original, else spool) holds the server's last line at
+// its offset and ends where the server's file ends.
+func (e *Engine) tailMatches(r protocol.RemoteFile, spoolPath string) bool {
+	if r.EndOffset == 0 {
+		return true
+	}
+	for _, p := range []string{filepath.Join(e.Root, filepath.FromSlash(r.Path)), spoolPath} {
+		if p == "" {
+			continue
+		}
+		lines, next, err := reader.ReadLines(p, r.TailOffset, 1)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		return err == nil && len(lines) > 0 && protocol.HashHex(lines[0]) == r.TailHash && next == r.EndOffset
+	}
+	return false
 }
 
 // discover merges disk entries and state rows into items. Rows whose original is gone read from the spool.
@@ -484,6 +522,9 @@ func (e *Engine) build(ctx context.Context, items []*item) (protocol.IngestReque
 			next = protocol.EndOffset(r.AckedOffset, lines)
 		}
 		fb := protocol.FileBatch{Kind: protocol.KindAppend, Path: r.RelPath, HeadHash: r.HeadHash, FromOffset: r.AckedOffset}
+		if r.DeviceScoped {
+			fb.Scope = protocol.ScopeDevice
+		}
 		for _, l := range lines {
 			fb.Lines = append(fb.Lines, protocol.EncodeLine(l))
 		}
@@ -524,6 +565,11 @@ func (e *Engine) apply(ctx context.Context, resp protocol.IngestResponse, metas 
 				return uploaded, fmt.Errorf("syncer: server reported gap at %d for offset %d", fr.EndOffset, m.from)
 			}
 			r.AckedOffset = fr.EndOffset // rewind; the next loop re-reads from there
+		case protocol.StatusConflict:
+			if r.DeviceScoped {
+				return uploaded, fmt.Errorf("syncer: server reported conflict for device-scoped %s", r.RelPath)
+			}
+			r.DeviceScoped, r.AckedOffset = true, 0 // resend from 0 under the device-scoped identity
 		default:
 			return uploaded, fmt.Errorf("syncer: unknown status %q", fr.Status)
 		}

@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS files (
   spool_path    TEXT,
   original_gone INTEGER NOT NULL DEFAULT 0,
   last_ack_at   TEXT,
+  device_scoped INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (rel_path, head_hash)
 );`
 
@@ -45,6 +46,7 @@ type File struct {
 	SpoolPath         string
 	OriginalGone      bool
 	LastAckAt         time.Time // zero if never
+	DeviceScoped      bool      // the server answered conflict: send with scope "device"
 }
 
 // DB wraps the SQLite connection pool.
@@ -68,25 +70,56 @@ func Open(path string) (*DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: schema: %w", err)
 	}
+	if err := addDeviceScoped(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: schema: %w", err)
+	}
 	return &DB{db: db}, nil
+}
+
+// addDeviceScoped upgrades a state DB created before the column existed.
+func addDeviceScoped(db *sql.DB) error {
+	rows, err := db.QueryContext(context.Background(), `PRAGMA table_info(files)`)
+	if err != nil {
+		return err
+	}
+	has := false
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, typ string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		has = has || name == "device_scoped"
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil || has {
+		return err
+	}
+	_, err = db.ExecContext(context.Background(), `ALTER TABLE files ADD COLUMN device_scoped INTEGER NOT NULL DEFAULT 0`)
+	return err
 }
 
 // Close closes the database.
 func (d *DB) Close() error { return d.db.Close() }
 
-const cols = `rel_path, head_hash, kind, acked_offset, COALESCE(content_hash,''), COALESCE(file_id,''), size_seen, COALESCE(spool_path,''), original_gone, last_ack_at`
+const cols = `rel_path, head_hash, kind, acked_offset, COALESCE(content_hash,''), COALESCE(file_id,''), size_seen, COALESCE(spool_path,''), original_gone, last_ack_at, device_scoped`
 
 type scanner interface{ Scan(...any) error }
 
 func scanFile(s scanner) (File, error) {
 	var f File
 	var kind string
-	var gone int
+	var gone, scoped int
 	var at sql.NullString
-	if err := s.Scan(&f.RelPath, &f.HeadHash, &kind, &f.AckedOffset, &f.ContentHash, &f.FileID, &f.SizeSeen, &f.SpoolPath, &gone, &at); err != nil {
+	if err := s.Scan(&f.RelPath, &f.HeadHash, &kind, &f.AckedOffset, &f.ContentHash, &f.FileID, &f.SizeSeen, &f.SpoolPath, &gone, &at, &scoped); err != nil {
 		return File{}, err
 	}
-	f.Kind, f.OriginalGone = protocol.Kind(kind), gone != 0
+	f.Kind, f.OriginalGone, f.DeviceScoped = protocol.Kind(kind), gone != 0, scoped != 0
 	if at.Valid && at.String != "" {
 		t, err := time.Parse(time.RFC3339, at.String)
 		if err != nil {
@@ -112,15 +145,16 @@ func (d *DB) Put(ctx context.Context, f File) error {
 	if !f.LastAckAt.IsZero() {
 		at = f.LastAckAt.UTC().Format(time.RFC3339)
 	}
-	_, err := d.db.ExecContext(ctx, `INSERT INTO files (`+cols0+`) VALUES (?,?,?,?,?,?,?,?,?,?)
+	_, err := d.db.ExecContext(ctx, `INSERT INTO files (`+cols0+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(rel_path, head_hash) DO UPDATE SET kind=excluded.kind, acked_offset=excluded.acked_offset,
  content_hash=excluded.content_hash, file_id=excluded.file_id, size_seen=excluded.size_seen,
- spool_path=excluded.spool_path, original_gone=excluded.original_gone, last_ack_at=excluded.last_ack_at`,
-		f.RelPath, f.HeadHash, string(f.Kind), f.AckedOffset, f.ContentHash, f.FileID, f.SizeSeen, f.SpoolPath, f.OriginalGone, at)
+ spool_path=excluded.spool_path, original_gone=excluded.original_gone, last_ack_at=excluded.last_ack_at,
+ device_scoped=excluded.device_scoped`,
+		f.RelPath, f.HeadHash, string(f.Kind), f.AckedOffset, f.ContentHash, f.FileID, f.SizeSeen, f.SpoolPath, f.OriginalGone, at, f.DeviceScoped)
 	return err
 }
 
-const cols0 = `rel_path, head_hash, kind, acked_offset, content_hash, file_id, size_seen, spool_path, original_gone, last_ack_at`
+const cols0 = `rel_path, head_hash, kind, acked_offset, content_hash, file_id, size_seen, spool_path, original_gone, last_ack_at, device_scoped`
 
 // Delete removes a row; missing rows are not an error.
 func (d *DB) Delete(ctx context.Context, relPath, headHash string) error {
@@ -170,7 +204,7 @@ func (d *DB) ResetAcks(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `UPDATE files SET acked_offset=0, content_hash='', size_seen=CASE WHEN kind='snapshot' THEN -1 ELSE size_seen END`); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE files SET acked_offset=0, content_hash='', device_scoped=0, size_seen=CASE WHEN kind='snapshot' THEN -1 ELSE size_seen END`); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM settings WHERE key='resumed'`); err != nil {

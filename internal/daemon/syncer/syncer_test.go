@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -37,6 +38,8 @@ type fakeServer struct {
 	rows         map[[2]string][]row // (path, head) -> rows
 	ends         map[[2]string]int64
 	snaps        map[string][]string // path -> content hashes (append-only, newest last)
+	conflictFor  string              // path answered with conflict while Scope == ""
+	lastScope    protocol.Scope
 }
 
 func newFakeServer() *fakeServer {
@@ -65,7 +68,16 @@ func (f *fakeServer) Ingest(_ context.Context, req protocol.IngestRequest) (prot
 			resp.Files = append(resp.Files, protocol.FileResult{Path: fb.Path, Status: protocol.StatusOK})
 			continue
 		}
-		k := [2]string{fb.Path, fb.HeadHash}
+		f.lastScope = fb.Scope
+		if fb.Scope == "" && fb.Path == f.conflictFor {
+			resp.Files = append(resp.Files, protocol.FileResult{Path: fb.Path, HeadHash: fb.HeadHash, Status: protocol.StatusConflict, EndOffset: f.ends[[2]string{fb.Path, fb.HeadHash}]})
+			continue
+		}
+		suffix := ""
+		if fb.Scope == protocol.ScopeDevice {
+			suffix = "|device"
+		}
+		k := [2]string{fb.Path, fb.HeadHash + suffix}
 		if fb.FromOffset > f.ends[k] {
 			resp.Files = append(resp.Files, protocol.FileResult{Path: fb.Path, HeadHash: fb.HeadHash, Status: protocol.StatusGap, EndOffset: f.ends[k]})
 			continue
@@ -101,7 +113,16 @@ func (f *fakeServer) Files(context.Context) ([]protocol.RemoteFile, error) {
 	defer f.mu.Unlock()
 	var out []protocol.RemoteFile
 	for k, e := range f.ends {
-		out = append(out, protocol.RemoteFile{Path: k[0], HeadHash: k[1], Kind: protocol.KindAppend, EndOffset: e})
+		rf := protocol.RemoteFile{Path: k[0], HeadHash: k[1], Kind: protocol.KindAppend, EndOffset: e}
+		if h, ok := strings.CutSuffix(k[1], "|device"); ok {
+			rf.HeadHash, rf.Scope = h, protocol.ScopeDevice
+		}
+		for _, r := range f.rows[k] {
+			if r.off >= rf.TailOffset {
+				rf.TailOffset, rf.TailHash = r.off, r.hash
+			}
+		}
+		out = append(out, rf)
 	}
 	for p, s := range f.snaps {
 		out = append(out, protocol.RemoteFile{Path: p, Kind: protocol.KindSnapshot, ContentHash: s[len(s)-1]})
@@ -374,5 +395,73 @@ func TestReplacedWithNewHeadKeepsOldSpool(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(e.Spool.Dir); len(entries) != 0 {
 		t.Fatalf("spool not cleaned: %v", entries)
+	}
+}
+
+func TestNewDeviceSendsNothingTwice(t *testing.T) {
+	ctx := context.Background()
+	fs := newFakeServer()
+	e, root := newEngine(t, fs)
+	appendTo(t, root, "p/a.jsonl", "h\n1\n2\n")
+	if _, err := e.Pass(ctx); err != nil {
+		t.Fatal(err)
+	}
+	calls := fs.ingestCalls()
+	if err := e.State.ResetAcks(ctx); err != nil { // what `braid login` does: a new device token, same user
+		t.Fatal(err)
+	}
+	if _, err := e.Pass(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if fs.ingestCalls() != calls || fs.rowCount() != 3 {
+		t.Fatalf("resent: calls %d->%d rows %d", calls, fs.ingestCalls(), fs.rowCount())
+	}
+}
+
+func TestResumeRejectsADivergentTail(t *testing.T) {
+	ctx := context.Background()
+	fs := newFakeServer()
+	e1, root1 := newEngine(t, fs)
+	appendTo(t, root1, "p/a.jsonl", "h\n1\n9\n") // another machine stored a different last line
+	if _, err := e1.Pass(ctx); err != nil {
+		t.Fatal(err)
+	}
+	calls := fs.ingestCalls()
+	e2, root2 := newEngine(t, fs) // fresh state, local file differs after the shared head
+	appendTo(t, root2, "p/a.jsonl", "h\n1\n2\n")
+	if _, err := e2.Pass(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if fs.ingestCalls() == calls {
+		t.Fatal("divergent file was trusted and not resent")
+	}
+	got := fs.lines("p/a.jsonl")
+	if !slices.Contains(got, "2") || !slices.Contains(got, "9") {
+		t.Fatalf("a line was lost: %v", got)
+	}
+}
+
+func TestConflictFallsBackToDeviceScope(t *testing.T) {
+	ctx := context.Background()
+	fs := newFakeServer()
+	fs.conflictFor = "p/a.jsonl"
+	e, root := newEngine(t, fs)
+	appendTo(t, root, "p/a.jsonl", "h\n1\n2\n")
+	if _, err := e.Pass(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := fs.lines("p/a.jsonl"); len(got) != 3 {
+		t.Fatalf("lines %v", got)
+	}
+	row, ok, err := e.State.Get(ctx, "p/a.jsonl", protocol.HashHex([]byte("h")))
+	if err != nil || !ok || !row.DeviceScoped || row.AckedOffset != 6 {
+		t.Fatalf("%+v %v %v", row, ok, err)
+	}
+	appendTo(t, root, "p/a.jsonl", "3\n") // later appends stay device-scoped
+	if _, err := e.Pass(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if fs.lastScope != protocol.ScopeDevice || len(fs.lines("p/a.jsonl")) != 4 {
+		t.Fatalf("scope %q lines %v", fs.lastScope, fs.lines("p/a.jsonl"))
 	}
 }

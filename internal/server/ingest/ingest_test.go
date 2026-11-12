@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -31,10 +32,10 @@ type reply struct {
 }
 
 type env struct {
-	owner, app               string
-	srv                      *httptest.Server
-	h                        *ingest.Handler
-	tokA, tokB, tokStatsOnly string
+	owner, app                      string
+	srv                             *httptest.Server
+	h                               *ingest.Handler
+	tokA, tokA2, tokB, tokStatsOnly string
 }
 
 func newEnv(t *testing.T) *env { return newEnvWithLimit(t, 600) }
@@ -47,7 +48,7 @@ func newEnvWithLimit(t *testing.T, perMinute int) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(d.Close)
-	e := &env{owner: owner, app: app, tokA: "braid_dev_tokA", tokB: "braid_dev_tokB", tokStatsOnly: "braid_dev_tokStats"}
+	e := &env{owner: owner, app: app, tokA: "braid_dev_tokA", tokA2: "braid_dev_tokA2", tokB: "braid_dev_tokB", tokStatsOnly: "braid_dev_tokStats"}
 	for i, u := range []struct {
 		tok    string
 		scopes string
@@ -55,13 +56,14 @@ func newEnvWithLimit(t *testing.T, perMinute int) *env {
 		dev    string
 	}{
 		{e.tokA, `{ingest:write,stats:read:self}`, "a", "a"},
+		{e.tokA2, "{ingest:write}", "a", "a2"},
 		{e.tokStatsOnly, `{stats:read:self}`, "a", "a"},
 		{e.tokB, `{ingest:write}`, "b", "b"},
 	} {
 		_ = i
 		testdb.Exec(t, owner, `INSERT INTO users(oidc_issuer, oidc_sub) VALUES ('i', $1) ON CONFLICT DO NOTHING`, u.user)
 		testdb.Exec(t, owner, `INSERT INTO devices(user_id, name, id)
-			SELECT id, 'dev', md5($1)::uuid FROM users WHERE oidc_sub = $1 ON CONFLICT DO NOTHING`, u.dev)
+			SELECT id, 'dev', md5($1)::uuid FROM users WHERE oidc_sub = $2 ON CONFLICT DO NOTHING`, u.dev, u.user)
 		h := sha256.Sum256([]byte(u.tok))
 		testdb.Exec(t, owner, `INSERT INTO device_tokens(device_id, user_id, hash, scopes)
 			SELECT d.id, d.user_id, $2, $3::text[] FROM devices d WHERE d.id = md5($1)::uuid`, u.dev, h[:], u.scopes)
@@ -450,5 +452,98 @@ func TestStalledBodiesDoNotBlockOthers(t *testing.T) {
 		if resp, _ := e.post(t, e.tokB, appendReq(0, `{"a":0}`), nil); resp.StatusCode != 200 {
 			t.Fatalf("other device blocked: %d", resp.StatusCode)
 		}
+	}
+}
+
+func TestSameUserNewDeviceDedupes(t *testing.T) {
+	e := newEnv(t)
+	e.post(t, e.tokA, appendReq(0, `{"a":0}`, `{"a":1}`), nil)
+	_, r := e.post(t, e.tokA2, appendReq(0, `{"a":0}`, `{"a":1}`), nil) // re-login / synced home: same bytes again
+	if r.Files[0].Status != protocol.StatusOK || r.Files[0].EndOffset != 16 {
+		t.Fatalf("%+v", r)
+	}
+	if n := e.countLines(t); n != 2 {
+		t.Fatalf("lines %d", n)
+	}
+	if n := e.ownerInt(t, `SELECT count(*) FROM source_files`); n != 1 {
+		t.Fatalf("source files %d", n)
+	}
+	fs := e.files(t, e.tokA2) // the new device sees the user's file and resumes at its end
+	if len(fs) != 1 || fs[0].EndOffset != 16 || fs[0].TailOffset != 8 || fs[0].TailHash != protocol.HashHex([]byte(`{"a":1}`)) {
+		t.Fatalf("%+v", fs)
+	}
+	if n := e.ownerInt(t, `SELECT count(*) FROM raw_lines WHERE device_id = md5('a')::uuid`); n != 2 {
+		t.Fatalf("first delivering device lost: %d", n)
+	}
+	_, r = e.post(t, e.tokA2, appendReq(16, `{"a":2}`), nil) // and appends after it
+	if r.Files[0].Status != protocol.StatusOK || e.ownerInt(t, `SELECT count(*) FROM raw_lines WHERE device_id = md5('a2')::uuid`) != 1 {
+		t.Fatalf("%+v", r)
+	}
+}
+
+func TestTwoDevicesDivergingAppendsAreBothKept(t *testing.T) {
+	e := newEnv(t)
+	base := []string{`{"a":0}`, `{"a":1}`}
+	x2, y2 := `{"a":"x2"}`, `{"a":"y2"}`
+	e.post(t, e.tokA, appendReq(0, base...), nil)
+	_, r := e.post(t, e.tokA2, appendReq(0, append(slices.Clone(base), x2)...), nil) // synced file: A2 appended x2
+	if r.Files[0].Status != protocol.StatusOK {
+		t.Fatalf("%+v", r)
+	}
+	end := int64(16 + len(x2) + 1)
+	_, r = e.post(t, e.tokA, appendReq(16, y2), nil) // A appended something else at the same offset
+	if r.Files[0].Status != protocol.StatusConflict || r.Files[0].EndOffset != end {
+		t.Fatalf("%+v", r)
+	}
+	if n := e.countLines(t); n != 3 {
+		t.Fatalf("conflicting entry stored lines: %d", n)
+	}
+	req := appendReq(0, append(slices.Clone(base), y2)...) // daemon fallback: device-scoped identity, from 0
+	req.Files[0].Scope = protocol.ScopeDevice
+	_, r = e.post(t, e.tokA, req, nil)
+	if r.Files[0].Status != protocol.StatusOK || r.Files[0].EndOffset != int64(16+len(y2)+1) {
+		t.Fatalf("%+v", r)
+	}
+	for _, want := range []string{x2, y2} {
+		if n := e.ownerInt(t, `SELECT count(*) FROM raw_lines WHERE convert_from(line,'UTF8') = '`+want+`'`); n != 1 {
+			t.Fatalf("%s stored %d times", want, n)
+		}
+	}
+	if n := e.countLines(t); n != 6 { // 3 per-user + 3 device-scoped
+		t.Fatalf("rows %d", n)
+	}
+	gotA, gotA2 := e.files(t, e.tokA), e.files(t, e.tokA2)
+	scoped := 0
+	for _, f := range gotA {
+		if f.Scope == protocol.ScopeDevice {
+			scoped++
+		}
+	}
+	if len(gotA) != 2 || scoped != 1 || len(gotA2) != 1 || gotA2[0].Scope != "" {
+		t.Fatalf("A=%+v A2=%+v", gotA, gotA2)
+	}
+}
+
+func TestScopeIsRejectedForSnapshots(t *testing.T) {
+	e := newEnv(t)
+	c := line(`{"v":1}`)
+	req := protocol.IngestRequest{Files: []protocol.FileBatch{{Kind: protocol.KindSnapshot, Path: "p/a.meta.json", Content: &c, Scope: protocol.ScopeDevice}}}
+	if resp, _ := e.post(t, e.tokA, req, nil); resp.StatusCode != 400 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+}
+
+func TestUsersNeverShareFilesOrConflict(t *testing.T) {
+	e := newEnv(t)
+	e.post(t, e.tokA, appendReq(0, `{"a":0}`, `{"a":1}`), nil)
+	_, r := e.post(t, e.tokB, appendReq(0, `{"a":0}`, `{"a":9}`), nil) // same path+head, different user, different line at offset 8
+	if r.Files[0].Status != protocol.StatusOK {
+		t.Fatalf("%+v", r)
+	}
+	if n := e.countLines(t); n != 4 || e.ownerInt(t, `SELECT count(DISTINCT user_id) FROM source_files`) != 2 {
+		t.Fatalf("users share storage: %d", n)
+	}
+	if fs := e.files(t, e.tokB); len(fs) != 1 || fs[0].TailHash != protocol.HashHex([]byte(`{"a":9}`)) {
+		t.Fatalf("%+v", fs)
 	}
 }

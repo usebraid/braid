@@ -5,6 +5,7 @@ package state_test
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -61,5 +62,41 @@ func TestStateRoundTrip(t *testing.T) {
 	}
 	if _, ok, _ := d2.Get(ctx, "p/c.json", ""); ok {
 		t.Fatal("not deleted")
+	}
+}
+
+func TestDeviceScopedPersistsAndOldDBUpgrades(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "s.db")
+	old, err := sql.Open("sqlite", "file:"+p) // driver registered by the state package
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`CREATE TABLE files (rel_path TEXT NOT NULL, head_hash TEXT NOT NULL, kind TEXT NOT NULL, acked_offset INTEGER NOT NULL DEFAULT 0,
+		  content_hash TEXT, file_id TEXT, size_seen INTEGER NOT NULL DEFAULT 0, spool_path TEXT, original_gone INTEGER NOT NULL DEFAULT 0,
+		  last_ack_at TEXT, PRIMARY KEY (rel_path, head_hash))`,
+		`INSERT INTO files(rel_path, head_hash, kind, acked_offset) VALUES ('a.jsonl','h','append',5)`,
+	} {
+		if _, err := old.ExecContext(context.Background(), q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = old.Close()
+	st, err := state.Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	ctx := context.Background()
+	f, ok, err := st.Get(ctx, "a.jsonl", "h")
+	if err != nil || !ok || f.DeviceScoped || f.AckedOffset != 5 {
+		t.Fatalf("%+v %v %v", f, ok, err)
+	}
+	f.DeviceScoped = true
+	if err := st.Put(ctx, f); err != nil {
+		t.Fatal(err)
+	}
+	if g, _, _ := st.Get(ctx, "a.jsonl", "h"); !g.DeviceScoped {
+		t.Fatal("device_scoped not persisted")
 	}
 }

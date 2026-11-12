@@ -74,6 +74,12 @@ func (l Line) Bytes() ([]byte, error) {
 	return l.B64, nil
 }
 
+// Scope selects the identity of an append file: "" = per user, ScopeDevice = per (user, device).
+type Scope string
+
+// ScopeDevice is the fallback after a conflict (01 section 3.4).
+const ScopeDevice Scope = "device"
+
 // FileBatch is one file's update inside an ingest request.
 type FileBatch struct {
 	Kind       Kind   `json:"kind"`
@@ -82,6 +88,7 @@ type FileBatch struct {
 	FromOffset int64  `json:"from_offset"`
 	Lines      []Line `json:"lines,omitempty"`
 	Content    *Line  `json:"content,omitempty"`
+	Scope      Scope  `json:"scope,omitempty"`
 }
 
 // IngestRequest is the body of POST /v1/ingest.
@@ -94,8 +101,9 @@ type FileStatus string
 
 // Known file statuses.
 const (
-	StatusOK  FileStatus = "ok"
-	StatusGap FileStatus = "gap"
+	StatusOK       FileStatus = "ok"
+	StatusGap      FileStatus = "gap"
+	StatusConflict FileStatus = "conflict"
 )
 
 // FileResult reports the server state of one ingested file.
@@ -118,6 +126,9 @@ type RemoteFile struct {
 	Kind        Kind   `json:"kind"`
 	EndOffset   int64  `json:"end_offset"`
 	ContentHash string `json:"content_hash,omitempty"` // hex sha256 of latest snapshot
+	Scope       Scope  `json:"scope,omitempty"`
+	TailOffset  int64  `json:"tail_offset,omitempty"` // append: offset of the stored line with the highest offset
+	TailHash    string `json:"tail_hash,omitempty"`   // hex sha256 of that line
 }
 
 // ErrorResponse is the JSON error body; Server and Min report version mismatches.
@@ -196,6 +207,9 @@ func (r IngestRequest) Validate() error {
 	for i, f := range r.Files {
 		if err := ValidPath(f.Path, f.Kind); err != nil {
 			return fmt.Errorf("files[%d]: %w", i, err)
+		}
+		if f.Scope != "" && (f.Scope != ScopeDevice || f.Kind != KindAppend) {
+			return fmt.Errorf("files[%d]: bad scope", i)
 		}
 		switch f.Kind {
 		case KindAppend:

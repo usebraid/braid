@@ -207,3 +207,22 @@ func TestValidateLineCap(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestScopeValidation(t *testing.T) {
+	h := HashHex([]byte("h"))
+	c := EncodeLine([]byte("{}"))
+	cases := map[string]struct {
+		fb      FileBatch
+		wantErr bool
+	}{
+		"device append":  {FileBatch{Kind: KindAppend, Path: "p/a.jsonl", HeadHash: h, Scope: ScopeDevice}, false},
+		"user append":    {FileBatch{Kind: KindAppend, Path: "p/a.jsonl", HeadHash: h}, false},
+		"unknown scope":  {FileBatch{Kind: KindAppend, Path: "p/a.jsonl", HeadHash: h, Scope: "team"}, true},
+		"snapshot scope": {FileBatch{Kind: KindSnapshot, Path: "p/a.json", Content: &c, Scope: ScopeDevice}, true},
+	}
+	for name, tc := range cases {
+		if err := (IngestRequest{Files: []FileBatch{tc.fb}}).Validate(); (err != nil) != tc.wantErr {
+			t.Errorf("%s: err=%v", name, err)
+		}
+	}
+}

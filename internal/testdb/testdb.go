@@ -20,6 +20,16 @@ import (
 // cluster roles exist, migrates as braid_owner and drops the database on cleanup.
 func New(t testing.TB) (ownerURL, appURL string) {
 	t.Helper()
+	ownerURL, appURL = NewUnmigrated(t)
+	if err := db.Migrate(context.Background(), ownerURL); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return ownerURL, appURL
+}
+
+// NewUnmigrated is like New but leaves the database empty.
+func NewUnmigrated(t testing.TB) (ownerURL, appURL string) {
+	t.Helper()
 	adminURL := os.Getenv("BRAID_TEST_DATABASE_URL")
 	if adminURL == "" {
 		t.Fatal("BRAID_TEST_DATABASE_URL is not set")
@@ -80,10 +90,6 @@ func New(t testing.TB) (ownerURL, appURL string) {
 	ownerURL = u.String()
 	u.User = url.UserPassword("braid_app", "app")
 	appURL = u.String()
-
-	if err := db.Migrate(ctx, ownerURL); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
 	return ownerURL, appURL
 }
 

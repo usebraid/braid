@@ -44,13 +44,19 @@ func TestAppCannotEscalate(t *testing.T) {
 	}
 }
 
-// A user may not attach their own rows to another user's device or file (composite FKs).
-func TestNoCrossUserParent(t *testing.T) {
+// A user may not attach their own rows to another user's device (composite FK).
+func TestRawRowsCannotUseForeignDevice(t *testing.T) {
 	f := setup(t)
-	err := userExec(f, f.userB, `INSERT INTO source_files(user_id,device_id,rel_path,head_hash,kind,first_seen,last_seen) VALUES ($1,'00000000-0000-0000-0000-00000000000a','x','h','append',now(),now())`, f.userB)
+	testdb.Exec(t, f.owner, `INSERT INTO source_files(user_id,rel_path,head_hash,kind,first_seen,last_seen) VALUES ($1,'p/b.jsonl','h','append',now(),now())`, f.userB)
+	err := userExec(f, f.userB, `INSERT INTO raw_lines(user_id,source_file_id,"offset",line_hash,line,device_id)
+		SELECT $1,id,0,'\x02','\x7b7d','00000000-0000-0000-0000-00000000000a' FROM source_files WHERE user_id=$1`, f.userB)
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
 		t.Fatalf("want foreign_key_violation, got %v", err)
+	}
+	err = userExec(f, f.userB, `INSERT INTO source_files(user_id,scope_device_id,rel_path,head_hash,kind,first_seen,last_seen) VALUES ($1,'00000000-0000-0000-0000-00000000000a','x','h','append',now(),now())`, f.userB)
+	if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
+		t.Fatalf("scope_device_id: want foreign_key_violation, got %v", err)
 	}
 }
 
@@ -119,13 +125,13 @@ func TestNoUniqueKeyOracle(t *testing.T) {
 	f := setup(t)
 	var fileID int64
 	ownerRead(t, f.owner, `SELECT id FROM source_files`, &fileID) // B cannot see it via RLS; use A's guessable id
-	err := userExec(f, f.userB, `INSERT INTO raw_lines(user_id,source_file_id,"offset",line_hash,line) VALUES ($1,$2,0,'\x01','\x7b7d')`, f.userB, fileID)
+	err := userExec(f, f.userB, `INSERT INTO raw_lines(user_id,source_file_id,"offset",line_hash,line,device_id) VALUES ($1,$2,0,'\x01','\x7b7d','00000000-0000-0000-0000-00000000000a')`, f.userB, fileID)
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
 		t.Fatalf("want 23503, got %v", err)
 	}
 	// source_files(device, path, head_hash) of A must not collide for B either
-	err = userExec(f, f.userB, `INSERT INTO source_files(user_id,device_id,rel_path,head_hash,kind,first_seen,last_seen) VALUES ($1,'00000000-0000-0000-0000-00000000000a','p/a.jsonl','h','append',now(),now())`, f.userB)
+	err = userExec(f, f.userB, `INSERT INTO source_files(user_id,scope_device_id,rel_path,head_hash,kind,first_seen,last_seen) VALUES ($1,'00000000-0000-0000-0000-00000000000a','p/a.jsonl','h','append',now(),now())`, f.userB)
 	if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
 		t.Fatalf("source_files: want 23503, got %v", err)
 	}

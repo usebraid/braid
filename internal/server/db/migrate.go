@@ -14,8 +14,11 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
-// Migrate applies embedded migrations in name order, one transaction each.
-func Migrate(ctx context.Context, ownerURL string) error {
+// Migrate applies all embedded migrations in name order, one transaction each.
+func Migrate(ctx context.Context, ownerURL string) error { return MigrateTo(ctx, ownerURL, "") }
+
+// MigrateTo applies migrations up to and including the file named last ("" = all).
+func MigrateTo(ctx context.Context, ownerURL, last string) error {
 	conn, err := pgx.Connect(ctx, ownerURL)
 	if err != nil {
 		return fmt.Errorf("migrate connect: %w", err)
@@ -32,6 +35,9 @@ func Migrate(ctx context.Context, ownerURL string) error {
 		}
 		if err := apply(ctx, conn, e.Name(), string(sql)); err != nil {
 			return fmt.Errorf("migration %s: %w", e.Name(), err)
+		}
+		if e.Name() == last {
+			break
 		}
 	}
 	return nil

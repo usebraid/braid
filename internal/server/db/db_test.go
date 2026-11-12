@@ -39,8 +39,8 @@ func setup(t *testing.T) fixture {
 	f.userB = upsert(t, d, "sub-b", false)
 	// device + source file + line for A, created as owner
 	testdb.Exec(t, ownerURL, `INSERT INTO devices(id,user_id,name,created_at) VALUES ('00000000-0000-0000-0000-00000000000a',$1,'a',now())`, f.userA)
-	testdb.Exec(t, ownerURL, `INSERT INTO source_files(user_id,device_id,rel_path,head_hash,kind,first_seen,last_seen) VALUES ($1,'00000000-0000-0000-0000-00000000000a','p/a.jsonl','h','append',now(),now())`, f.userA)
-	testdb.Exec(t, ownerURL, `INSERT INTO raw_lines(user_id,source_file_id,"offset",line_hash,line,received_at) SELECT $1,id,0,'\x01','\x7b7d',now() FROM source_files`, f.userA)
+	testdb.Exec(t, ownerURL, `INSERT INTO source_files(user_id,rel_path,head_hash,kind,first_seen,last_seen) VALUES ($1,'p/a.jsonl','h','append',now(),now())`, f.userA)
+	testdb.Exec(t, ownerURL, `INSERT INTO raw_lines(user_id,source_file_id,"offset",line_hash,line,received_at,device_id) SELECT $1,id,0,'\x01','\x7b7d',now(),'00000000-0000-0000-0000-00000000000a' FROM source_files`, f.userA)
 	return f
 }
 
@@ -92,7 +92,7 @@ func TestRLSIsolation(t *testing.T) {
 func TestRLSBlocksForeignInsert(t *testing.T) {
 	f := setup(t)
 	err := f.d.WithUser(context.Background(), f.userB, func(tx pgx.Tx) error {
-		_, err := tx.Exec(context.Background(), `INSERT INTO source_files(user_id,device_id,rel_path,head_hash,kind,first_seen,last_seen) VALUES ($1,'00000000-0000-0000-0000-00000000000a','x.jsonl','h2','append',now(),now())`, f.userA)
+		_, err := tx.Exec(context.Background(), `INSERT INTO source_files(user_id,rel_path,head_hash,kind,first_seen,last_seen) VALUES ($1,'x.jsonl','h2','append',now(),now())`, f.userA)
 		return err
 	})
 	if err == nil {
