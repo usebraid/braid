@@ -276,7 +276,7 @@ func parseUser(m obj, add func(Event)) {
 	}
 	s, ok := content.(string)
 	if !ok {
-		s = strings.Join(text, "")
+		s = strings.Join(text, "\n")
 	}
 	add(Event{Kind: KindPrompt, Text: capText(s, MaxText)})
 }
