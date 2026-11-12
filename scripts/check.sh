@@ -13,6 +13,7 @@ golangci-lint run
 govulncheck ./...
 scripts/check-spdx.sh
 gitleaks detect --no-banner
+if command -v trivy >/dev/null; then trivy config --exit-code 1 --severity HIGH,CRITICAL . ; fi
 
 if [ -z "${BRAID_TEST_DATABASE_URL:-}" ]; then
   if ! docker ps --format '{{.Names}}' | grep -qx braid-test-pg; then

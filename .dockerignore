@@ -1,0 +1,6 @@
+.git
+.superpowers
+.github
+docs
+deploy
+**/*_test.go

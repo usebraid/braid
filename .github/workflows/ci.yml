@@ -31,6 +31,15 @@ jobs:
       - run: scripts/check.sh
         env:
           BRAID_TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/postgres?sslmode=disable
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build -t braid-server:ci .
+      - name: Scan image
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/v0.76.2/contrib/install.sh | sh -s -- -b "$RUNNER_TEMP" v0.76.2
+          "$RUNNER_TEMP/trivy" image --exit-code 1 --severity HIGH,CRITICAL braid-server:ci
   commits:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
