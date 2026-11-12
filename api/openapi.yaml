@@ -144,6 +144,24 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AuditPage" } } } }
         "403": { $ref: "#/components/responses/Error" }
+  /api/v1/stats/live:
+    get:
+      operationId: statsLive
+      summary: Live sessions with their active agents and current tools
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LivePage" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/stats/filters:
+    get:
+      operationId: statsFilters
+      summary: Distinct projects, models and skills of the sessions in range
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FilterOptions" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
   /api/v1/stats/overview:
     get:
       operationId: statsOverview
@@ -483,6 +501,49 @@ components:
         skills: { type: array, items: { type: string } }
         line_count: { type: integer, format: int64 }
         git_branch: { type: string }
+    CurrentTool:
+      type: object
+      required: [name, summary, started_at]
+      properties:
+        name: { type: string }
+        summary: { type: string, maxLength: 200 }
+        started_at: { type: string, format: date-time }
+    LiveAgent:
+      type: object
+      required: [agent_id, agent_type, description, parent_agent_id, started_at, current_tool]
+      properties:
+        agent_id: { type: string }
+        agent_type: { type: string }
+        description: { type: string }
+        parent_agent_id: { type: [string, "null"] }
+        started_at: { type: [string, "null"], format: date-time }
+        current_tool:
+          oneOf: [{ $ref: "#/components/schemas/CurrentTool" }, { type: "null" }]
+          description: Newest tool call of the agent without end, started less than 15 minutes ago.
+    LiveSession:
+      type: object
+      required: [session, agents]
+      properties:
+        session: { $ref: "#/components/schemas/SessionItem" }
+        agents: { type: array, items: { $ref: "#/components/schemas/LiveAgent" }, description: Agents active within 2 minutes, main first. }
+    LivePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/LiveSession" } }
+    ProjectOption:
+      type: object
+      required: [path, name]
+      properties:
+        path: { type: string }
+        name: { type: string }
+    FilterOptions:
+      type: object
+      required: [projects, models, skills]
+      properties:
+        projects: { type: array, items: { $ref: "#/components/schemas/ProjectOption" } }
+        models: { type: array, items: { type: string } }
+        skills: { type: array, items: { type: string } }
     SessionPage:
       type: object
       required: [items, next]

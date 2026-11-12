@@ -35,6 +35,8 @@ func New(d *db.DB) *Handler { return &Handler{db: d, now: time.Now} }
 func (h *Handler) Register(mux *http.ServeMux, auth *webauth.Auth, devLim *httpx.Limiter) {
 	mux.Handle("GET /v1/stats/self", ingest.RequireDevice(h.db, "stats:read:self", devLim, http.HandlerFunc(h.self)))
 	mux.Handle("GET /api/v1/stats/overview", auth.Require(http.HandlerFunc(h.overview)))
+	mux.Handle("GET /api/v1/stats/live", auth.Require(http.HandlerFunc(h.live)))
+	mux.Handle("GET /api/v1/stats/filters", auth.Require(http.HandlerFunc(h.filters)))
 	mux.Handle("GET /api/v1/stats/failures", auth.Require(http.HandlerFunc(h.failures)))
 	mux.Handle("GET /api/v1/stats/search", auth.Require(http.HandlerFunc(h.search)))
 	mux.Handle("GET /api/v1/stats/sessions", auth.Require(http.HandlerFunc(h.sessions)))
