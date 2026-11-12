@@ -9,6 +9,7 @@ export PATH="$(go env GOPATH)/bin:$PATH"
 out="$(gofmt -l .)"
 if [ -n "$out" ]; then echo "gofmt needed:"; echo "$out"; exit 1; fi
 go vet ./...
+go vet -tags e2e ./e2e/
 golangci-lint run
 govulncheck ./...
 scripts/check-spdx.sh
@@ -23,3 +24,4 @@ if [ -z "${BRAID_TEST_DATABASE_URL:-}" ]; then
   export BRAID_TEST_DATABASE_URL='postgres://postgres:test@localhost:55432/postgres?sslmode=disable'
 fi
 go test -race ./...
+if [ "${BRAID_E2E:-}" = 1 ]; then go test -tags e2e -count=1 -timeout 20m ./e2e/; fi

@@ -8,6 +8,7 @@ package paths
 type Dirs struct{ ClaudeProjects, Data, Config string }
 
 // Resolve builds paths with the separator of the target goos, not the host.
+// BRAID_CONFIG_DIR and BRAID_DATA_DIR override Config and Data for tests and unusual setups.
 func Resolve(goos, home string, getenv func(string) string) Dirs {
 	sep := "/"
 	if goos == "windows" {
@@ -39,5 +40,6 @@ func Resolve(goos, home string, getenv func(string) string) Dirs {
 		d.Data = join(env("XDG_STATE_HOME", join(home, ".local", "state")), "braid")
 		d.Config = join(env("XDG_CONFIG_HOME", join(home, ".config")), "braid")
 	}
+	d.Data, d.Config = env("BRAID_DATA_DIR", d.Data), env("BRAID_CONFIG_DIR", d.Config)
 	return d
 }

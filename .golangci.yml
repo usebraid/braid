@@ -1,4 +1,6 @@
 version: "2"
+run:
+  build-tags: [e2e] # lint the chaos test too
 linters:
   default: none
   enable:
@@ -12,3 +14,8 @@ linters:
     - noctx
     - errorlint
     - revive
+  exclusions:
+    rules:
+      - path: ^e2e/
+        linters: [gosec, noctx]
+        text: "G404|G115|must not be called" # test harness: seeded PRNG for reproducible data, loopback sockets, small bounded conversions

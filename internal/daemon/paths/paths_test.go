@@ -31,4 +31,9 @@ func TestResolve(t *testing.T) {
 	if d.Data != `C:\Users\u\AppData\Local\braid` || d.ClaudeProjects != `C:\Users\u\.claude\projects` {
 		t.Fatalf("%+v", d)
 	}
+	env = map[string]string{"BRAID_CONFIG_DIR": "/c", "BRAID_DATA_DIR": "/d"}
+	d = paths.Resolve("linux", "/home/u", get)
+	if d.Config != "/c" || d.Data != "/d" || d.ClaudeProjects != "/home/u/.claude/projects" {
+		t.Fatalf("%+v", d)
+	}
 }
