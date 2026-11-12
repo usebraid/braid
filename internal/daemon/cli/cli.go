@@ -323,14 +323,19 @@ func (e *env) install(f func(service.Spec, func(string, ...string) error) error)
 	})
 }
 
-// trackUp records token rejection in the settings for `braid status`.
+// trackUp records token rejection in the settings for `braid status`. On a 401 it re-reads the
+// stored credentials once (a new `braid login` replaces the token under a running service) and retries.
 type trackUp struct {
 	syncer.Uploader
-	db *state.DB
+	db     *state.DB
+	reload func() (syncer.Uploader, bool) // fresh uploader when the stored credentials changed
 }
 
-func (t trackUp) Ingest(ctx context.Context, req protocol.IngestRequest) (protocol.IngestResponse, error) {
+func (t *trackUp) Ingest(ctx context.Context, req protocol.IngestRequest) (protocol.IngestResponse, error) {
 	resp, err := t.Uploader.Ingest(ctx, req)
+	if errors.Is(err, client.ErrUnauthorized) && t.swap() {
+		resp, err = t.Uploader.Ingest(ctx, req)
+	}
 	switch {
 	case err == nil:
 		_ = t.db.SetSetting(context.WithoutCancel(ctx), "last_error", "")
@@ -340,13 +345,43 @@ func (t trackUp) Ingest(ctx context.Context, req protocol.IngestRequest) (protoc
 	return resp, err
 }
 
+func (t *trackUp) Files(ctx context.Context) ([]protocol.RemoteFile, error) {
+	out, err := t.Uploader.Files(ctx)
+	if errors.Is(err, client.ErrUnauthorized) && t.swap() {
+		out, err = t.Uploader.Files(ctx)
+	}
+	return out, err
+}
+
+func (t *trackUp) swap() bool {
+	if t.reload == nil {
+		return false
+	}
+	up, ok := t.reload()
+	if ok {
+		t.Uploader = up
+	}
+	return ok
+}
+
 func (e *env) engine() (*syncer.Engine, *state.DB, error) {
 	db, server, token, err := e.creds()
 	if err != nil {
 		return nil, nil, err
 	}
 	return &syncer.Engine{Root: e.dirs.ClaudeProjects, State: db, Spool: spool.New(filepath.Join(e.dirs.Data, "spool")),
-		Up: trackUp{client.New(server, token, Version, nil), db}}, db, nil
+		Up: &trackUp{Uploader: client.New(server, token, Version, nil), db: db, reload: func() (syncer.Uploader, bool) {
+			db2, s2, t2, err := e.creds()
+			if err != nil {
+				return nil, false
+			}
+			_ = db2.Close()
+			if s2 == server && t2 == token {
+				return nil, false
+			}
+			server, token = s2, t2
+			return client.New(s2, t2, Version, nil), true
+		}}}, db, nil
 }
 
 func (e *env) run() error {
