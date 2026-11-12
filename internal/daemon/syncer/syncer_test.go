@@ -309,3 +309,35 @@ func TestSnapshotOnlyOnChange(t *testing.T) {
 		t.Fatalf("versions %d", fs.snapshots("p/c.json"))
 	}
 }
+
+func TestReplacedFileDrainsOldSpool(t *testing.T) {
+	fs := newFakeServer()
+	e, root := newEngine(t, fs)
+	appendTo(t, root, "p/a.jsonl", "h\n")
+	if _, err := e.Pass(context.Background()); err != nil { // acks the head line only
+		t.Fatal(err)
+	}
+	appendTo(t, root, "p/a.jsonl", "1\n2\n")
+	fs.failNext = &client.RetryableError{Status: 503}
+	_, _ = e.Pass(context.Background()) // spools, upload fails
+	tmp := filepath.Join(root, "p/new.tmp")
+	_ = os.WriteFile(tmp, []byte("h\nn1\nn2\n"), 0o600)
+	if err := os.Rename(tmp, filepath.Join(root, "p/a.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Pass(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, l := range fs.lines("p/a.jsonl") {
+		got[l] = true
+	}
+	for _, w := range []string{"h", "1", "2", "n1", "n2"} {
+		if !got[w] {
+			t.Fatalf("missing %q in %v", w, got)
+		}
+	}
+	if entries, _ := os.ReadDir(e.Spool.Dir); len(entries) != 0 {
+		t.Fatalf("spool not cleaned: %v", entries)
+	}
+}

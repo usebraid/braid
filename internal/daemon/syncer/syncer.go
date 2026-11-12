@@ -48,6 +48,7 @@ type item struct {
 	src     string // where to read from
 	done    bool
 	spooled bool // spool ensured this pass (snapshots)
+	drain   bool // draining the retired spool entry of a replaced file; the new file follows
 }
 
 type sent struct {
@@ -191,6 +192,11 @@ func (e *Engine) prepare(ctx context.Context, it *item) error {
 	switch {
 	case it.abs != "":
 		it.src = it.abs
+		if r.Kind == protocol.KindAppend && r.SpoolPath != "" && r.FileID != "" {
+			if err := e.checkReplaced(it); err != nil {
+				return err
+			}
+		}
 	case r.SpoolPath != "" && fileExists(r.SpoolPath):
 		it.src = r.SpoolPath
 	default:
@@ -212,9 +218,39 @@ func (e *Engine) prepare(ctx context.Context, it *item) error {
 		r.AckedOffset = 0 // shorter than acked, same head: resend, server dedupes
 	}
 	r.SizeSeen = fi.Size()
-	if it.abs != "" && fi.Size() > r.AckedOffset {
+	if it.abs != "" && !it.drain && fi.Size() > r.AckedOffset {
 		return e.ensureSpool(it)
 	}
+	return nil
+}
+
+// checkReplaced detects a file replaced under the same rel and head (new FileID) whose old
+// content is not fully acked: the old spool entry is retired and drained first (state keeps one
+// row per (rel, head): a SpoolPath that is not the live spool path marks the draining phase).
+func (e *Engine) checkReplaced(it *item) error {
+	r := &it.row
+	if r.SpoolPath == e.Spool.Path(r.RelPath) {
+		id, err := reader.FileID(it.abs)
+		if err != nil {
+			return nil //nolint:nilerr // vanished: next pass decides
+		}
+		if id == r.FileID {
+			return nil
+		}
+		if lines, _, err := reader.ReadLines(r.SpoolPath, r.AckedOffset, 1); err != nil || len(lines) == 0 {
+			return nil //nolint:nilerr // nothing unacked in the old entry (or it is gone): Ensure replaces it
+		}
+		old, err := e.Spool.Retire(r.RelPath, r.FileID)
+		if err != nil || old == "" {
+			return err
+		}
+		r.SpoolPath = old
+	}
+	if !fileExists(r.SpoolPath) {
+		r.SpoolPath = ""
+		return nil
+	}
+	it.drain, it.src = true, r.SpoolPath
 	return nil
 }
 
@@ -223,7 +259,6 @@ func (e *Engine) ensureSpool(it *item) error {
 	if err != nil {
 		return err
 	}
-	// shortcut: a replaced file (new FileID, same head) overwrites the old spool entry via Ensure instead of Retire-and-drain; upgrade if rewrites with unacked tails show up.
 	p, _, err := e.Spool.Ensure(it.row.RelPath, it.abs, id)
 	if err != nil {
 		return err
@@ -246,6 +281,26 @@ func (e *Engine) drop(ctx context.Context, it *item) error {
 
 // finish handles a fully acked item: gone → forget it; present → release the spool entry.
 func (e *Engine) finish(ctx context.Context, it *item) error {
+	if it.drain { // old file drained: switch the same row over to the new file
+		if err := e.Spool.Remove(it.row.SpoolPath); err != nil {
+			return err
+		}
+		r := &it.row
+		r.SpoolPath, r.FileID, r.AckedOffset = "", "", 0
+		it.drain, it.src = false, it.abs
+		fi, err := os.Stat(it.abs)
+		if err != nil {
+			it.done = true // vanished; next pass decides
+			return e.State.Put(ctx, *r)
+		}
+		r.SizeSeen = fi.Size()
+		if fi.Size() > 0 {
+			if err := e.ensureSpool(it); err != nil {
+				return err
+			}
+		}
+		return e.State.Put(ctx, *r)
+	}
 	it.done = true
 	if it.abs == "" {
 		return e.drop(ctx, it)
@@ -266,6 +321,7 @@ func (e *Engine) build(ctx context.Context, items []*item) (protocol.IngestReque
 	var metas []sent
 	used, nlines := 0, 0
 	for _, it := range items {
+	retry:
 		if it.done {
 			continue
 		}
@@ -325,8 +381,12 @@ func (e *Engine) build(ctx context.Context, items []*item) (protocol.IngestReque
 			return req, nil, err
 		}
 		if len(lines) == 0 {
+			wasDrain := it.drain
 			if err := e.finish(ctx, it); err != nil {
 				return req, nil, err
+			}
+			if wasDrain {
+				goto retry // now the new file, same row
 			}
 			continue
 		}
