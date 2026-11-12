@@ -159,3 +159,16 @@ func TestReadJSON(t *testing.T) {
 		t.Error("oversized body accepted")
 	}
 }
+
+func TestLimiterAllowedDoesNotConsume(t *testing.T) {
+	l := NewLimiter(1, time.Now)
+	for i := 0; i < 3; i++ {
+		if !l.Allowed("k") {
+			t.Fatal("Allowed consumed or denied a fresh key")
+		}
+	}
+	l.Allow("k")
+	if l.Allowed("k") {
+		t.Fatal("Allowed true on empty bucket")
+	}
+}

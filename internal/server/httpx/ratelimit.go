@@ -66,6 +66,17 @@ func (l *Limiter) Allow(key string) bool {
 	return true
 }
 
+// Allowed reports whether key has a token, without consuming it.
+func (l *Limiter) Allowed(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	b, ok := l.buckets[key]
+	if !ok {
+		return true
+	}
+	return math.Min(l.cap, b.tokens+l.now().Sub(b.last).Seconds()*l.perSec) >= 1
+}
+
 // TooMany writes 429 with Retry-After (whole seconds, at least 1).
 func TooMany(w http.ResponseWriter, retryAfter time.Duration) {
 	secs := int(math.Ceil(retryAfter.Seconds()))
