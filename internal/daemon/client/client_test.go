@@ -96,3 +96,13 @@ func TestBackoff(t *testing.T) {
 		t.Errorf("jitter floor: %v", d)
 	}
 }
+
+func TestUndecodable2xxIsRetryable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("<html>")) }))
+	defer srv.Close()
+	_, err := client.New(srv.URL, "t", "0", srv.Client()).Files(context.Background())
+	var r *client.RetryableError
+	if !errors.As(err, &r) || r.Status != 200 {
+		t.Errorf("got %v", err)
+	}
+}

@@ -83,43 +83,44 @@ func (c *Client) Ingest(ctx context.Context, req protocol.IngestRequest) (protoc
 	if err := zw.Close(); err != nil {
 		return out, err
 	}
-	body, err := c.do(ctx, http.MethodPost, "/v1/ingest", &buf, true)
+	body, st, err := c.do(ctx, http.MethodPost, "/v1/ingest", &buf, true)
 	if err != nil {
 		return out, err
 	}
-	return out, decode(body, &out)
+	return out, decode(body, st, &out)
 }
 
 // Files lists the files the server knows for this device.
 func (c *Client) Files(ctx context.Context) ([]protocol.RemoteFile, error) {
-	body, err := c.do(ctx, http.MethodGet, "/v1/files", nil, false)
+	body, st, err := c.do(ctx, http.MethodGet, "/v1/files", nil, false)
 	if err != nil {
 		return nil, err
 	}
 	var out []protocol.RemoteFile
-	return out, decode(body, &out)
+	return out, decode(body, st, &out)
 }
 
 // Revoke revokes this device; already revoked (401) counts as done.
 func (c *Client) Revoke(ctx context.Context) error {
-	_, err := c.do(ctx, http.MethodPost, "/v1/device/revoke", nil, false)
+	_, _, err := c.do(ctx, http.MethodPost, "/v1/device/revoke", nil, false)
 	if errors.Is(err, ErrUnauthorized) {
 		return nil
 	}
 	return err
 }
 
-func decode(body []byte, v any) error {
+// An undecodable 2xx (captive portal, proxy) is retryable.
+func decode(body []byte, status int, v any) error {
 	if err := json.Unmarshal(body, v); err != nil {
-		return fmt.Errorf("decode response: %w", err)
+		return &RetryableError{Status: status, Err: fmt.Errorf("decode response: %w", err)}
 	}
 	return nil
 }
 
-func (c *Client) do(ctx context.Context, method, path string, body io.Reader, gz bool) ([]byte, error) {
+func (c *Client) do(ctx context.Context, method, path string, body io.Reader, gz bool) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.base+path, body)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set(protocol.HeaderVersion, strconv.Itoa(protocol.Version))
@@ -133,20 +134,20 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, gz
 	resp, err := c.hc.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, 0, ctx.Err()
 		}
 		// url.Error never contains headers, so the token cannot leak.
-		return nil, &RetryableError{Err: err}
+		return nil, 0, &RetryableError{Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 	if err != nil {
-		return nil, &RetryableError{Status: resp.StatusCode, Err: err}
+		return nil, 0, &RetryableError{Status: resp.StatusCode, Err: err}
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return data, nil
+		return data, resp.StatusCode, nil
 	}
-	return nil, classify(resp, data)
+	return nil, resp.StatusCode, classify(resp, data)
 }
 
 func classify(resp *http.Response, data []byte) error {
