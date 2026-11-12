@@ -28,6 +28,12 @@ type failureAcc struct {
 	offset int64
 }
 
+type docAcc struct {
+	role, text, tools, idents string
+	at                        time.Time
+	offset                    int64
+}
+
 type usageAcc struct {
 	u      *parse.Usage
 	at     time.Time
@@ -47,6 +53,7 @@ type batch struct {
 	usage                  map[string]*usageAcc
 	models                 map[string]bool
 	failures               map[int64]*failureAcc
+	docs                   map[int64]*docAcc
 	// session and agent
 	started, ended                time.Time
 	projPath, branch, firstPrompt string
@@ -61,7 +68,7 @@ type batch struct {
 
 func newBatch(userID string, fileID int64, fi parse.FileInfo) *batch {
 	return &batch{userID: userID, fileID: fileID, session: fi.SessionID, agent: fi.AgentID, main: fi.Kind == parse.FileMain, sub: fi.Kind == parse.FileSubagent, metaFile: fi.Kind == parse.FileAgentMeta,
-		devices: map[string]int64{}, projects: map[string]*projAcc{}, tools: map[string]*toolAcc{}, usage: map[string]*usageAcc{}, models: map[string]bool{}, failures: map[int64]*failureAcc{}}
+		devices: map[string]int64{}, projects: map[string]*projAcc{}, tools: map[string]*toolAcc{}, usage: map[string]*usageAcc{}, models: map[string]bool{}, failures: map[int64]*failureAcc{}, docs: map[int64]*docAcc{}}
 }
 
 func nullTime(t time.Time) *time.Time {
@@ -84,6 +91,12 @@ func (b *batch) tool(id string) *toolAcc {
 }
 
 func (b *batch) add(evs []parse.Event, offset int64) {
+	doc := &docAcc{offset: offset} // snapshots yield no prompt/assistant events, so they never produce a doc
+	defer func() {
+		if doc.text != "" || doc.tools != "" {
+			b.docs[offset] = doc
+		}
+	}()
 	for _, e := range evs {
 		if later(b.maxTS, e.TS) && !e.TS.IsZero() {
 			b.maxTS = e.TS
@@ -133,6 +146,7 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 				b.failures[offset] = &failureAcc{e.Failure, at, offset}
 			}
 		case parse.KindPrompt:
+			doc.role, doc.text, doc.at = "user", e.Text, e.TS
 			if !e.TS.IsZero() && earlier(b.promptAt, e.TS) {
 				b.firstPrompt, b.promptAt = firstPromptText(e.Text), e.TS
 			}
@@ -149,6 +163,7 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 		case parse.KindAgentMeta:
 			b.meta = e.Meta
 		case parse.KindAssistant:
+			doc.role, doc.text, doc.at = "assistant", e.Text, e.TS
 			if e.Usage == nil || e.TS.IsZero() {
 				break
 			}
@@ -157,6 +172,10 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 				b.usage[e.Usage.ID] = &usageAcc{e.Usage, e.TS, offset}
 			}
 		case parse.KindToolUse:
+			if doc.role == "" {
+				doc.role = "assistant"
+			}
+			doc.tools, doc.idents = strings.TrimSpace(doc.tools+" "+e.Tool), strings.TrimSpace(doc.idents+" "+e.Idents)
 			t := b.tool(e.ToolUseID)
 			t.name, t.skill, t.summary = e.Tool, e.Skill, e.Summary
 			if !e.TS.IsZero() && earlier(t.started, e.TS) {
@@ -352,6 +371,25 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 		  ON CONFLICT (user_id, source_file_id, "offset") DO UPDATE SET category = EXCLUDED.category, detail = EXCLUDED.detail, occurred_at = EXCLUDED.occurred_at,
 		    session_id = EXCLUDED.session_id, agent_id = EXCLUDED.agent_id, limit_type = EXCLUDED.limit_type, resets_at = EXCLUDED.resets_at`,
 			b.fileID, b.session, b.agent, off, cat, detail, at, lt, rs); err != nil {
+			return err
+		}
+	}
+
+	if b.session != "" && len(b.docs) > 0 {
+		var off []int64
+		var role, text, idents []string
+		var at []*time.Time
+		for _, d := range b.docs {
+			// Postgres text cannot hold NUL; idents are capped at 1000 bytes (names and paths are ASCII-ish, cut may split a rune, so trim to valid UTF-8).
+			off, role, at = append(off, d.offset), append(role, d.role), append(at, nullTime(d.at))
+			text = append(text, strings.ToValidUTF8(strings.ReplaceAll(d.text+" "+d.tools, "\x00", ""), ""))
+			idents = append(idents, strings.ToValidUTF8(strings.ReplaceAll(d.idents[:min(len(d.idents), 1000)], "\x00", ""), ""))
+		}
+		if err := exec(`INSERT INTO search_docs(user_id, source_file_id, "offset", session_id, agent_id, role, at, tsv, idents)
+		  SELECT $1, $2, o, $3, $4, r, a, to_tsvector('simple', t), i FROM unnest($5::bigint[], $6::text[], $7::timestamptz[], $8::text[], $9::text[]) AS x(o, r, a, t, i)
+		  ON CONFLICT (user_id, source_file_id, "offset") DO UPDATE SET session_id = EXCLUDED.session_id, agent_id = EXCLUDED.agent_id,
+		    role = EXCLUDED.role, at = EXCLUDED.at, tsv = EXCLUDED.tsv, idents = EXCLUDED.idents`,
+			b.fileID, b.session, b.agent, off, role, at, text, idents); err != nil {
 			return err
 		}
 	}
