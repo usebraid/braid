@@ -1,0 +1,11 @@
+/home/u/.config/systemd/user/braid.service
+[Unit]
+Description=Braid sync daemon
+
+[Service]
+ExecStart=/usr/local/bin/braid run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
