@@ -22,6 +22,12 @@ type toolAcc struct {
 	resultMs, totalMs    *int64
 }
 
+type failureAcc struct {
+	f      *parse.Failure
+	at     time.Time
+	offset int64
+}
+
 type usageAcc struct {
 	u      *parse.Usage
 	at     time.Time
@@ -40,6 +46,7 @@ type batch struct {
 	tools                  map[string]*toolAcc
 	usage                  map[string]*usageAcc
 	models                 map[string]bool
+	failures               map[int64]*failureAcc
 	// session and agent
 	started, ended                time.Time
 	projPath, branch, firstPrompt string
@@ -54,7 +61,7 @@ type batch struct {
 
 func newBatch(userID string, fileID int64, fi parse.FileInfo) *batch {
 	return &batch{userID: userID, fileID: fileID, session: fi.SessionID, agent: fi.AgentID, main: fi.Kind == parse.FileMain, sub: fi.Kind == parse.FileSubagent, metaFile: fi.Kind == parse.FileAgentMeta,
-		devices: map[string]int64{}, projects: map[string]*projAcc{}, tools: map[string]*toolAcc{}, usage: map[string]*usageAcc{}, models: map[string]bool{}}
+		devices: map[string]int64{}, projects: map[string]*projAcc{}, tools: map[string]*toolAcc{}, usage: map[string]*usageAcc{}, models: map[string]bool{}, failures: map[int64]*failureAcc{}}
 }
 
 func nullTime(t time.Time) *time.Time {
@@ -116,6 +123,14 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 			}
 			if e.Branch != "" && later(b.branchAt, e.TS) {
 				b.branch, b.branchAt = e.Branch, e.TS
+			}
+		case parse.KindFailure:
+			at := e.TS
+			if at.IsZero() {
+				at = b.prevTS // newest ts seen so far, seeded from the cursor
+			}
+			if !at.IsZero() {
+				b.failures[offset] = &failureAcc{e.Failure, at, offset}
 			}
 		case parse.KindPrompt:
 			if !e.TS.IsZero() && earlier(b.promptAt, e.TS) {
@@ -320,6 +335,23 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 		  WHERE EXCLUDED.output_tokens > usage.output_tokens
 		     OR (EXCLUDED.output_tokens = usage.output_tokens AND (EXCLUDED.source_file_id, EXCLUDED."offset") < (usage.source_file_id, usage."offset"))`,
 			b.session, b.agent, b.fileID, ids, models, in, out, cr, w5, w1, th, ws, wf, speeds, at, off, cost, unk, est); err != nil {
+			return err
+		}
+	}
+
+	if b.session != "" && len(b.failures) > 0 {
+		var off []int64
+		var cat, detail, lt []string
+		var at, rs []*time.Time
+		for _, a := range b.failures {
+			off, cat, detail, lt = append(off, a.offset), append(cat, a.f.Category), append(detail, a.f.Detail), append(lt, a.f.LimitType)
+			at, rs = append(at, &a.at), append(rs, nullTime(a.f.ResetsAt))
+		}
+		if err := exec(`INSERT INTO failures(user_id, source_file_id, "offset", category, detail, occurred_at, session_id, agent_id, limit_type, resets_at)
+		  SELECT $1, $2, o, c, d, a, $3, $4, nullif(l, ''), r FROM unnest($5::bigint[], $6::text[], $7::text[], $8::timestamptz[], $9::text[], $10::timestamptz[]) AS x(o, c, d, a, l, r)
+		  ON CONFLICT (user_id, source_file_id, "offset") DO UPDATE SET category = EXCLUDED.category, detail = EXCLUDED.detail, occurred_at = EXCLUDED.occurred_at,
+		    session_id = EXCLUDED.session_id, agent_id = EXCLUDED.agent_id, limit_type = EXCLUDED.limit_type, resets_at = EXCLUDED.resets_at`,
+			b.fileID, b.session, b.agent, off, cat, detail, at, lt, rs); err != nil {
 			return err
 		}
 	}
