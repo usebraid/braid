@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -120,7 +121,7 @@ func errJSON(w http.ResponseWriter, status int, code string) {
 var errNotFound = errors.New("not found")
 
 // fail maps an error to a response.
-func fail(w http.ResponseWriter, err error) {
+func fail(w http.ResponseWriter, r *http.Request, err error) {
 	var pg *pgconn.PgError
 	switch {
 	case errors.Is(err, errNotFound):
@@ -132,6 +133,7 @@ func fail(w http.ResponseWriter, err error) {
 	case errors.As(err, &pg) && pg.Code == "P0001": // guard exceptions (own account)
 		errJSON(w, http.StatusBadRequest, "invalid_request")
 	default:
+		slog.Error("api error", "method", r.Method, "path", r.URL.Path, "err", err)
 		errJSON(w, http.StatusInternalServerError, "internal")
 	}
 }
@@ -148,7 +150,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		return tx.QueryRow(r.Context(), `SELECT id::text, email, name FROM users WHERE id = app_user()`).Scan(&m.ID, &m.Email, &m.Name)
 	})
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	m.IsAdmin = p.IsAdmin
@@ -184,7 +186,7 @@ func (h *Handler) devices(w http.ResponseWriter, r *http.Request) {
 		return rows.Err()
 	})
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
@@ -244,7 +246,7 @@ func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
 		return h.auditDevice(r.Context(), tx, r, p.UserID, id, "device_renamed", map[string]string{"from": old, "to": name})
 	})
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, d)
@@ -271,7 +273,7 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 		return h.auditDevice(r.Context(), tx, r, p.UserID, id, "device_revoked", nil)
 	})
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -335,7 +337,7 @@ func (h *Handler) auditHandler(own bool) http.HandlerFunc {
 			return err
 		})
 		if err != nil {
-			fail(w, err)
+			fail(w, r, err)
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, page)
@@ -370,7 +372,7 @@ func (h *Handler) adminUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	})
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
@@ -389,7 +391,7 @@ func (h *Handler) setDisabled(disabled bool) http.HandlerFunc {
 			return err
 		})
 		if err != nil {
-			fail(w, err)
+			fail(w, r, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -424,7 +426,7 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 		errJSON(w, http.StatusBadRequest, "confirm_mismatch")
 		return
 	} else if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -167,3 +167,19 @@ func TestCrossOriginMutationRejected(t *testing.T) {
 		t.Fatalf("%d", resp.StatusCode)
 	}
 }
+
+func TestAdminSelfAndBadIDs(t *testing.T) {
+	e := servertest.Start(t)
+	admin := e.Login(t, "root", "braid-admins")
+	_, b := do(t, e, admin, "GET", "/api/v1/me", nil)
+	var me api.Me
+	_ = json.Unmarshal(b, &me)
+	for _, c := range [][2]string{{"POST", "/disable"}, {"POST", "/enable"}, {"DELETE", "?confirm=" + url.QueryEscape(me.Email)}} {
+		if resp, _ := do(t, e, admin, c[0], "/api/v1/admin/users/"+me.ID+c[1], nil); resp.StatusCode != 400 {
+			t.Errorf("self %s %s: %d", c[0], c[1], resp.StatusCode)
+		}
+		if resp, _ := do(t, e, admin, c[0], "/api/v1/admin/users/not-a-uuid"+c[1], nil); resp.StatusCode != 404 {
+			t.Errorf("bad id %s %s: %d", c[0], c[1], resp.StatusCode)
+		}
+	}
+}
