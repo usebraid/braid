@@ -86,9 +86,9 @@ func (e *Engine) Pass(ctx context.Context) (res Result, err error) {
 		}
 		_ = e.State.SetSetting(context.WithoutCancel(ctx), "blocked", msg)
 	}()
-	if err := e.resume(ctx); err != nil {
-		return res, err
-	}
+	// A failing resume must not stop collection: spooling is unconditional (§4.5), so the error
+	// is returned only after discover has spooled everything.
+	resumeErr := e.resume(ctx)
 	entries, walkErr := scan.Walk(e.Root)
 	if walkErr != nil && len(entries) == 0 {
 		return res, walkErr // do not mistake an unreadable root for "all originals gone"
@@ -96,6 +96,9 @@ func (e *Engine) Pass(ctx context.Context) (res Result, err error) {
 	items, err := e.discover(ctx, entries)
 	if err != nil {
 		return res, err
+	}
+	if resumeErr != nil {
+		return res, resumeErr
 	}
 	for {
 		req, metas, err := e.build(ctx, items)
@@ -262,7 +265,7 @@ func (e *Engine) prepare(ctx context.Context, it *item) error {
 		return e.drop(ctx, it)
 	}
 	if r.Kind != protocol.KindAppend {
-		return nil
+		return e.spoolSnapshot(it)
 	}
 	fi, err := os.Stat(it.src)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -313,6 +316,24 @@ func (e *Engine) checkReplaced(it *item) error {
 	}
 	it.drain, it.src = true, r.SpoolPath
 	return nil
+}
+
+// spoolSnapshot spools a changed snapshot during discovery, so a long outage cannot lose any of them.
+func (e *Engine) spoolSnapshot(it *item) error {
+	if it.abs == "" {
+		return nil
+	}
+	_, hash, err := reader.Snapshot(it.abs)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if hash == it.row.ContentHash {
+		return nil
+	}
+	return e.ensureSpool(it)
 }
 
 func (e *Engine) ensureSpool(it *item) error {
