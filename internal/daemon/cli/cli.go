@@ -206,6 +206,14 @@ func (e *env) login(raw string) error {
 		return err
 	}
 	defer func() { _ = db.Close() }()
+	// Every login makes a new device on the server that knows none of our history.
+	oldServer, _, _ := db.Setting(e.ctx, "server_url")
+	oldDevice, _, _ := db.Setting(e.ctx, "device_id")
+	if (oldServer != "" || oldDevice != "") && (oldServer != server || oldDevice != tr.DeviceID) {
+		if err := db.ResetAcks(e.ctx); err != nil {
+			return err
+		}
+	}
 	for k, v := range map[string]string{"server_url": server, "device_id": tr.DeviceID, "token_store": st.Kind(), "last_error": ""} {
 		if err := db.SetSetting(e.ctx, k, v); err != nil {
 			return err

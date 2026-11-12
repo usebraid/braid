@@ -12,6 +12,7 @@ import (
 
 	"github.com/usebraid/braid/internal/daemon/cli"
 	"github.com/usebraid/braid/internal/daemon/state"
+	"github.com/usebraid/braid/internal/protocol"
 )
 
 func TestVersionAndUnknown(t *testing.T) {
@@ -69,5 +70,40 @@ func TestStatusReportsBlockedFiles(t *testing.T) {
 	out.Reset()
 	if code := cli.RunWithHooks(context.Background(), []string{"status"}, nil, &out, &errb, h); code != 1 || !strings.Contains(out.String(), "cannot be synced") {
 		t.Fatalf("%d %s", code, out.String())
+	}
+}
+
+func TestLoginElsewhereResetsAckedState(t *testing.T) {
+	var out, errb bytes.Buffer
+	h := cli.Hooks{NoKeychain: true, FakeToken: "braid_dev_a", ConfigDir: t.TempDir(), DataDir: t.TempDir()} //nolint:gosec // G101: test fixture
+	login := func(url string) {
+		t.Helper()
+		if code := cli.RunWithHooks(context.Background(), []string{"login", url}, strings.NewReader("y\n"), &out, &errb, h); code != 0 {
+			t.Fatalf("login %d: %s", code, errb.String())
+		}
+	}
+	login("https://one.example")
+	db, err := state.Open(filepath.Join(h.DataDir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	_ = db.Put(ctx, state.File{RelPath: "p/a.jsonl", HeadHash: "h", Kind: protocol.KindAppend, AckedOffset: 42, SpoolPath: "/spool/x"})
+	_ = db.SetSetting(ctx, "resumed", "1")
+	_ = db.Close()
+
+	login("https://one.example") // same server and device id: acks stay
+	db, _ = state.Open(filepath.Join(h.DataDir, "state.db"))
+	if f, _, _ := db.Get(ctx, "p/a.jsonl", "h"); f.AckedOffset != 42 {
+		t.Fatalf("same device reset: %d", f.AckedOffset)
+	}
+	_ = db.Close()
+
+	login("https://two.example")
+	db, _ = state.Open(filepath.Join(h.DataDir, "state.db"))
+	defer func() { _ = db.Close() }()
+	f, _, _ := db.Get(ctx, "p/a.jsonl", "h")
+	if _, ok, _ := db.Setting(ctx, "resumed"); f.AckedOffset != 0 || f.SpoolPath != "/spool/x" || ok {
+		t.Fatalf("not reset: %+v resumed=%v", f, ok)
 	}
 }

@@ -162,6 +162,23 @@ func (d *DB) SetSetting(ctx context.Context, key, value string) error {
 	return err
 }
 
+// ResetAcks forgets everything the server acknowledged (offsets, snapshot hashes, the resume marker)
+// so the whole history is sent again to a new device. Spool paths and file ids stay.
+func (d *DB) ResetAcks(ctx context.Context) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `UPDATE files SET acked_offset=0, content_hash='', size_seen=CASE WHEN kind='snapshot' THEN -1 ELSE size_seen END`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM settings WHERE key='resumed'`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // Backlog summarises unacked work.
 type Backlog struct {
 	Files         int
