@@ -298,6 +298,9 @@ func (e *env) status() int {
 	if lastErr != "" {
 		warn(1, lastErr)
 	}
+	if blocked, _, _ := db.Setting(e.ctx, "blocked"); blocked != "" {
+		warn(1, blocked)
+	}
 	return code
 }
 

@@ -12,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/usebraid/braid/internal/daemon/client"
 	"github.com/usebraid/braid/internal/daemon/reader"
 	"github.com/usebraid/braid/internal/daemon/scan"
 	"github.com/usebraid/braid/internal/daemon/spool"
@@ -34,6 +35,8 @@ type Engine struct {
 	MaxBatchBytes int // uncompressed line bytes per request, default 4 MiB
 	MaxBatchLines int // default 5000
 	Now           func() time.Time
+
+	fileErrs []error // per-file failures of the running pass; the pass goes on without those files
 }
 
 // Result summarises a pass.
@@ -75,6 +78,14 @@ func (e *Engine) Pass(ctx context.Context) (res Result, err error) {
 	if e.Now == nil {
 		e.Now = time.Now
 	}
+	e.fileErrs = nil
+	defer func() { // visible to `braid status`; "" when nothing is stuck
+		msg := ""
+		if n := len(e.fileErrs); n > 0 {
+			msg = fmt.Sprintf("%d file(s) cannot be synced, first: %v", n, e.fileErrs[0])
+		}
+		_ = e.State.SetSetting(context.WithoutCancel(ctx), "blocked", msg)
+	}()
 	if err := e.resume(ctx); err != nil {
 		return res, err
 	}
@@ -95,6 +106,11 @@ func (e *Engine) Pass(ctx context.Context) (res Result, err error) {
 			break
 		}
 		resp, err := e.Up.Ingest(ctx, req)
+		var perm *client.PermanentError
+		if errors.As(err, &perm) {
+			// The server rejects the whole request; find the file(s) that cause it, block those, keep the rest.
+			resp, metas, err = e.isolate(ctx, req, metas)
+		}
 		if err != nil {
 			return res, err
 		}
@@ -105,9 +121,31 @@ func (e *Engine) Pass(ctx context.Context) (res Result, err error) {
 		}
 	}
 	if walkErr != nil {
-		return res, fmt.Errorf("syncer: scan skipped unreadable paths: %w", walkErr)
+		e.fileErrs = append(e.fileErrs, fmt.Errorf("syncer: scan skipped unreadable paths: %w", walkErr))
 	}
-	return res, nil
+	return res, errors.Join(e.fileErrs...)
+}
+
+// isolate re-sends a rejected request one file at a time. Files the server still rejects permanently
+// are blocked for this pass (recorded in fileErrs); the others are returned with their responses.
+func (e *Engine) isolate(ctx context.Context, req protocol.IngestRequest, metas []sent) (protocol.IngestResponse, []sent, error) {
+	var out protocol.IngestResponse
+	var okMetas []sent
+	for i, m := range metas {
+		resp, err := e.Up.Ingest(ctx, protocol.IngestRequest{Files: req.Files[i : i+1]})
+		var perm *client.PermanentError
+		if errors.As(err, &perm) {
+			m.it.done = true
+			e.fileErrs = append(e.fileErrs, fmt.Errorf("syncer: server rejects %s: %w", m.it.row.RelPath, err))
+			continue
+		}
+		if err != nil {
+			return out, nil, err
+		}
+		out.Files = append(out.Files, resp.Files...)
+		okMetas = append(okMetas, m)
+	}
+	return out, okMetas, nil
 }
 
 // resume seeds state from the server once, when no local state was ever built.
@@ -153,7 +191,8 @@ func (e *Engine) discover(ctx context.Context, entries []scan.Entry) ([]*item, e
 				continue // vanished, or no complete line yet
 			}
 			if err != nil {
-				return nil, err
+				e.fileErrs = append(e.fileErrs, err) // unreadable: skip this file only
+				continue
 			}
 			head = h
 		}
@@ -187,7 +226,8 @@ func (e *Engine) discover(ctx context.Context, entries []scan.Entry) ([]*item, e
 	for _, it := range items {
 		orig := it.row
 		if err := e.prepare(ctx, it); err != nil {
-			return nil, err
+			e.fileErrs = append(e.fileErrs, err)
+			continue
 		}
 		if it.done {
 			continue
@@ -355,7 +395,9 @@ func (e *Engine) build(ctx context.Context, items []*item) (protocol.IngestReque
 				continue
 			}
 			if err != nil {
-				return req, nil, err
+				it.done = true
+				e.fileErrs = append(e.fileErrs, err)
+				continue
 			}
 			if hash == r.ContentHash {
 				if r.SizeSeen != 0 {
@@ -396,7 +438,9 @@ func (e *Engine) build(ctx context.Context, items []*item) (protocol.IngestReque
 			continue
 		}
 		if err != nil {
-			return req, nil, err
+			it.done = true
+			e.fileErrs = append(e.fileErrs, err)
+			continue
 		}
 		if len(lines) == 0 {
 			wasDrain := it.drain
