@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -25,13 +26,40 @@ import (
 type Handler struct {
 	db  *db.DB
 	sem chan struct{} // bounds concurrent ingest requests (memory)
+	// Per-device in-flight limit, taken before the body is read: a device that stalls its
+	// bodies can only block itself, not the global slots.
+	mu       sync.Mutex
+	inflight map[string]int
+}
+
+// MaxIngestPerDevice bounds in-flight ingest requests per device (one is the daemon's normal case).
+const MaxIngestPerDevice = 2
+
+func (h *Handler) enter(dev string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.inflight[dev] >= MaxIngestPerDevice {
+		return false
+	}
+	h.inflight[dev]++
+	return true
+}
+
+func (h *Handler) leave(dev string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.inflight[dev]--; h.inflight[dev] <= 0 {
+		delete(h.inflight, dev)
+	}
 }
 
 // MaxConcurrentIngest bounds in-flight ingest requests per server.
 const MaxConcurrentIngest = 4
 
 // New returns a Handler on d.
-func New(d *db.DB) *Handler { return &Handler{db: d, sem: make(chan struct{}, MaxConcurrentIngest)} }
+func New(d *db.DB) *Handler {
+	return &Handler{db: d, sem: make(chan struct{}, MaxConcurrentIngest), inflight: map[string]int{}}
+}
 
 // Register mounts the endpoints; both need scope ingest:write.
 func (h *Handler) Register(mux *http.ServeMux, lim *httpx.Limiter) {
@@ -47,16 +75,21 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		errJSON(w, http.StatusUnsupportedMediaType, "unsupported_encoding")
 		return
 	}
+	if !h.enter(dev.DeviceID) {
+		httpx.TooMany(w, time.Second)
+		return
+	}
+	defer h.leave(dev.DeviceID)
+	var req protocol.IngestRequest
+	if status, code := readRequest(w, r, &req); code != "" {
+		errJSON(w, status, code)
+		return
+	}
 	select {
 	case h.sem <- struct{}{}:
 		defer func() { <-h.sem }()
 	default:
 		httpx.TooMany(w, time.Second)
-		return
-	}
-	var req protocol.IngestRequest
-	if status, code := readRequest(w, r, &req); code != "" {
-		errJSON(w, status, code)
 		return
 	}
 	// Fixed lock order across concurrent requests avoids deadlocks; results go back in request order.
@@ -118,7 +151,7 @@ func (c *capReader) Read(p []byte) (int, error) {
 func readRequest(w http.ResponseWriter, r *http.Request, req *protocol.IngestRequest) (status int, code string) {
 	fail := func(err error) (int, string) {
 		var mb *http.MaxBytesError
-		if errors.Is(err, errTooLarge) || errors.As(err, &mb) || errors.Is(err, protocol.ErrTooManyLines) {
+		if errors.Is(err, errTooLarge) || errors.As(err, &mb) || errors.Is(err, protocol.ErrTooManyLines) || errors.Is(err, protocol.ErrTooManyFiles) {
 			return http.StatusRequestEntityTooLarge, "too_large"
 		}
 		return http.StatusBadRequest, "bad_request"

@@ -408,3 +408,47 @@ func TestOppositeOrderNoDeadlock(t *testing.T) {
 		}
 	}
 }
+
+func TestTooManyFileEntries(t *testing.T) {
+	e := newEnv(t)
+	r := protocol.IngestRequest{}
+	for i := 0; i <= protocol.MaxFilesPerRequest; i++ {
+		c := protocol.EncodeLine([]byte(`{}`))
+		r.Files = append(r.Files, protocol.FileBatch{Kind: protocol.KindSnapshot, Path: "p/" + strings.Repeat("x", 3) + string(rune('a'+i%26)) + "/" + time.Duration(i).String() + ".json", Content: &c})
+	}
+	if resp, _ := e.post(t, e.tokA, r, nil); resp.StatusCode != 413 {
+		t.Fatalf("%d", resp.StatusCode)
+	}
+}
+
+// A device that stalls its body must neither take global slots nor block other devices.
+func TestStalledBodiesDoNotBlockOthers(t *testing.T) {
+	e := newEnv(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var pipes []*io.PipeWriter
+	for i := 0; i < ingest.MaxIngestPerDevice+3; i++ {
+		pr, pw := io.Pipe()
+		pipes = append(pipes, pw)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, e.srv.URL+"/v1/ingest", pr)
+		req.Header.Set("Authorization", "Bearer "+e.tokA)
+		req.Header.Set(protocol.HeaderVersion, "1")
+		req.Header.Set("Content-Encoding", "gzip")
+		go func() {
+			if resp, err := http.DefaultClient.Do(req); err == nil {
+				_ = resp.Body.Close()
+			}
+		}()
+	}
+	defer func() {
+		for _, p := range pipes {
+			_ = p.Close()
+		}
+	}()
+	time.Sleep(300 * time.Millisecond) // let the stalled requests reach the handler
+	for i := 0; i < 5; i++ {
+		if resp, _ := e.post(t, e.tokB, appendReq(0, `{"a":0}`), nil); resp.StatusCode != 200 {
+			t.Fatalf("other device blocked: %d", resp.StatusCode)
+		}
+	}
+}

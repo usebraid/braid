@@ -27,6 +27,7 @@ const (
 	MaxDecompressedBody = 64 << 20
 	MaxPathLen          = 1024
 	MaxLinesPerRequest  = 20000
+	MaxFilesPerRequest  = 5000 // the daemon never sends more entries than lines per batch
 )
 
 // Kind is the sync mode of a file: append-only log or whole-file snapshot.
@@ -40,6 +41,9 @@ const (
 
 // ErrTooManyLines means a request carries more than MaxLinesPerRequest lines in total.
 var ErrTooManyLines = errors.New("protocol: too many lines in request")
+
+// ErrTooManyFiles means a request carries more than MaxFilesPerRequest file entries.
+var ErrTooManyFiles = errors.New("protocol: too many files in request")
 
 // ErrBadLine means a Line has both or neither of Text and B64 set.
 var ErrBadLine = errors.New("protocol: line must set exactly one of text or b64")
@@ -179,6 +183,9 @@ func validHash(h string) bool {
 
 // Validate checks a whole request. An append entry with zero lines is valid.
 func (r IngestRequest) Validate() error {
+	if len(r.Files) > MaxFilesPerRequest {
+		return ErrTooManyFiles
+	}
 	total := 0
 	for _, f := range r.Files {
 		total += len(f.Lines)
