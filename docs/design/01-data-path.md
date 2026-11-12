@@ -57,6 +57,7 @@ Auth: device token with scope `ingest:write`. Body: JSON, `Content-Encoding: gzi
       "path": "-Users-x-proj/0b1c….jsonl",
       "head_hash": "<hex sha256>",
       "from_offset": 10240,
+      "scope": "device",
       "lines": [{"text": "{\"type\":\"user\",…}"}, {"b64": "…"}]
     },
     {
@@ -68,6 +69,7 @@ Auth: device token with scope `ingest:write`. Body: JSON, `Content-Encoding: gzi
 }
 ```
 
+- `scope` is optional: absent means the per-user identity, `"device"` the device-scoped identity after a `conflict`.
 - A line is sent as `text` when it is valid UTF-8, otherwise as `b64`. The `\n` is not included.
 - Offsets are byte offsets: line *i* starts at `from_offset + Σ(len(line_j)+1)` for *j < i*.
 
@@ -83,12 +85,13 @@ Response `200`:
 ```
 
 - `ok`: everything in the entry is stored. `end_offset` is the end of this entry; snapshots return `0`.
+- `conflict`: a line of this entry differs from the line stored at the same offset for this file identity. Nothing of this entry is stored; the daemon switches the file to `scope: "device"` (see the amendment in 3.4) and sends it again.
 - `gap`: `from_offset` is greater than the server's highest stored end for this file. Nothing of this entry is stored. The daemon resends from `end_offset`.
 - The whole request runs in one transaction. Any other error means nothing was stored; the daemon retries with backoff.
 
 ### 3.3 `GET /v1/files`
 
-Auth: device token. Returns `[{path, head_hash, kind, end_offset, content_hash}]` for the calling device. The daemon uses it when its local state is missing (reinstall, new state DB) to resume without resending everything. Resending is still correct, only slower.
+Auth: device token. Returns `[{path, head_hash, kind, scope, end_offset, content_hash, tail_offset, tail_hash}]` for the calling device; `scope` is absent (per user) or `device`, `tail_offset` and `tail_hash` give offset and SHA-256 of the stored line with the highest offset of an append file. On resume the daemon trusts `end_offset` only if its local file (or spool) holds exactly that line at `tail_offset`; otherwise it ignores the entry and resends. The daemon uses it when its local state is missing (reinstall, new state DB) to resume without resending everything. Resending is still correct, only slower.
 
 ### 3.4 Dedupe
 
