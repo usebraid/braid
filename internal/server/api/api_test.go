@@ -214,3 +214,34 @@ func TestDeleteUserWithoutEmailNeedsConfirm(t *testing.T) {
 		t.Fatalf("confirmed delete: %d", resp.StatusCode)
 	}
 }
+
+func TestMeTimeZone(t *testing.T) {
+	e := servertest.Start(t)
+	c := e.Login(t, "u1")
+	get := func(c *http.Client) api.Me {
+		_, b := do(t, e, c, "GET", "/api/v1/me", nil)
+		var m api.Me
+		_ = json.Unmarshal(b, &m)
+		return m
+	}
+	if m := get(c); m.TimeZone != "UTC" || m.TimeZoneSet {
+		t.Fatalf("%+v", m)
+	}
+	if resp, b := do(t, e, c, "PATCH", "/api/v1/me", map[string]string{"time_zone": "Europe/Berlin"}); resp.StatusCode != 200 {
+		t.Fatalf("%d %s", resp.StatusCode, b)
+	}
+	if m := get(c); m.TimeZone != "Europe/Berlin" || !m.TimeZoneSet {
+		t.Fatalf("%+v", m)
+	}
+	for name, body := range map[string]map[string]string{
+		"unknown zone": {"time_zone": "Mars/Base"}, "empty": {"time_zone": ""}, "missing": {},
+		"extra field": {"time_zone": "UTC", "is_admin": "true"}, "too long": {"time_zone": strings.Repeat("a", 65)},
+	} {
+		if resp, _ := do(t, e, c, "PATCH", "/api/v1/me", body); resp.StatusCode != 400 {
+			t.Errorf("%s: status %d", name, resp.StatusCode)
+		}
+	}
+	if m := get(e.Login(t, "u2")); m.TimeZone != "UTC" || m.TimeZoneSet {
+		t.Fatalf("another user's zone changed: %+v", m)
+	}
+}

@@ -31,6 +31,9 @@ type Me struct {
 	Email   string `json:"email"`
 	Name    string `json:"name"`
 	IsAdmin bool   `json:"is_admin"`
+	// TimeZone is the effective zone ("UTC" when unset); TimeZoneSet is false until the user sets it.
+	TimeZone    string `json:"time_zone"`
+	TimeZoneSet bool   `json:"time_zone_set"`
 }
 
 // Device is one registered device.
@@ -101,6 +104,7 @@ func (h *Handler) Register(mux *http.ServeMux, auth *webauth.Auth) {
 		return httpx.RequireSameOrigin(h.cfg.PublicURL, auth.Require(auth.RequireAdmin(f)))
 	}
 	mux.Handle("GET /api/v1/me", user(h.me))
+	mux.Handle("PATCH /api/v1/me", mut(h.setTimeZone))
 	mux.Handle("GET /api/v1/devices", user(h.devices))
 	mux.Handle("PATCH /api/v1/devices/{id}", mut(h.rename))
 	mux.Handle("DELETE /api/v1/devices/{id}", mut(h.revoke))
@@ -147,7 +151,8 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	p, _ := h.as(r)
 	var m Me
 	err := h.db.WithUser(r.Context(), p.UserID, func(tx pgx.Tx) error {
-		return tx.QueryRow(r.Context(), `SELECT id::text, email, name FROM users WHERE id = app_user()`).Scan(&m.ID, &m.Email, &m.Name)
+		return tx.QueryRow(r.Context(), `SELECT id::text, email, name, coalesce(time_zone, 'UTC'), time_zone IS NOT NULL FROM users WHERE id = app_user()`).
+			Scan(&m.ID, &m.Email, &m.Name, &m.TimeZone, &m.TimeZoneSet)
 	})
 	if err != nil {
 		fail(w, r, err)
@@ -155,6 +160,43 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	}
 	m.IsAdmin = p.IsAdmin
 	httpx.WriteJSON(w, http.StatusOK, m)
+}
+
+func (h *Handler) setTimeZone(w http.ResponseWriter, r *http.Request) {
+	p, _ := h.as(r)
+	var body struct {
+		TimeZone *string `json:"time_zone"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil || body.TimeZone == nil {
+		errJSON(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	zone := *body.TimeZone
+	valid := false
+	if zone != "" && len(zone) <= 64 {
+		err := h.db.WithUser(r.Context(), p.UserID, func(tx pgx.Tx) error {
+			return tx.QueryRow(r.Context(), `SELECT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = $1)`, zone).Scan(&valid)
+		})
+		if err != nil {
+			fail(w, r, err)
+			return
+		}
+	}
+	if !valid {
+		errJSON(w, http.StatusBadRequest, "invalid_time_zone")
+		return
+	}
+	err := h.db.WithUser(r.Context(), p.UserID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(r.Context(), `UPDATE users SET time_zone = $1 WHERE id = app_user()`, zone)
+		return err
+	})
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	h.me(w, r)
 }
 
 const deviceCols = `id::text, name, coalesce(hostname,''), coalesce(os,''), coalesce(arch,''), coalesce(os_user,''),
