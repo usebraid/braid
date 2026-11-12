@@ -110,7 +110,10 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 			}
 			resp.Files[i] = res
 		}
-		_, err := tx.Exec(r.Context(), `UPDATE devices SET last_sync_at = now() WHERE id = $1`, dev.DeviceID)
+		if _, err := tx.Exec(r.Context(), `UPDATE devices SET last_sync_at = now() WHERE id = $1`, dev.DeviceID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(r.Context(), `SELECT pg_notify('braid_ingest', $1)`, dev.UserID) // delivered at commit
 		return err
 	})
 	switch {

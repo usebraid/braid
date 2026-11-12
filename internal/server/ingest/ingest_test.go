@@ -547,3 +547,27 @@ func TestUsersNeverShareFilesOrConflict(t *testing.T) {
 		t.Fatalf("%+v", fs)
 	}
 }
+
+func TestIngestNotifiesTheWorker(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c, err := pgx.Connect(ctx, e.owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close(ctx) }()
+	if _, err := c.Exec(ctx, `LISTEN braid_ingest`); err != nil {
+		t.Fatal(err)
+	}
+	e.post(t, e.tokA, appendReq(0, `{"a":0}`), nil)
+	var uid string
+	if err := c.QueryRow(ctx, `SELECT id::text FROM users WHERE oidc_sub = 'a'`).Scan(&uid); err != nil {
+		t.Fatal(err)
+	}
+	wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	n, err := c.WaitForNotification(wctx)
+	if err != nil || n.Payload != uid {
+		t.Fatalf("%+v %v", n, err)
+	}
+}

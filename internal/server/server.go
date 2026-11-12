@@ -6,12 +6,14 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/usebraid/braid/internal/server/api"
 	"github.com/usebraid/braid/internal/server/config"
 	"github.com/usebraid/braid/internal/server/db"
+	"github.com/usebraid/braid/internal/server/derive"
 	"github.com/usebraid/braid/internal/server/device"
 	"github.com/usebraid/braid/internal/server/httpx"
 	"github.com/usebraid/braid/internal/server/ingest"
@@ -57,3 +59,23 @@ func (s *Server) Handler() http.Handler { return httpx.SecurityHeaders(s.mux) }
 
 // Close releases the DB pool.
 func (s *Server) Close() { s.db.Close() }
+
+// RunWorker runs the derivation worker until ctx is done.
+func (s *Server) RunWorker(ctx context.Context) error {
+	return (&derive.Worker{D: &derive.Deriver{DB: s.db}, DB: s.db}).Run(ctx)
+}
+
+// Reindex rebuilds the derived data of one user (userID "" = all users) from the raw data and prints one line per user.
+func Reindex(ctx context.Context, cfg config.Config, userID string) error {
+	d, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	w := &derive.Worker{D: &derive.Deriver{DB: d}, DB: d,
+		OnReindexed: func(id string, rows int) { fmt.Printf("%s %d\n", id, rows) }}
+	if userID == "" {
+		return w.ReindexAll(ctx)
+	}
+	return w.Reindex(ctx, userID)
+}

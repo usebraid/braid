@@ -6,11 +6,14 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
 	"time"
 
@@ -18,6 +21,8 @@ import (
 	"github.com/usebraid/braid/internal/server/config"
 	"github.com/usebraid/braid/internal/server/db"
 )
+
+var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
@@ -34,6 +39,22 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if len(os.Args) > 1 && os.Args[1] == "reindex" {
+		fs := flag.NewFlagSet("reindex", flag.ContinueOnError)
+		user := fs.String("user", "", "reindex only this user id (default: all)")
+		if err := fs.Parse(os.Args[2:]); err != nil {
+			return err
+		}
+		if *user != "" {
+			if !uuidRe.MatchString(*user) {
+				return errors.New("--user: not a uuid")
+			}
+		}
+		if err := db.Migrate(ctx, cfg.DatabaseOwnerURL); err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+		return server.Reindex(ctx, cfg, *user)
+	}
 	if err := db.Migrate(ctx, cfg.DatabaseOwnerURL); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
@@ -46,6 +67,11 @@ func run() error {
 	srv := &http.Server{Addr: cfg.Listen, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout: 60 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}
 	errc := make(chan error, 1)
+	go func() {
+		if err := s.RunWorker(ctx); err != nil {
+			errc <- err
+		}
+	}()
 	go func() { errc <- srv.ListenAndServe() }()
 	slog.Info("listening", "addr", cfg.Listen)
 	select {

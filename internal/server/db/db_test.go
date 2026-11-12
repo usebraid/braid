@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -286,5 +287,42 @@ func TestDeviceCodeFlowFunctions(t *testing.T) {
 	})
 	if none != nil {
 		t.Fatal("expired code approved")
+	}
+}
+
+func TestListenReceivesNotifications(t *testing.T) {
+	owner, app := testdb.New(t)
+	d, err := db.Open(context.Background(), app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready, got := make(chan struct{}, 1), make(chan string, 4)
+	go func() {
+		_ = d.Listen(ctx, "braid_test", func() {
+			select {
+			case ready <- struct{}{}:
+			default:
+			}
+		}, func(p string) { got <- p })
+	}()
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("not listening")
+	}
+	testdb.Exec(t, owner, `SELECT pg_notify('braid_test', 'hello')`)
+	select {
+	case p := <-got:
+		if p != "hello" {
+			t.Fatalf("payload %q", p)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no notification")
+	}
+	if err := d.Listen(ctx, "bad channel; drop", nil, nil); err == nil {
+		t.Fatal("unsafe channel name accepted")
 	}
 }

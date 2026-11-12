@@ -78,6 +78,9 @@ func (d *Deriver) DeriveUser(ctx context.Context, userID string) (rows int, err 
 // Reset deletes every derived row and cursor of the user (never raw data, never derive_state).
 func (d *Deriver) Reset(ctx context.Context, userID string) error {
 	return d.DB.WithUser(ctx, userID, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7002, hashtext($1::text))`, userID); err != nil { // same lock as chunk
+			return err
+		}
 		for _, t := range []string{"derive_cursor", "derive_errors", "projects", "sessions", "session_devices", "agents",
 			"tool_calls", "skill_phases", "usage", "failures", "search_docs"} {
 			if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE user_id = $1`, userID); err != nil {
