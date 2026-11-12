@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/usebraid/braid/internal/server/api"
 	"github.com/usebraid/braid/internal/server/config"
 	"github.com/usebraid/braid/internal/server/db"
 	"github.com/usebraid/braid/internal/server/device"
@@ -38,7 +39,7 @@ func New(ctx context.Context, cfg config.Config) (*Server, error) {
 	auth.Register(mux)
 	device.New(cfg, d).Register(mux, auth)
 	ingest.New(d).Register(mux, httpx.NewLimiter(600, time.Now))
-	// Task 8: register the /api/v1/* handler here (behind auth.Require).
+	api.New(cfg, d).Register(mux, auth)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		pctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
