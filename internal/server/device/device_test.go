@@ -11,10 +11,13 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/usebraid/braid/internal/protocol"
 	"github.com/usebraid/braid/internal/server/servertest"
+	"github.com/usebraid/braid/internal/server/webauth/oidctest"
 	"github.com/usebraid/braid/internal/testdb"
 )
 
@@ -228,5 +231,46 @@ func TestBruteForceLockoutBlocksCorrectCode(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 429 {
 		t.Fatalf("approve after lockout: %d", resp.StatusCode)
+	}
+}
+
+func TestWrongCodeLimitHoldsUnderConcurrency(t *testing.T) {
+	e := servertest.Start(t)
+	c := e.Login(t, "u1")
+	var passed atomic.Int32
+	var wg sync.WaitGroup
+	for i := 0; i < 30; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resp, err := c.Get(e.URL + "/device?user_code=BBBB-BBBB")
+			if err != nil {
+				return
+			}
+			resp.Body.Close()
+			if resp.StatusCode != 429 {
+				passed.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	if n := passed.Load(); n > 5 {
+		t.Fatalf("%d of 30 concurrent guesses passed the limiter (max 5)", n)
+	}
+}
+
+func TestUserCodeSurvivesLoginRedirect(t *testing.T) {
+	e := servertest.Start(t)
+	r := codeReq(t, e)
+	e.IdP.SetUser(oidctest.User{Sub: "u2", Email: "u2@example.test", Name: "u2"})
+	c := e.Client() // not logged in; follows redirects through /auth/login and the mock IdP
+	resp, err := c.Get(r.VerificationURIComplete)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(string(html), "mac-&lt;b&gt;") || !strings.Contains(string(html), r.UserCode) {
+		t.Fatalf("not on confirmation page for the code: %d %s", resp.StatusCode, html)
 	}
 }

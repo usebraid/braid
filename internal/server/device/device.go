@@ -234,15 +234,15 @@ func sessionKey(r *http.Request) string {
 	return hex.EncodeToString(sum(c.Value))
 }
 
-// limited reports whether the wrong-code limits are already exhausted (checked before any lookup).
+// limited consumes one token from both limiters before any lookup, so parallel guesses cannot outrun the limit.
 func (h *Handler) limited(r *http.Request) bool {
-	return !h.entrySess.Allowed(sessionKey(r)) || !h.entryIP.Allowed(h.ip(r))
+	okSess := h.entrySess.Allow(sessionKey(r))
+	okIP := h.entryIP.Allow(h.ip(r))
+	return !okSess || !okIP
 }
 
-// miss counts a well-formed code that matched no pending row and audits it.
+// miss audits a well-formed code that matched no pending row (the limit was consumed up front).
 func (h *Handler) miss(r *http.Request, p webauth.Principal) {
-	h.entrySess.Allow(sessionKey(r))
-	h.entryIP.Allow(h.ip(r))
 	h.audit(r.Context(), r, p.UserID, "device_code_failed", map[string]any{})
 }
 
