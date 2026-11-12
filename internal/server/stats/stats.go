@@ -33,6 +33,8 @@ func New(d *db.DB) *Handler { return &Handler{db: d, now: time.Now} }
 // Register mounts the web routes behind auth; devLim is used by the device routes.
 func (h *Handler) Register(mux *http.ServeMux, auth *webauth.Auth, _ *httpx.Limiter) {
 	mux.Handle("GET /api/v1/stats/overview", auth.Require(http.HandlerFunc(h.overview)))
+	mux.Handle("GET /api/v1/stats/failures", auth.Require(http.HandlerFunc(h.failures)))
+	mux.Handle("GET /api/v1/stats/search", auth.Require(http.HandlerFunc(h.search)))
 	mux.Handle("GET /api/v1/stats/sessions", auth.Require(http.HandlerFunc(h.sessions)))
 	mux.Handle("GET /api/v1/stats/sessions/{id}", auth.Require(http.HandlerFunc(h.sessionDetail)))
 	mux.Handle("GET /api/v1/stats/sessions/{id}/lines", auth.Require(http.HandlerFunc(h.sessionLines)))
