@@ -30,6 +30,7 @@ import (
 type Env struct {
 	URL      string
 	OwnerURL string
+	AppURL   string
 	IdP      *oidctest.Provider
 	Client   func() *http.Client // fresh TLS client with cookie jar
 }
@@ -58,7 +59,7 @@ func Start(t testing.TB) *Env {
 	}
 	t.Cleanup(s.Close)
 	h.Store(s.Handler())
-	return &Env{URL: srv.URL, OwnerURL: ownerURL, IdP: idp, Client: func() *http.Client {
+	return &Env{URL: srv.URL, OwnerURL: ownerURL, AppURL: appURL, IdP: idp, Client: func() *http.Client {
 		jar, _ := cookiejar.New(nil)
 		return &http.Client{Transport: srv.Client().Transport, Jar: jar}
 	}}

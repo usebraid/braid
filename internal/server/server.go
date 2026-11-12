@@ -17,6 +17,7 @@ import (
 	"github.com/usebraid/braid/internal/server/device"
 	"github.com/usebraid/braid/internal/server/httpx"
 	"github.com/usebraid/braid/internal/server/ingest"
+	"github.com/usebraid/braid/internal/server/stats"
 	"github.com/usebraid/braid/internal/server/webauth"
 )
 
@@ -42,6 +43,7 @@ func New(ctx context.Context, cfg config.Config) (*Server, error) {
 	device.New(cfg, d).Register(mux, auth)
 	ingest.New(d).Register(mux, httpx.NewLimiter(600, time.Now))
 	api.New(cfg, d).Register(mux, auth)
+	stats.New(d).Register(mux, auth, httpx.NewLimiter(120, time.Now))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		pctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
