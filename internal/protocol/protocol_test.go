@@ -172,6 +172,25 @@ func TestDeviceCodeRequestValidate(t *testing.T) {
 	}
 }
 
+func TestDeviceFieldsRejectInvisibleAndBidi(t *testing.T) {
+	for _, v := range []string{"a\u202eb", "a\u2066b", "a\u2069b", "a\u200bb", "a\u200eb", "\ufeffa", "a\u2028b", "a\u2029b", "a\U000e0041b", "\u00a0", "   ", "a\x00b"} {
+		bad := DeviceCodeRequest{Hostname: v, OS: "darwin", Arch: "arm64", OSUser: "jan", DaemonVersion: "0.1.0"}
+		if bad.Validate() == nil {
+			t.Errorf("hostname %q accepted", v)
+		}
+		bad.Hostname, bad.OSUser = "mac", v
+		if bad.Validate() == nil {
+			t.Errorf("os_user %q accepted", v)
+		}
+		if ValidText(v, 64) {
+			t.Errorf("ValidText(%q)", v)
+		}
+	}
+	if !ValidText("Jan's Mac \u00e9\u65e5\u672c", 64) || ValidText(strings.Repeat("x", 65), 64) {
+		t.Error("ValidText limits")
+	}
+}
+
 func TestValidateLineCap(t *testing.T) {
 	txt := "{}"
 	mk := func(n int) IngestRequest {

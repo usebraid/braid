@@ -20,8 +20,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -202,7 +200,7 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type info struct{ Hostname, OS, Arch, OSUser, IP, Requested, DaemonVersion string }
+type info struct{ Hostname, DefaultName, OS, Arch, OSUser, IP, Requested, DaemonVersion string }
 
 type view struct {
 	Nonce, View, Title, Error, UserCode string
@@ -291,11 +289,18 @@ func (h *Handler) entry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in = info{Hostname: ci["hostname"], OS: ci["os"], Arch: ci["arch"], OSUser: ci["os_user"],
-		Requested: created.UTC().Format(time.RFC3339), DaemonVersion: ci["daemon_version"]}
+		DefaultName: firstRunes(ci["hostname"], 64), Requested: created.UTC().Format(time.RFC3339), DaemonVersion: ci["daemon_version"]}
 	if ip != nil {
 		in.IP = *ip
 	}
 	h.page(w, http.StatusOK, view{View: "confirm", Title: "Approve this device?", UserCode: disp, Info: in})
+}
+
+func firstRunes(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n])
+	}
+	return s
 }
 
 func truncate(s string) string {
@@ -306,8 +311,7 @@ func truncate(s string) string {
 }
 
 func validName(s string) bool {
-	n := utf8.RuneCountInString(s)
-	return n >= 1 && n <= 64 && utf8.ValidString(s) && !strings.ContainsFunc(s, unicode.IsControl)
+	return protocol.ValidText(s, 64)
 }
 
 func (h *Handler) decide(approve bool) func(http.ResponseWriter, *http.Request) {

@@ -38,7 +38,7 @@ button.deny{background:none;color:#f3f2ee;border:1px solid #f3f2ee}
 </dl>
 <form method="post" action="/device/approve">
 <input type="hidden" name="user_code" value="{{.UserCode}}">
-<p><label>Device name<br><input name="name" value="{{.Info.Hostname}}" maxlength="64" required></label></p>
+<p><label>Device name<br><input name="name" value="{{.Info.DefaultName}}" maxlength="64" required></label></p>
 <button type="submit">Approve</button>
 <button type="submit" class="deny" formaction="/device/deny" formnovalidate>Deny</button>
 </form>

@@ -20,13 +20,24 @@ type DeviceCodeRequest struct {
 	DaemonVersion string `json:"daemon_version"`
 }
 
-// Validate requires each field to be 1..128 bytes of valid UTF-8 without control characters.
+// ValidText reports whether s is 1..maxRunes runes of valid UTF-8 that is safe to show to a human:
+// no control (Cc), format (Cf, e.g. bidi overrides, zero-width) or line/paragraph separator characters
+// and not only whitespace.
+func ValidText(s string, maxRunes int) bool {
+	n := utf8.RuneCountInString(s)
+	return n >= 1 && n <= maxRunes && utf8.ValidString(s) && strings.TrimSpace(s) != "" &&
+		!strings.ContainsFunc(s, func(r rune) bool {
+			return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r)
+		})
+}
+
+// Validate requires each field to be 1..128 bytes of valid text (see ValidText).
 func (r DeviceCodeRequest) Validate() error {
 	for name, v := range map[string]string{
 		"hostname": r.Hostname, "os": r.OS, "arch": r.Arch,
 		"os_user": r.OSUser, "daemon_version": r.DaemonVersion,
 	} {
-		if len(v) < 1 || len(v) > 128 || !utf8.ValidString(v) || strings.ContainsFunc(v, unicode.IsControl) {
+		if len(v) > 128 || !ValidText(v, 128) {
 			return fmt.Errorf("protocol: invalid %s", name)
 		}
 	}

@@ -82,6 +82,11 @@ func TestDevicesListRenameRevoke(t *testing.T) {
 	if resp, _ := do(t, e, c, "PATCH", "/api/v1/devices/"+id, map[string]string{"name": ""}); resp.StatusCode != 400 {
 		t.Fatalf("empty name: %d", resp.StatusCode)
 	}
+	for _, bad := range []string{"a\u202eb", "a\u200bb", "a\x00b", "\u00a0"} {
+		if resp, _ := do(t, e, c, "PATCH", "/api/v1/devices/"+id, map[string]string{"name": bad}); resp.StatusCode != 400 {
+			t.Fatalf("name %q: %d", bad, resp.StatusCode)
+		}
+	}
 	if resp, _ := do(t, e, c, "DELETE", "/api/v1/devices/"+id, nil); resp.StatusCode != 204 {
 		t.Fatalf("revoke: %d", resp.StatusCode)
 	}

@@ -14,11 +14,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/usebraid/braid/internal/protocol"
 	"github.com/usebraid/braid/internal/server/config"
 	"github.com/usebraid/braid/internal/server/db"
 	"github.com/usebraid/braid/internal/server/httpx"
@@ -225,7 +225,7 @@ func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimSpace(*body.Name)
-	if n := utf8.RuneCountInString(name); n < 1 || n > 64 {
+	if !protocol.ValidText(name, 64) {
 		errJSON(w, http.StatusBadRequest, "invalid_name")
 		return
 	}
