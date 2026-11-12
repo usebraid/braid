@@ -114,6 +114,7 @@ Each sub-project gets its own design spec, implementation plan and execution. Or
 | 3 | Dashboard & live | All views (overview + KPIs, timeline, session canvas, live, devices, audit log, search, admin), WebSocket, light/dark. | `03-dashboard.md` |
 | 4 | Band | Claude Code mod using `braid stats --json`. | `04-band.md` |
 | 5 | Release & website | GoReleaser, signatures, GHCR multi-arch, Homebrew tap, `install.sh`, usebraid.dev modelled on the ponytail website, self-hosting docs. | `05-release.md` |
+| 6 | Cloud sessions | Sync Claude Code sessions that run in Anthropic's cloud (claude.ai/code, web and mobile), where no daemon runs. Starts with a spike that tests two candidates: (a) a token-free hook (`SessionEnd`/`Stop`, shipped as plugin or repo settings) that uploads the transcript via the existing ingest protocol, with the cloud environment registered as its own device token; open questions: outbound network access to the Braid server and how to provide the token securely; (b) an official API to fetch cloud session transcripts, if one exists. Fallback: sessions teleported to a local terminal are already picked up by the daemon. | `06-cloud-sessions.md` |
 
 ## 7. Licensing and contributions
 
@@ -157,3 +158,4 @@ Rules:
 - End-to-end encryption: devices encrypt payloads, server sees ciphertext, derivation and search move to the browser. The schema already keeps payload and metadata separately addressable.
 - Single-user mode without an external OIDC provider.
 - Team views, export (JSONL, CSV), per-project retention, notifications.
+- Import of claude.ai chat history (browser, not Claude Code) from the claude.ai data export: archive only, no live sync, different metrics (no tool calls or subagents).
