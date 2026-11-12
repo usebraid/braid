@@ -295,9 +295,12 @@ func (e *Engine) checkReplaced(it *item) error {
 		if id == r.FileID {
 			return nil
 		}
-		if lines, _, err := reader.ReadLines(r.SpoolPath, r.AckedOffset, 1); err != nil || len(lines) == 0 {
-			return nil //nolint:nilerr // nothing unacked in the old entry (or it is gone): Ensure replaces it
+		if fileExists(r.SpoolPath) {
+			if lines, _, err := reader.ReadLines(r.SpoolPath, r.AckedOffset, 1); err != nil || len(lines) == 0 {
+				return nil //nolint:nilerr // nothing unacked in the old entry: Ensure replaces it
+			}
 		}
+		// A missing live entry may be a crash after the rename: Retire then returns the .old path.
 		old, err := e.Spool.Retire(r.RelPath, r.FileID)
 		if err != nil || old == "" {
 			return err

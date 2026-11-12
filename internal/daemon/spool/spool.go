@@ -117,6 +117,8 @@ func copyFile(src, dst string) (err error) {
 }
 
 // Retire moves the current entry aside to <path>.<fileID>.old; a missing entry returns "".
+// It is idempotent: when only the .old file exists (a crash between the rename and the caller's
+// state write) that path is returned again.
 func (s *Spool) Retire(relPath, fileID string) (string, error) {
 	if err := validRel(relPath); err != nil {
 		return "", err
@@ -125,6 +127,9 @@ func (s *Spool) Retire(relPath, fileID string) (string, error) {
 	old := p + "." + strings.ReplaceAll(fileID, ":", "-") + ".old"
 	if err := os.Rename(p, old); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
+			if _, serr := os.Stat(old); serr == nil {
+				return old, nil
+			}
 			return "", nil
 		}
 		return "", err
