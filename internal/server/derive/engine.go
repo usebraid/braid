@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/usebraid/braid/internal/server/db"
@@ -117,8 +118,9 @@ func (d *Deriver) chunk(ctx context.Context, userID string, f pendingFile) (n in
 			return err
 		}
 		var lastLine, lastSnap int64
-		if err := tx.QueryRow(ctx, `SELECT last_line_id, last_snapshot_id FROM derive_cursor WHERE user_id = $1 AND source_file_id = $2`,
-			userID, f.id).Scan(&lastLine, &lastSnap); err != nil {
+		var lastTS *time.Time
+		if err := tx.QueryRow(ctx, `SELECT last_line_id, last_snapshot_id, last_ts FROM derive_cursor WHERE user_id = $1 AND source_file_id = $2`,
+			userID, f.id).Scan(&lastLine, &lastSnap, &lastTS); err != nil {
 			return err
 		}
 		if kind == "other" { // advance so the file is not pending forever
@@ -129,6 +131,9 @@ func (d *Deriver) chunk(ctx context.Context, userID string, f pendingFile) (n in
 			return err
 		}
 		b := newBatch(userID, f.id, info)
+		if lastTS != nil {
+			b.prevTS = *lastTS
+		}
 		var last int64
 		if f.snapshot {
 			var row rawRow

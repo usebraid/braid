@@ -79,7 +79,7 @@ CREATE TABLE usage (
   thinking_tokens bigint NOT NULL,                                            -- subset of output_tokens, never added again
   web_search_requests int NOT NULL DEFAULT 0, web_fetch_requests int NOT NULL DEFAULT 0, speed text NOT NULL DEFAULT '',
   at timestamptz NOT NULL, source_file_id bigint NOT NULL, "offset" bigint NOT NULL,
-  cost_usd numeric(14,6) NOT NULL DEFAULT 0, price_unknown boolean NOT NULL DEFAULT false,
+  cost_usd numeric(14,6) NOT NULL DEFAULT 0, price_unknown boolean NOT NULL DEFAULT false, price_estimated boolean NOT NULL DEFAULT false,
   PRIMARY KEY (user_id, message_id));
 CREATE INDEX usage_at ON usage (user_id, at);
 CREATE INDEX usage_session ON usage (user_id, session_id);

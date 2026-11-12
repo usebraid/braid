@@ -46,7 +46,7 @@ func TestEntitiesFromAMainTranscript(t *testing.T) {
 	if got := e.Row(t, `SELECT count(*), sum(output_tokens)::bigint FROM usage`); got != "2|60" {
 		t.Fatalf("usage rows: %s", got)
 	}
-	if got := e.Row(t, `SELECT output_tokens, round(cost_usd*1e6)::bigint, price_unknown, agent_id FROM usage WHERE message_id='m2'`); got != "50|9020|false|main" {
+	if got := e.Row(t, `SELECT output_tokens, round(cost_usd*1e6)::bigint, price_unknown, price_estimated, agent_id FROM usage WHERE message_id='m2'`); got != "50|9020|false|false|main" {
 		t.Fatalf("m2: %s", got)
 	}
 	if got := e.Row(t, `SELECT round(cost_usd*1e6)::bigint FROM usage WHERE message_id='m1'`); got != "4200" {

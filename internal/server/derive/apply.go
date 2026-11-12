@@ -46,6 +46,10 @@ type batch struct {
 	projAt, branchAt, promptAt    time.Time
 	aiTitle, customTitle          *string
 	meta                          *parse.AgentMeta
+	// agent time
+	turnMs, estMs int64
+	turnCount     int64
+	prevTS        time.Time // newest Touch so far, seeded from the cursor so the gap logic survives chunk borders
 }
 
 func newBatch(userID string, fileID int64, fi parse.FileInfo) *batch {
@@ -79,6 +83,12 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 		}
 		switch e.Kind {
 		case parse.KindTouch:
+			if gap := e.TS.Sub(b.prevTS); !b.prevTS.IsZero() && gap > 0 {
+				b.estMs += min(gap, 5*time.Minute).Milliseconds()
+			}
+			if later(b.prevTS, e.TS) {
+				b.prevTS = e.TS
+			}
 			if earlier(b.started, e.TS) {
 				b.started = e.TS
 			}
@@ -137,6 +147,13 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 			if !e.TS.IsZero() && earlier(t.started, e.TS) {
 				t.started = e.TS
 			}
+		case parse.KindTurn:
+			if e.DurationMs != nil {
+				b.turnMs += *e.DurationMs
+				b.turnCount++
+			}
+		case parse.KindTaskNote:
+			b.tool(e.ToolUseID).totalMs = e.AgentTotalMs
 		case parse.KindToolResult:
 			t := b.tool(e.ToolUseID)
 			if later(t.ended, e.TS) && !e.TS.IsZero() {
@@ -236,15 +253,16 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 			if m == nil {
 				m = &parse.AgentMeta{}
 			}
-			if err := exec(`INSERT INTO agents(user_id, session_id, agent_id, agent_type, description, parent_hint, spawn_tool_use_id, spawn_depth, finished, started_at, ended_at)
-			  VALUES ($1, $2, $3, coalesce(nullif($4::text, ''), $12::text), nullif($5, ''), nullif($6, ''), nullif($7, ''), $8, $9, $10, $11)
+			if err := exec(`INSERT INTO agents(user_id, session_id, agent_id, agent_type, description, parent_hint, spawn_tool_use_id, spawn_depth, finished, started_at, ended_at, turn_ms, turn_count, est_ms)
+			  VALUES ($1, $2, $3, coalesce(nullif($4::text, ''), $12::text), nullif($5, ''), nullif($6, ''), nullif($7, ''), $8, $9, $10, $11, $14, $15, $16)
 			  ON CONFLICT (user_id, session_id, agent_id) DO UPDATE SET
 			    agent_type = coalesce(EXCLUDED.agent_type, agents.agent_type), description = coalesce(EXCLUDED.description, agents.description),
 			    parent_hint = coalesce(EXCLUDED.parent_hint, agents.parent_hint), spawn_tool_use_id = coalesce(EXCLUDED.spawn_tool_use_id, agents.spawn_tool_use_id),
 			    spawn_depth = CASE WHEN $13 THEN EXCLUDED.spawn_depth ELSE agents.spawn_depth END, finished = coalesce(EXCLUDED.finished, agents.finished),
-			    started_at = least(agents.started_at, EXCLUDED.started_at), ended_at = greatest(agents.ended_at, EXCLUDED.ended_at)`,
+			    started_at = least(agents.started_at, EXCLUDED.started_at), ended_at = greatest(agents.ended_at, EXCLUDED.ended_at),
+			    turn_ms = agents.turn_ms + EXCLUDED.turn_ms, turn_count = agents.turn_count + EXCLUDED.turn_count, est_ms = agents.est_ms + EXCLUDED.est_ms`,
 				b.session, b.agent, m.AgentType, m.Description, m.ParentAgentID, m.ToolUseID, m.SpawnDepth, m.Finished,
-				nullTime(b.started), nullTime(b.ended), agentType, b.meta != nil); err != nil {
+				nullTime(b.started), nullTime(b.ended), agentType, b.meta != nil, b.turnMs, b.turnCount, b.estMs); err != nil {
 				return err
 			}
 		}
@@ -280,28 +298,34 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 		var at []time.Time
 		var in, out, cr, w5, w1, th, ws, wf, off []int64
 		var cost []float64
-		var unk []bool
+		var unk, est []bool
 		for id, a := range b.usage {
-			c, _, unknown := Cost(*a.u)
+			c, estimated, unknown := Cost(*a.u)
 			ids, models, speeds, at = append(ids, id), append(models, NormalizeModel(a.u.Model)), append(speeds, a.u.Speed), append(at, a.at)
 			in, out, cr, w5, w1 = append(in, a.u.Input), append(out, a.u.Output), append(cr, a.u.CacheRead), append(w5, a.u.CacheWrite5m), append(w1, a.u.CacheWrite1h)
 			th, ws, wf, off = append(th, a.u.Thinking), append(ws, a.u.WebSearch), append(wf, a.u.WebFetch), append(off, a.offset)
-			cost, unk = append(cost, c), append(unk, unknown)
+			cost, unk, est = append(cost, c), append(unk, unknown), append(est, estimated)
 		}
 		if err := exec(`INSERT INTO usage(user_id, message_id, session_id, agent_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_5m_tokens, cache_write_1h_tokens,
-		    thinking_tokens, web_search_requests, web_fetch_requests, speed, at, source_file_id, "offset", cost_usd, price_unknown)
-		  SELECT $1, i, $2, $3, m, a, o, r, w5, w1, t, ws, wf, sp, at, $4, off, c, u
+		    thinking_tokens, web_search_requests, web_fetch_requests, speed, at, source_file_id, "offset", cost_usd, price_unknown, price_estimated)
+		  SELECT $1, i, $2, $3, m, a, o, r, w5, w1, t, ws, wf, sp, at, $4, off, c, u, pe
 		    FROM unnest($5::text[], $6::text[], $7::bigint[], $8::bigint[], $9::bigint[], $10::bigint[], $11::bigint[], $12::bigint[], $13::bigint[], $14::bigint[], $15::text[],
-		                $16::timestamptz[], $17::bigint[], $18::float8[], $19::bool[])
-		    AS x(i, m, a, o, r, w5, w1, t, ws, wf, sp, at, off, c, u)
+		                $16::timestamptz[], $17::bigint[], $18::float8[], $19::bool[], $20::bool[])
+		    AS x(i, m, a, o, r, w5, w1, t, ws, wf, sp, at, off, c, u, pe)
 		  ON CONFLICT (user_id, message_id) DO UPDATE SET model = EXCLUDED.model, session_id = EXCLUDED.session_id, agent_id = EXCLUDED.agent_id,
 		    input_tokens = EXCLUDED.input_tokens, output_tokens = EXCLUDED.output_tokens, cache_read_tokens = EXCLUDED.cache_read_tokens,
 		    cache_write_5m_tokens = EXCLUDED.cache_write_5m_tokens, cache_write_1h_tokens = EXCLUDED.cache_write_1h_tokens, thinking_tokens = EXCLUDED.thinking_tokens,
 		    web_search_requests = EXCLUDED.web_search_requests, web_fetch_requests = EXCLUDED.web_fetch_requests, speed = EXCLUDED.speed, at = EXCLUDED.at,
-		    source_file_id = EXCLUDED.source_file_id, "offset" = EXCLUDED."offset", cost_usd = EXCLUDED.cost_usd, price_unknown = EXCLUDED.price_unknown
+		    source_file_id = EXCLUDED.source_file_id, "offset" = EXCLUDED."offset", cost_usd = EXCLUDED.cost_usd, price_unknown = EXCLUDED.price_unknown, price_estimated = EXCLUDED.price_estimated
 		  WHERE EXCLUDED.output_tokens > usage.output_tokens
 		     OR (EXCLUDED.output_tokens = usage.output_tokens AND (EXCLUDED.source_file_id, EXCLUDED."offset") < (usage.source_file_id, usage."offset"))`,
-			b.session, b.agent, b.fileID, ids, models, in, out, cr, w5, w1, th, ws, wf, speeds, at, off, cost, unk); err != nil {
+			b.session, b.agent, b.fileID, ids, models, in, out, cr, w5, w1, th, ws, wf, speeds, at, off, cost, unk, est); err != nil {
+			return err
+		}
+	}
+
+	if b.session != "" {
+		if err := b.fixups(ctx, tx); err != nil {
 			return err
 		}
 	}
@@ -310,6 +334,31 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 		if err := exec(`INSERT INTO derive_errors(user_id, source_file_id, errors, last_offset) VALUES ($1, $2, $3, $4)
 		  ON CONFLICT (user_id, source_file_id) DO UPDATE SET errors = derive_errors.errors + EXCLUDED.errors, last_offset = greatest(derive_errors.last_offset, EXCLUDED.last_offset)`,
 			b.fileID, b.bad, b.badOffset); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// fixups recomputes everything that links rows of different files; idempotent and independent of arrival order.
+func (b *batch) fixups(ctx context.Context, tx pgx.Tx) error {
+	for _, q := range []string{
+		`UPDATE agents a SET result_ms = t.agent_total_ms FROM tool_calls t
+		  WHERE a.user_id = $1 AND a.session_id = $2 AND t.user_id = a.user_id AND t.session_id = a.session_id
+		    AND t.tool_use_id = a.spawn_tool_use_id AND t.agent_total_ms IS DISTINCT FROM a.result_ms`,
+		`UPDATE agents a SET parent_agent_id = CASE WHEN a.spawn_tool_use_id IS NULL THEN a.parent_hint
+		    ELSE coalesce((SELECT t.agent_id FROM tool_calls t WHERE t.user_id = a.user_id AND t.session_id = a.session_id AND t.tool_use_id = a.spawn_tool_use_id),
+		                  a.parent_hint, 'main') END
+		  WHERE a.user_id = $1 AND a.session_id = $2 AND a.agent_id <> 'main'`,
+		`DELETE FROM skill_phases WHERE user_id = $1 AND session_id = $2`,
+		`INSERT INTO skill_phases(user_id, session_id, agent_id, seq, skill, tool_use_id, started_at, ended_at)
+		  SELECT t.user_id, t.session_id, t.agent_id, t.seq, t.skill, t.tool_use_id, t.started_at, coalesce(t.next_start, a.ended_at)
+		    FROM (SELECT c.*, row_number() OVER w AS seq, lead(c.started_at) OVER w AS next_start
+		            FROM tool_calls c WHERE c.user_id = $1 AND c.session_id = $2 AND c.skill IS NOT NULL AND c.started_at IS NOT NULL
+		          WINDOW w AS (PARTITION BY c.agent_id ORDER BY c.started_at, c.tool_use_id)) t
+		    LEFT JOIN agents a ON a.user_id = t.user_id AND a.session_id = t.session_id AND a.agent_id = t.agent_id`,
+	} {
+		if _, err := tx.Exec(ctx, q, b.userID, b.session); err != nil {
 			return err
 		}
 	}
