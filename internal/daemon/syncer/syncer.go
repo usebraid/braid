@@ -165,6 +165,24 @@ func (e *Engine) discover(ctx context.Context, entries []scan.Entry) ([]*item, e
 		}
 		it.abs = en.AbsPath
 	}
+	// A row whose original is gone still owns the live spool path (one entry per rel path). A new file
+	// with another head under the same rel would overwrite it, so move the old entry aside first.
+	for _, it := range items {
+		r := &it.row
+		if it.abs != "" || r.Kind != protocol.KindAppend || r.FileID == "" || r.SpoolPath != e.Spool.Path(r.RelPath) {
+			continue
+		}
+		old, err := e.Spool.Retire(r.RelPath, r.FileID)
+		if err != nil {
+			return nil, err
+		}
+		if old != "" {
+			r.SpoolPath = old
+			if err := e.State.Put(ctx, *r); err != nil {
+				return nil, err
+			}
+		}
+	}
 	live := items[:0]
 	for _, it := range items {
 		orig := it.row

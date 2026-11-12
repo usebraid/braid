@@ -341,3 +341,38 @@ func TestReplacedFileDrainsOldSpool(t *testing.T) {
 		t.Fatalf("spool not cleaned: %v", entries)
 	}
 }
+
+// A file replaced by one with a different head while the old one is unacked: the new file's spool
+// entry must not overwrite the old one, and the old head's rows must hold exactly the old lines.
+func TestReplacedWithNewHeadKeepsOldSpool(t *testing.T) {
+	fs := newFakeServer()
+	e, root := newEngine(t, fs)
+	appendTo(t, root, "p/a.jsonl", "h1\n")
+	if _, err := e.Pass(context.Background()); err != nil { // acks the head line only
+		t.Fatal(err)
+	}
+	appendTo(t, root, "p/a.jsonl", "1\n2\n")
+	fs.failNext = &client.RetryableError{Status: 503}
+	_, _ = e.Pass(context.Background()) // spools the old file, upload fails
+	tmp := filepath.Join(root, "p/new.tmp")
+	_ = os.WriteFile(tmp, []byte("h2\nn1\nn2\nn3\n"), 0o600)
+	if err := os.Rename(tmp, filepath.Join(root, "p/a.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Pass(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	want := map[[2]string]string{{"p/a.jsonl", sum([]byte("h1"))}: "h1,1,2", {"p/a.jsonl", sum([]byte("h2"))}: "h2,n1,n2,n3"}
+	for k, w := range want {
+		var got []string
+		for _, r := range fs.rows[k] {
+			got = append(got, r.text)
+		}
+		if strings.Join(got, ",") != w {
+			t.Errorf("%s head %.6s: got %v, want %s", k[0], k[1], got, w)
+		}
+	}
+	if entries, _ := os.ReadDir(e.Spool.Dir); len(entries) != 0 {
+		t.Fatalf("spool not cleaned: %v", entries)
+	}
+}
