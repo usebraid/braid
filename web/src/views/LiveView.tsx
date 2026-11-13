@@ -46,7 +46,9 @@ export function LiveView() {
             </Link>
             <div className="sub">
               {s.project_name} · {names.get(dev) ?? dev.slice(0, 8)} · last activity{' '}
-              <span data-testid="live-last-activity">{ago(s.ended_at, now)}</span>
+              <span data-testid="live-last-activity" data-ended-at={s.ended_at}>
+                {ago(s.ended_at, now)}
+              </span>
             </div>
             <ul className="live-agents">
               {agents.map((a) => (
