@@ -1,0 +1,5 @@
+{
+  "entry": ["scripts/*.mjs", "test/*.test.mjs"],
+  "project": ["*.mjs", "scripts/**", "test/**"],
+  "ignoreBinaries": ["go"]
+}

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braid: every Claude Code session, every device, one stream</title>
+<meta name="description" content="Braid syncs your Claude Code sessions from all your devices into one self-hosted dashboard. Nothing is lost. No token cost.">
+<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="/"><img src="/assets/logo.svg" alt="" width="28" height="28"><span>Braid</span></a>
+  <nav aria-label="Main">
+    <a href="#features">Features</a>
+    <a href="#install">Install</a>
+    <a href="/docs/">Docs</a>
+    <a href="https://github.com/usebraid/braid">GitHub</a>
+  </nav>
+</header>
+<main id="main">
+  <section class="hero" id="hero">
+    <h1>Every Claude Code session, every device, one stream</h1>
+    <p class="lead">Braid copies your Claude Code history from all your machines to a server you run. You get one timeline, a live view and your numbers. Nothing is lost.</p>
+    <div class="snippets">
+      <pre><code>curl -fsSL https://get.usebraid.dev | sh</code></pre>
+      <pre><code>brew install usebraid/tap/braid</code></pre>
+    </div>
+    <p class="note">The script checks a SHA-256 sum before it installs anything. <a href="#install">More install options</a>.</p>
+  </section>
+
+  <section class="shots" id="screenshots" aria-label="Screenshots">
+{{shots}}
+  </section>
+
+  <section id="features">
+    <h2>What you get</h2>
+    <ul class="cards">
+      <li><h3>One timeline</h3><p>All sessions from all devices. Filter by device, project, model, skill and time.</p></li>
+      <li><h3>Live view</h3><p>See running sessions as they happen, subagents included.</p></li>
+      <li><h3>Session canvas</h3><p>Open a session as a graph: main session, subagents and skill phases.</p></li>
+      <li><h3>KPIs</h3><p>Sessions, agent time, cost, tokens and streak over your whole history.</p></li>
+      <li><h3>Failures</h3><p>Usage limits, rate limits, server errors, refusals and failed tool calls. How often, why, and how much time they cost.</p></li>
+      <li><h3>Band</h3><p>A band in Claude Code shows the current session and today across all devices.</p></li>
+      <li><h3>Nothing lost</h3><p>The raw transcript lines are kept as they are. The dashboard is derived from them and can be rebuilt.</p></li>
+      <li><h3>No token cost</h3><p>Braid reads files on disk. It never calls a model.</p></li>
+      <li><h3>Self-hosted, any OIDC</h3><p>Your server, your database. Sign in with Pocket ID, Authentik, Keycloak, Authelia or Zitadel.</p></li>
+    </ul>
+  </section>
+
+  <section id="how-it-works">
+    <h2>How it works</h2>
+    <p>A small daemon on each device watches the Claude Code files and sends new lines to your server. The server stores them in Postgres and serves the dashboard.</p>
+{{diagram}}
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <h3>macOS and Linux</h3>
+    <pre><code>curl -fsSL https://get.usebraid.dev | sh
+braid login https://braid.example.com
+braid install</code></pre>
+    <p>Or with Homebrew: <code>brew install usebraid/tap/braid</code>. The script installs to <code>~/.local/bin</code>. It does not use sudo.</p>
+    <h3>Windows</h3>
+    <p>Download the zip from the release page and follow the <a href="/docs/daemon/#windows">manual steps</a>.</p>
+    <h3>Server (Docker)</h3>
+    <pre><code>docker pull ghcr.io/usebraid/braid-server:latest</code></pre>
+    <p>The image is built for amd64 and arm64. The docs have a Compose file.</p>
+    <h3>Verify</h3>
+    <p>Releases are signed with cosign. Check the checksum file:</p>
+    <pre><code>cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/usebraid/braid/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt</code></pre>
+  </section>
+
+  <section id="self-hosting">
+    <h2>Self-hosting</h2>
+    <p>You run the server and the database. The docs cover Docker Compose, an external Postgres, OIDC setup, reverse proxies and backups.</p>
+    <p><a class="button" href="/docs/">Read the docs</a></p>
+  </section>
+
+  <section id="credits">
+    <h2>Credits</h2>
+    <p>Built on <a href="https://github.com/simple10/agents-observe">agents-observe</a> &amp; <a href="https://github.com/DietrichGebert/ponytail">ponytail</a>. The board look and parts of the code come from ponytail. The idea of syncing sessions comes from agents-observe.</p>
+  </section>
+
+  <section id="license">
+    <h2>License</h2>
+    <p>AGPL-3.0-or-later. The source is on <a href="https://github.com/usebraid/braid">GitHub</a>.</p>
+  </section>
+</main>
+<footer class="foot"><p>Braid. No tracking, no cookies, no third-party requests.</p></footer>
+</body>
+</html>

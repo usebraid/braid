@@ -1,0 +1,24 @@
+{
+  "name": "braid-site",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=26.13"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/",
+    "lint": "biome check .",
+    "knip": "knip",
+    "check": "npm run lint && npm run knip && npm run build && npm test"
+  },
+  "dependencies": {
+    "marked": "18.2.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.7",
+    "knip": "6.45.1"
+  }
+}
