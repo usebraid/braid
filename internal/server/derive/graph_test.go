@@ -83,6 +83,15 @@ func TestEventsModelAcrossBatches(t *testing.T) {
 	}
 }
 
+func TestEventsStartMovedEarlierByOutOfOrderLine(t *testing.T) {
+	lines := []string{dt.Prompt(dt.At(300), "a"), dt.Reply(dt.At(310), "m1", opus, gu), dt.Prompt(dt.At(0), "b"), dt.Reply(dt.At(10), "m2", sonnet, gu)}
+	for _, batch := range []int{0, 1, 2} {
+		if got, want := events(t, batch, lines...), "start@10:00/claude-sonnet-5-5"; got != want {
+			t.Errorf("batch %d: %s want %s", batch, got, want)
+		}
+	}
+}
+
 func TestLineOrderMissingTimestamp(t *testing.T) {
 	lines := []string{dt.Line("system", ""), dt.Prompt(dt.At(5), "a"), dt.Line("system", ""), dt.Reply(dt.At(9), "m1", opus, gu)}
 	for _, batch := range []int{0, 1, 3} {
@@ -108,6 +117,9 @@ func TestGraphTablesEqualReindex(t *testing.T) {
 			random = append(random, dt.Reply(dt.At(at), "m"+strconv.Itoa(i), opus, gu, dt.Tool("t"+strconv.Itoa(i), "Bash", map[string]any{})))
 		}
 		at += []int{5, 90, 1700, 2000, 9000}[rnd.IntN(5)]
+		if rnd.IntN(6) == 0 { // a line stamped earlier than its predecessors
+			at -= 3000
+		}
 	}
 	e := dt.New(t)
 	for name, files := range map[string][]dt.File{"scenario": dt.Scenario(), "random": {{Rel: "-work-alpha/r1.jsonl", Lines: random}}} {

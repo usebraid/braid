@@ -136,13 +136,7 @@ func (b *batch) activeTime(e parse.Event) {
 func (b *batch) graphEvent(e parse.Event, row rawRow) {
 	if b.start == nil || e.TS.Before(b.start.at) {
 		s := &eventAcc{kind: "start", at: e.TS, device: row.device, offset: row.offset}
-		if b.start != nil {
-			s.model = b.start.model
-		}
-		if s.model == "" {
-			b.open = append(b.open, s)
-		}
-		b.start = s
+		b.start, b.open = s, append(b.open, s) // its model is the first reply after its line, not that of the start it replaces
 	}
 	if !e.TurnStart || e.Sidechain {
 		return
