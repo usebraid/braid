@@ -311,6 +311,12 @@ select.ctl {
   background-image: none;
   cursor: pointer;
 }
+/* Native option lists ignore the select's transparent background on Windows; set colors explicitly. */
+select option,
+select optgroup {
+  background-color: var(--panel);
+  color: var(--text);
+}
 .select {
   position: relative;
   display: inline-flex;
