@@ -332,6 +332,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/stats/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Start and resume events of sessions, newest first */
+        get: operations["statsTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/sessions/{id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lines of all agents of a session in time order */
+        get: operations["statsSessionChat"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stats/failures": {
         parameters: {
             query?: never;
@@ -721,6 +755,16 @@ export interface components {
             started_at: string | null;
             /** Format: date-time */
             ended_at: string | null;
+            /**
+             * Format: date-time
+             * @description Start of the tool call that spawned the agent.
+             */
+            spawned_at: string | null;
+            /**
+             * Format: date-time
+             * @description Time of that call's result; null while open.
+             */
+            merged_at: string | null;
             finished: boolean | null;
             /** Format: int64 */
             duration_ms: number;
@@ -777,6 +821,47 @@ export interface components {
             lines: components["schemas"]["LineItem"][];
             next: string | null;
             /** @description Id of the first returned line when an earlier line of the agent exists. */
+            prev: string | null;
+        };
+        TimelineEvent: {
+            session_id: string;
+            /** @enum {string} */
+            kind: "start" | "resume";
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            device_id: string | null;
+            model: string | null;
+            project: string;
+            project_name: string;
+            title: string;
+            is_live: boolean;
+            /** Format: int64 */
+            failures: number;
+        };
+        TimelinePage: {
+            events: components["schemas"]["TimelineEvent"][];
+            next: string | null;
+        };
+        ChatLine: {
+            /** Format: int64 */
+            id: number;
+            agent_id: string;
+            /**
+             * Format: date-time
+             * @description Null while the line's file has no timestamp yet; such lines sort first.
+             */
+            ts: string | null;
+            /** Format: int64 */
+            offset: number;
+            /** @description The raw transcript line. */
+            line: Record<string, never>;
+        };
+        ChatPage: {
+            lines: components["schemas"]["ChatLine"][];
+            /** @description Cursor for after when later lines exist. */
+            next: string | null;
+            /** @description Cursor for before when earlier lines exist. */
             prev: string | null;
         };
         FailureAgg: {
@@ -1461,6 +1546,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinePage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    statsTimeline: {
+        parameters: {
+            query?: {
+                /** @description Range start (RFC 3339); default 30 days before To. */
+                from?: components["parameters"]["From"];
+                /** @description Range end (RFC 3339); default now. */
+                to?: components["parameters"]["To"];
+                device?: components["parameters"]["DeviceFilter"];
+                project?: components["parameters"]["ProjectFilter"];
+                model?: components["parameters"]["ModelFilter"];
+                skill?: components["parameters"]["SkillFilter"];
+                /** @description Opaque cursor from the previous page's next. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelinePage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+        };
+    };
+    statsSessionChat: {
+        parameters: {
+            query?: {
+                /** @description Cursor (next of a page); lines after it. Not combinable with before or at. */
+                after?: string;
+                /** @description Cursor (prev of a page); the newest lines before it */
+                before?: string;
+                /** @description A raw line id; the page starts at that line. */
+                at?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Free-text session id, not a uuid. */
+                id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatPage"];
                 };
             };
             400: components["responses"]["Error"];

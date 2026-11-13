@@ -13,6 +13,8 @@ const agent = (id: string, parent: string | null, over: Partial<AgentItem> = {})
   description: `d-${id}`,
   parent_agent_id: parent,
   spawn_tool_use_id: null,
+  spawned_at: null,
+  merged_at: null,
   spawn_depth: 0,
   started_at: null,
   ended_at: null,

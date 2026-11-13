@@ -262,6 +262,38 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/stats/timeline:
+    get:
+      operationId: statsTimeline
+      summary: Start and resume events of sessions, newest first
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/DeviceFilter"
+        - $ref: "#/components/parameters/ProjectFilter"
+        - $ref: "#/components/parameters/ModelFilter"
+        - $ref: "#/components/parameters/SkillFilter"
+        - $ref: "#/components/parameters/Cursor"
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TimelinePage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/stats/sessions/{id}/chat:
+    get:
+      operationId: statsSessionChat
+      summary: Lines of all agents of a session in time order
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - { name: after, in: query, description: Cursor (next of a page); lines after it. Not combinable with before or at., schema: { type: string } }
+        - { name: before, in: query, description: Cursor (prev of a page); the newest lines before it, ascending., schema: { type: string } }
+        - { name: at, in: query, description: A raw line id; the page starts at that line., schema: { type: integer, format: int64, minimum: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 200 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ChatPage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/stats/failures:
     get:
       operationId: statsFailures
@@ -675,7 +707,7 @@ components:
         messages: { type: integer, format: int64 }
     AgentItem:
       type: object
-      required: [agent_id, agent_type, description, parent_agent_id, spawn_tool_use_id, spawn_depth, started_at, ended_at, finished, duration_ms, duration_estimated, tool_calls, tool_errors, usage]
+      required: [agent_id, agent_type, description, parent_agent_id, spawn_tool_use_id, spawn_depth, started_at, ended_at, spawned_at, merged_at, finished, duration_ms, duration_estimated, tool_calls, tool_errors, usage]
       properties:
         agent_id: { type: string }
         agent_type: { type: string }
@@ -685,6 +717,8 @@ components:
         spawn_depth: { type: integer }
         started_at: { type: [string, "null"], format: date-time }
         ended_at: { type: [string, "null"], format: date-time }
+        spawned_at: { type: [string, "null"], format: date-time, description: Start of the tool call that spawned the agent. }
+        merged_at: { type: [string, "null"], format: date-time, description: Time of that call's result; null while open. }
         finished: { type: [boolean, "null"] }
         duration_ms: { type: integer, format: int64 }
         duration_estimated: { type: boolean }
@@ -735,6 +769,42 @@ components:
         lines: { type: array, items: { $ref: "#/components/schemas/LineItem" } }
         next: { type: [string, "null"] }
         prev: { type: [string, "null"], description: Id of the first returned line when an earlier line of the agent exists. }
+    TimelineEvent:
+      type: object
+      required: [session_id, kind, at, device_id, model, project, project_name, title, is_live, failures]
+      properties:
+        session_id: { type: string }
+        kind: { type: string, enum: [start, resume] }
+        at: { type: string, format: date-time }
+        device_id: { type: [string, "null"], format: uuid }
+        model: { type: [string, "null"] }
+        project: { type: string }
+        project_name: { type: string }
+        title: { type: string }
+        is_live: { type: boolean }
+        failures: { type: integer, format: int64 }
+    TimelinePage:
+      type: object
+      required: [events, next]
+      properties:
+        events: { type: array, items: { $ref: "#/components/schemas/TimelineEvent" } }
+        next: { type: [string, "null"] }
+    ChatLine:
+      type: object
+      required: [id, agent_id, ts, offset, line]
+      properties:
+        id: { type: integer, format: int64 }
+        agent_id: { type: string }
+        ts: { type: [string, "null"], format: date-time, description: Null while the line's file has no timestamp yet; such lines sort first. }
+        offset: { type: integer, format: int64 }
+        line: { type: object, description: The raw transcript line. }
+    ChatPage:
+      type: object
+      required: [lines, next, prev]
+      properties:
+        lines: { type: array, items: { $ref: "#/components/schemas/ChatLine" } }
+        next: { type: [string, "null"], description: Cursor for after when later lines exist. }
+        prev: { type: [string, "null"], description: Cursor for before when earlier lines exist. }
     FailureAgg:
       type: object
       required: [key, count, time_lost_s]

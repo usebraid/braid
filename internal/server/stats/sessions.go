@@ -74,6 +74,8 @@ type AgentItem struct {
 	Finished          *bool            `json:"finished"`
 	DurationMs        int64            `json:"duration_ms"`
 	DurationEstimated bool             `json:"duration_estimated"`
+	SpawnedAt         *time.Time       `json:"spawned_at"` // the spawning tool call's start
+	MergedAt          *time.Time       `json:"merged_at"`  // its result's time; null while open
 	ToolCalls         map[string]int64 `json:"tool_calls"`
 	ToolErrors        int64            `json:"tool_errors"`
 	Usage             AgentUsage       `json:"usage"`
@@ -233,7 +235,9 @@ func (h *Handler) sessionDetail(w http.ResponseWriter, r *http.Request) {
 		    (SELECT coalesce(jsonb_object_agg(x.tool_name, x.n), '{}') FROM (SELECT t.tool_name, count(*) n FROM tool_calls t
 		       WHERE t.session_id = a.session_id AND t.agent_id = a.agent_id GROUP BY 1) x),
 		    (SELECT count(*) FROM tool_calls t WHERE t.session_id = a.session_id AND t.agent_id = a.agent_id AND t.is_error),
-		    us.cost, us.tok, us.inp, us.outp, us.cr, us.cw, us.n
+		    us.cost, us.tok, us.inp, us.outp, us.cr, us.cw, us.n,
+		    (SELECT t.started_at FROM tool_calls t WHERE t.session_id = a.session_id AND t.tool_use_id = a.spawn_tool_use_id),
+		    (SELECT t.ended_at FROM tool_calls t WHERE t.session_id = a.session_id AND t.tool_use_id = a.spawn_tool_use_id)
 		  FROM agents a CROSS JOIN LATERAL (SELECT coalesce(sum(u.cost_usd), 0)::float8 cost, coalesce(sum(`+tokExpr+`), 0)::bigint tok,
 		      coalesce(sum(u.input_tokens), 0)::bigint inp, coalesce(sum(u.output_tokens), 0)::bigint outp,
 		      coalesce(sum(u.cache_read_tokens), 0)::bigint cr, coalesce(sum(u.cache_write_5m_tokens + u.cache_write_1h_tokens), 0)::bigint cw, count(*) n
@@ -242,7 +246,7 @@ func (h *Handler) sessionDetail(w http.ResponseWriter, r *http.Request) {
 			var a AgentItem
 			u := &a.Usage
 			err := rows.Scan(&a.AgentID, &a.AgentType, &a.Description, &a.ParentAgentID, &a.SpawnToolUseID, &a.SpawnDepth, &a.StartedAt, &a.EndedAt,
-				&a.Finished, &a.DurationMs, &a.DurationEstimated, &a.ToolCalls, &a.ToolErrors, &u.CostUSD, &u.Tokens, &u.Input, &u.Output, &u.CacheRead, &u.CacheWrite, &u.Messages)
+				&a.Finished, &a.DurationMs, &a.DurationEstimated, &a.ToolCalls, &a.ToolErrors, &u.CostUSD, &u.Tokens, &u.Input, &u.Output, &u.CacheRead, &u.CacheWrite, &u.Messages, &a.SpawnedAt, &a.MergedAt)
 			det.Agents = append(det.Agents, a)
 			return err
 		}); err != nil {
@@ -316,6 +320,19 @@ func linesQuery(cond, files, order string) string {
 	return `SELECT r.id, r."offset", octet_length(r.line), CASE WHEN octet_length(r.line) <= ` + strconv.Itoa(protocol.MaxReadLine) + ` THEN r.line END FROM raw_lines r WHERE ` + cond + ` AND ` + files + ` ORDER BY ` + order + ` LIMIT $4`
 }
 
+// decodeLine is the JSON of one stored line: itself, a size placeholder when too large to load, or base64 when not JSON.
+func decodeLine(offset, n int64, raw []byte) json.RawMessage {
+	switch {
+	case n > protocol.MaxReadLine:
+		b, _ := json.Marshal(map[string]any{"too_large": true, "offset": offset, "size": n})
+		return b
+	case json.Valid(raw):
+		return raw
+	}
+	b, _ := json.Marshal(map[string]string{"invalid_json_b64": base64.StdEncoding.EncodeToString(raw)})
+	return b
+}
+
 // readLines pages the lines of one agent: ascending after `after`, or with before > 0 the newest lines below `before`, ascending.
 func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent string, after, before int64, limit int, page *LinePage) error {
 	var ok bool
@@ -354,13 +371,7 @@ func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent strin
 		if err := rows.Scan(&it.ID, &it.Offset, &n, &raw); err != nil {
 			return err
 		}
-		if n > protocol.MaxReadLine { // never loaded: a placeholder with the size
-			it.Line, _ = json.Marshal(map[string]any{"too_large": true, "offset": it.Offset, "size": n})
-		} else if json.Valid(raw) {
-			it.Line = raw
-		} else {
-			it.Line, _ = json.Marshal(map[string]string{"invalid_json_b64": base64.StdEncoding.EncodeToString(raw)})
-		}
+		it.Line = decodeLine(it.Offset, n, raw)
 		size += len(it.Line) // what goes out: base64 of invalid JSON is a third larger
 		page.Lines = append(page.Lines, it)
 	}
