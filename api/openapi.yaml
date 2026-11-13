@@ -297,6 +297,21 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+  /v1/files:
+    get:
+      operationId: listFiles
+      summary: The files the server holds for the device's user, one cursor page at a time
+      security:
+        - device: ["ingest:write"]
+      parameters:
+        - { name: Braid-Protocol, in: header, required: true, schema: { type: string } }
+        - { name: after, in: query, description: Cursor from the previous page's next., schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 500 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FilesPage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     session:
@@ -735,6 +750,24 @@ components:
       properties:
         type: { type: string }
         resets_at: { type: string, format: date-time }
+    RemoteFile:
+      type: object
+      required: [path, head_hash, kind, end_offset]
+      properties:
+        path: { type: string }
+        head_hash: { type: string }
+        kind: { type: string, enum: [append, snapshot] }
+        end_offset: { type: integer, format: int64 }
+        content_hash: { type: string }
+        scope: { type: string, enum: [device] }
+        tail_offset: { type: integer, format: int64 }
+        tail_hash: { type: string }
+    FilesPage:
+      type: object
+      required: [files]
+      properties:
+        files: { type: array, items: { $ref: "#/components/schemas/RemoteFile" } }
+        next: { type: string, description: Cursor of the next page; absent on the last page. }
     Self:
       type: object
       required: [today, session, limit]

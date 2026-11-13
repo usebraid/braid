@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -273,32 +274,52 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 
 func (h *Handler) files(w http.ResponseWriter, r *http.Request) {
 	dev, _ := DeviceFrom(r.Context())
-	out := []protocol.RemoteFile{}
+	var after int64
+	if a := r.URL.Query().Get("after"); a != "" {
+		var err error
+		if after, err = strconv.ParseInt(a, 10, 64); err != nil || after < 0 {
+			errJSON(w, http.StatusBadRequest, "bad_request")
+			return
+		}
+	}
+	limit := protocol.DefaultFilesLimit
+	if l := r.URL.Query().Get("limit"); l != "" {
+		n, err := strconv.Atoi(l)
+		if err != nil || n < 1 {
+			errJSON(w, http.StatusBadRequest, "bad_request")
+			return
+		}
+		limit = min(n, protocol.MaxFilesLimit)
+	}
+	out := protocol.FilesPage{Files: []protocol.RemoteFile{}}
+	var ids []int64
 	err := h.db.WithUser(r.Context(), dev.UserID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(r.Context(), `
-			SELECT f.rel_path, f.head_hash, f.kind, f.end_offset, coalesce(encode(s.content_hash, 'hex'), ''),
+			SELECT f.id, f.rel_path, f.head_hash, f.kind, f.end_offset, coalesce(encode(s.content_hash, 'hex'), ''),
 			       f.scope_device_id IS NOT NULL, coalesce(t."offset", 0), coalesce(encode(t.line_hash, 'hex'), '')
 			  FROM source_files f
 			  LEFT JOIN LATERAL (SELECT content_hash FROM raw_snapshots WHERE source_file_id = f.id
 			                      ORDER BY received_at DESC, id DESC LIMIT 1) s ON true
 			  LEFT JOIN LATERAL (SELECT "offset", line_hash FROM raw_lines WHERE source_file_id = f.id
 			                      ORDER BY "offset" DESC, id DESC LIMIT 1) t ON true
-			 WHERE f.scope_device_id IS NULL OR f.scope_device_id = $1
-			 ORDER BY f.rel_path, f.head_hash, f.scope_device_id NULLS FIRST`, dev.DeviceID)
+			 WHERE (f.scope_device_id IS NULL OR f.scope_device_id = $1) AND f.id > $2
+			 ORDER BY f.id LIMIT $3`, dev.DeviceID, after, limit+1)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var f protocol.RemoteFile
+			var id int64
 			var scoped bool
-			if err := rows.Scan(&f.Path, &f.HeadHash, &f.Kind, &f.EndOffset, &f.ContentHash, &scoped, &f.TailOffset, &f.TailHash); err != nil {
+			if err := rows.Scan(&id, &f.Path, &f.HeadHash, &f.Kind, &f.EndOffset, &f.ContentHash, &scoped, &f.TailOffset, &f.TailHash); err != nil {
 				return err
 			}
 			if scoped {
 				f.Scope = protocol.ScopeDevice
 			}
-			out = append(out, f)
+			out.Files = append(out.Files, f)
+			ids = append(ids, id)
 		}
 		return rows.Err()
 	})
@@ -306,6 +327,10 @@ func (h *Handler) files(w http.ResponseWriter, r *http.Request) {
 		slog.Error("files", "err", err)
 		errJSON(w, http.StatusInternalServerError, "internal")
 		return
+	}
+	if len(out.Files) > limit {
+		out.Files = out.Files[:limit]
+		out.Next = strconv.FormatInt(ids[limit-1], 10)
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }

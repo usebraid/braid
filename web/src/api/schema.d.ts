@@ -380,6 +380,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The files the server holds for the device's user, one cursor page at a time */
+        get: operations["listFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -771,6 +788,25 @@ export interface components {
             type: string;
             /** Format: date-time */
             resets_at: string;
+        };
+        RemoteFile: {
+            path: string;
+            head_hash: string;
+            /** @enum {string} */
+            kind: "append" | "snapshot";
+            /** Format: int64 */
+            end_offset: number;
+            content_hash?: string;
+            /** @enum {string} */
+            scope?: "device";
+            /** Format: int64 */
+            tail_offset?: number;
+            tail_hash?: string;
+        };
+        FilesPage: {
+            files: components["schemas"]["RemoteFile"][];
+            /** @description Cursor of the next page; absent on the last page. */
+            next?: string;
         };
         Self: {
             today: components["schemas"]["SelfToday"];
@@ -1453,6 +1489,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Self"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    listFiles: {
+        parameters: {
+            query?: {
+                /** @description Cursor from the previous page's next. */
+                after?: string;
+                limit?: number;
+            };
+            header: {
+                "Braid-Protocol": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilesPage"];
                 };
             };
             400: components["responses"]["Error"];

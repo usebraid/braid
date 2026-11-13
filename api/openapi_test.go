@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/usebraid/braid/internal/protocol"
 	srvapi "github.com/usebraid/braid/internal/server/api"
 	"github.com/usebraid/braid/internal/server/stats"
 )
@@ -31,7 +32,7 @@ func TestOpenAPIPaths(t *testing.T) {
 	for _, p := range []string{"/api/v1/me", "/api/v1/devices", "/api/v1/devices/{id}", "/api/v1/audit", "/api/v1/admin/users",
 		"/api/v1/admin/users/{id}/disable", "/api/v1/admin/users/{id}/enable", "/api/v1/admin/users/{id}", "/api/v1/admin/audit",
 		"/api/v1/stats/overview", "/api/v1/stats/sessions", "/api/v1/stats/sessions/{id}", "/api/v1/stats/sessions/{id}/lines",
-		"/api/v1/stats/failures", "/api/v1/stats/search", "/api/v1/admin/stats", "/v1/stats/self"} {
+		"/api/v1/stats/failures", "/api/v1/stats/search", "/api/v1/admin/stats", "/v1/stats/self", "/v1/files"} {
 		if !have["  "+p+":"] {
 			t.Errorf("missing path %s", p)
 		}
@@ -91,7 +92,7 @@ func TestSchemasMatchGoTypes(t *testing.T) {
 		"SessionDetail": stats.SessionDetail{}, "LineItem": stats.LineItem{}, "LinePage": stats.LinePage{}, "FailureAgg": stats.FailureAgg{},
 		"FailurePage": stats.FailurePage{}, "SearchHit": stats.SearchHit{}, "SearchResult": stats.SearchResult{}, "SelfToday": stats.SelfToday{},
 		"SelfSession": stats.SelfSession{}, "SelfLimit": stats.SelfLimit{}, "Self": stats.Self{}, "AdminUserStats": srvapi.AdminUserStats{}, "AdminTotals": srvapi.AdminTotals{},
-		"AdminStats": srvapi.AdminStats{},
+		"AdminStats": srvapi.AdminStats{}, "RemoteFile": protocol.RemoteFile{}, "FilesPage": protocol.FilesPage{},
 	} {
 		got, want := schemaProps(t, doc, name), jsonFields(reflect.TypeOf(v))
 		if !reflect.DeepEqual(got, want) {
@@ -99,7 +100,7 @@ func TestSchemasMatchGoTypes(t *testing.T) {
 		}
 	}
 	for _, p := range []string{"/api/v1/stats/overview", "/api/v1/stats/sessions", "/api/v1/stats/sessions/{id}", "/api/v1/stats/sessions/{id}/lines",
-		"/api/v1/stats/failures", "/api/v1/stats/search", "/api/v1/admin/stats", "/v1/stats/self"} {
+		"/api/v1/stats/failures", "/api/v1/stats/search", "/api/v1/admin/stats", "/v1/stats/self", "/v1/files"} {
 		if !strings.Contains(doc, "\n  "+p+":\n") {
 			t.Errorf("missing path %s", p)
 		}

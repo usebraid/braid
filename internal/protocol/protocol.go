@@ -131,6 +131,18 @@ type RemoteFile struct {
 	TailHash    string `json:"tail_hash,omitempty"`   // hex sha256 of that line
 }
 
+// Page sizes of GET /v1/files.
+const (
+	DefaultFilesLimit = 500
+	MaxFilesLimit     = 1000
+)
+
+// FilesPage is the response of GET /v1/files?after=<cursor>&limit=<n>; Next is the cursor of the next page, empty on the last.
+type FilesPage struct {
+	Files []RemoteFile `json:"files"`
+	Next  string       `json:"next,omitempty"`
+}
+
 // ErrorResponse is the JSON error body; Server and Min report version mismatches.
 type ErrorResponse struct {
 	Error  string `json:"error"`

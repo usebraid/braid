@@ -91,14 +91,29 @@ func (c *Client) Ingest(ctx context.Context, req protocol.IngestRequest) (protoc
 	return out, decode(body, st, &out)
 }
 
-// Files lists the files the server knows for this device.
+// Files lists the files the server knows for this device, following the cursor through all pages.
 func (c *Client) Files(ctx context.Context) ([]protocol.RemoteFile, error) {
-	body, st, err := c.do(ctx, http.MethodGet, "/v1/files", nil, false)
-	if err != nil {
-		return nil, err
-	}
 	var out []protocol.RemoteFile
-	return out, decode(body, st, &out)
+	after := ""
+	for {
+		path := "/v1/files"
+		if after != "" {
+			path += "?after=" + url.QueryEscape(after)
+		}
+		body, st, err := c.do(ctx, http.MethodGet, path, nil, false)
+		if err != nil {
+			return nil, err
+		}
+		var page protocol.FilesPage
+		if err := decode(body, st, &page); err != nil {
+			return nil, err
+		}
+		out = append(out, page.Files...)
+		if page.Next == "" {
+			return out, nil
+		}
+		after = page.Next
+	}
 }
 
 // Self is the subset of GET /v1/stats/self the CLI uses; unknown fields are ignored.

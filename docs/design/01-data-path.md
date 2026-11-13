@@ -91,7 +91,7 @@ Response `200`:
 
 ### 3.3 `GET /v1/files`
 
-Auth: device token. Returns `[{path, head_hash, kind, scope, end_offset, content_hash, tail_offset, tail_hash}]` for the calling device; `scope` is absent (per user) or `device`, `tail_offset` and `tail_hash` give offset and SHA-256 of the stored line with the highest offset of an append file. On resume the daemon trusts `end_offset` only if its local file (or spool) holds exactly that line at `tail_offset`; otherwise it ignores the entry and resends. The daemon uses it when its local state is missing (reinstall, new state DB) to resume without resending everything. Resending is still correct, only slower.
+Auth: device token. Returns `{files: [{path, head_hash, kind, scope, end_offset, content_hash, tail_offset, tail_hash}], next}` for the calling device, one cursor page at a time (`?after=<file id>&limit=<n>`, default 500, max 1000; `next` is the cursor for the following page and absent on the last; the daemon loops until it is absent); `scope` is absent (per user) or `device`, `tail_offset` and `tail_hash` give offset and SHA-256 of the stored line with the highest offset of an append file. On resume the daemon trusts `end_offset` only if its local file (or spool) holds exactly that line at `tail_offset`; otherwise it ignores the entry and resends. The daemon uses it when its local state is missing (reinstall, new state DB) to resume without resending everything. Resending is still correct, only slower.
 
 ### 3.4 Dedupe
 

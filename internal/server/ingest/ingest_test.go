@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/usebraid/braid/internal/daemon/client"
 	"github.com/usebraid/braid/internal/protocol"
 	"github.com/usebraid/braid/internal/server/db"
 	"github.com/usebraid/braid/internal/server/httpx"
@@ -127,11 +129,11 @@ func (e *env) files(t *testing.T, token string) []protocol.RemoteFile {
 	if resp.StatusCode != 200 {
 		t.Fatalf("files status %d", resp.StatusCode)
 	}
-	var out []protocol.RemoteFile
+	var out protocol.FilesPage
 	if err := json.Unmarshal(resp.body, &out); err != nil {
 		t.Fatal(err)
 	}
-	return out
+	return out.Files
 }
 
 func (e *env) ownerInt(t *testing.T, q string) int {
@@ -617,5 +619,39 @@ func TestGlobalSlotsAreTakenBeforeTheBodyIsRead(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code != 429 || body.read {
 		t.Fatalf("status %d, body read %v", rec.Code, body.read)
+	}
+}
+
+func TestFilesArePaginatedAndTheClientResumesAll(t *testing.T) {
+	e := newEnv(t)
+	req := protocol.IngestRequest{}
+	for i := 0; i < 2500; i++ {
+		req.Files = append(req.Files, protocol.FileBatch{Kind: protocol.KindAppend, Path: fmt.Sprintf("p/%04d.jsonl", i), HeadHash: head})
+	}
+	if resp, _ := e.post(t, e.tokA, req, nil); resp.StatusCode != 200 {
+		t.Fatalf("seed: %d", resp.StatusCode)
+	}
+	var page protocol.FilesPage
+	resp := e.do(t, http.MethodGet, "/v1/files", e.tokA, nil, nil)
+	if err := json.Unmarshal(resp.body, &page); err != nil || len(page.Files) != 500 || page.Next == "" {
+		t.Fatalf("default page: %d files, next %q, err %v", len(page.Files), page.Next, err)
+	}
+	resp = e.do(t, http.MethodGet, "/v1/files?limit=5000", e.tokA, nil, nil)
+	if err := json.Unmarshal(resp.body, &page); err != nil || len(page.Files) != 1000 {
+		t.Fatalf("max page: %d files, err %v", len(page.Files), err)
+	}
+	if resp := e.do(t, http.MethodGet, "/v1/files?after=x", e.tokA, nil, nil); resp.StatusCode != 400 {
+		t.Fatalf("bad cursor: %d", resp.StatusCode)
+	}
+	all, err := client.New(e.srv.URL, e.tokA, "0", nil).Files(context.Background())
+	if err != nil || len(all) != 2500 {
+		t.Fatalf("client got %d files, err %v", len(all), err)
+	}
+	seen := map[string]bool{}
+	for _, f := range all {
+		seen[f.Path] = true
+	}
+	if len(seen) != 2500 {
+		t.Fatalf("duplicates across pages: %d distinct", len(seen))
 	}
 }
