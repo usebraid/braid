@@ -5,10 +5,10 @@
 == session_devices
 {"device_id": "DEVICE", "line_count": 35, "session_id": "g1"}
 == agents
-{"est_ms": 0, "turn_ms": 0, "agent_id": "a1", "ended_at": "2026-11-01T10:00:25+00:00", "finished": true, "active_ms": 3000, "result_ms": 9000, "turn_asst": true, "work_prev": "2026-11-01T10:00:25+00:00", "agent_type": "Explore", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:22+00:00", "turn_count": 1, "description": "d1", "duration_ms": 3000, "parent_hint": null, "spawn_depth": 1, "parent_agent_id": "main", "spawn_tool_use_id": "tuA", "duration_estimated": false}
-{"est_ms": 0, "turn_ms": 0, "agent_id": "a2", "ended_at": "2026-11-01T10:00:50+00:00", "finished": true, "active_ms": 8000, "result_ms": 12000, "turn_asst": true, "work_prev": "2026-11-01T10:00:50+00:00", "agent_type": "general-purpose", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:42+00:00", "turn_count": 1, "description": "d2", "duration_ms": 8000, "parent_hint": null, "spawn_depth": 1, "parent_agent_id": "main", "spawn_tool_use_id": "tuB", "duration_estimated": false}
-{"est_ms": 0, "turn_ms": 0, "agent_id": "a3", "ended_at": "2026-11-01T10:00:35+00:00", "finished": null, "active_ms": 8000, "result_ms": null, "turn_asst": true, "work_prev": "2026-11-01T10:00:35+00:00", "agent_type": "Explore", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:27+00:00", "turn_count": 1, "description": "d3", "duration_ms": 8000, "parent_hint": null, "spawn_depth": 2, "parent_agent_id": "a1", "spawn_tool_use_id": "tuC", "duration_estimated": false}
-{"est_ms": 0, "turn_ms": 0, "agent_id": "main", "ended_at": "2026-11-01T10:16:00+00:00", "finished": null, "active_ms": 940000, "result_ms": null, "turn_asst": true, "work_prev": "2026-11-01T10:15:50+00:00", "agent_type": "main", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:01+00:00", "turn_count": 1, "description": null, "duration_ms": 940000, "parent_hint": null, "spawn_depth": 0, "parent_agent_id": null, "spawn_tool_use_id": null, "duration_estimated": false}
+{"est_ms": 0, "turn_ms": 0, "agent_id": "a1", "ended_at": "2026-11-01T10:00:25+00:00", "finished": true, "active_ms": 3000, "result_ms": 9000, "turn_asst": true, "work_prev": "2026-11-01T10:00:25+00:00", "agent_type": "Explore", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:22+00:00", "turn_count": 1, "description": "d1", "duration_ms": 3000, "parent_hint": null, "spawn_depth": 1, "parent_agent_id": "main", "last_turn_device": null, "spawn_tool_use_id": "tuA", "duration_estimated": false}
+{"est_ms": 0, "turn_ms": 0, "agent_id": "a2", "ended_at": "2026-11-01T10:00:50+00:00", "finished": true, "active_ms": 8000, "result_ms": 12000, "turn_asst": true, "work_prev": "2026-11-01T10:00:50+00:00", "agent_type": "general-purpose", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:42+00:00", "turn_count": 1, "description": "d2", "duration_ms": 8000, "parent_hint": null, "spawn_depth": 1, "parent_agent_id": "main", "last_turn_device": null, "spawn_tool_use_id": "tuB", "duration_estimated": false}
+{"est_ms": 0, "turn_ms": 0, "agent_id": "a3", "ended_at": "2026-11-01T10:00:35+00:00", "finished": null, "active_ms": 8000, "result_ms": null, "turn_asst": true, "work_prev": "2026-11-01T10:00:35+00:00", "agent_type": "Explore", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:27+00:00", "turn_count": 1, "description": "d3", "duration_ms": 8000, "parent_hint": null, "spawn_depth": 2, "parent_agent_id": "a1", "last_turn_device": null, "spawn_tool_use_id": "tuC", "duration_estimated": false}
+{"est_ms": 0, "turn_ms": 0, "agent_id": "main", "ended_at": "2026-11-01T10:16:00+00:00", "finished": null, "active_ms": 940000, "result_ms": null, "turn_asst": true, "work_prev": "2026-11-01T10:15:50+00:00", "agent_type": "main", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:01+00:00", "turn_count": 1, "description": null, "duration_ms": 940000, "parent_hint": null, "spawn_depth": 0, "parent_agent_id": null, "last_turn_device": "DEVICE", "spawn_tool_use_id": null, "duration_estimated": false}
 == tool_calls
 {"skill": "superpowers:brainstorming", "agent_id": "main", "ended_at": null, "is_error": false, "result_ms": null, "tool_name": "Skill", "session_id": "g1", "started_at": "2026-11-01T10:00:20+00:00", "duration_ms": null, "tool_use_id": "sk1", "input_summary": "superpowers:brainstorming", "agent_total_ms": null}
 {"skill": "superpowers:writing-plans", "agent_id": "main", "ended_at": null, "is_error": false, "result_ms": null, "tool_name": "Skill", "session_id": "g1", "started_at": "2026-11-01T10:15:50+00:00", "duration_ms": null, "tool_use_id": "sk2", "input_summary": "superpowers:writing-plans", "agent_total_ms": null}
@@ -46,5 +46,43 @@
 {"at": "2026-11-01T10:00:25+00:00", "tsv": "'agent':2 'skill':1", "role": "assistant", "idents": "Skill Agent", "offset": 211, "agent_id": "a1", "session_id": "g1"}
 {"at": "2026-11-01T10:00:40+00:00", "tsv": "'agent':1 'bash':2", "role": "assistant", "idents": "Agent Bash", "offset": 2511, "agent_id": "main", "session_id": "g1"}
 {"at": "2026-11-01T10:15:50+00:00", "tsv": "'skill':1", "role": "assistant", "idents": "Skill", "offset": 8199, "agent_id": "main", "session_id": "g1"}
+== session_events
+{"at": "2026-11-01T10:00:01+00:00", "kind": "start", "model": "claude-opus-5-5", "offset": 125, "device_id": "DEVICE", "session_id": "g1"}
+== line_order
+{"ts": "2026-11-01T10:00:01+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:01+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:02+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:03+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:03+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:10+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:20+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:21+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:22+00:00", "agent_id": "a1", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:25+00:00", "agent_id": "a1", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:27+00:00", "agent_id": "a3", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:30+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:35+00:00", "agent_id": "a3", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:40+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:41+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:42+00:00", "agent_id": "a2", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:45+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:50+00:00", "agent_id": "a2", "session_id": "g1"}
+{"ts": "2026-11-01T10:01:00+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:01:10+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:01:20+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:01:30+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:01:40+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:03:20+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:05:00+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:00+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:10+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:20+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:30+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:35+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:40+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:40+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:50+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:16:00+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:16:00+00:00", "agent_id": "main", "session_id": "g1"}
 == derive_errors
 {"errors": 1, "last_offset": 8896}

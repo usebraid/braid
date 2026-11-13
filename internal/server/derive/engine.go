@@ -21,7 +21,7 @@ import (
 )
 
 // ParserVersion is bumped whenever a parser or engine change requires re-deriving from raw data.
-const ParserVersion = 2
+const ParserVersion = 3
 
 // Deriver derives the pending raw rows of users.
 type Deriver struct {
@@ -158,7 +158,7 @@ func (d *Deriver) Reset(ctx context.Context, userID string) error {
 			return err
 		}
 		for _, t := range []string{"derive_cursor", "derive_errors", "projects", "sessions", "session_devices", "agents",
-			"tool_calls", "skill_phases", "usage", "failures", "search_docs"} {
+			"tool_calls", "skill_phases", "usage", "failures", "search_docs", "session_events", "line_order"} {
 			if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE user_id = $1`, userID); err != nil {
 				return err
 			}
@@ -229,14 +229,25 @@ func (d *Deriver) chunkN(ctx context.Context, userID string, f pendingFile, maxL
 		}
 		if b.main || b.sub { // the open turn of the agent continues across batches
 			var prev *time.Time
-			err := tx.QueryRow(ctx, `SELECT work_prev, pending_ms, turn_asst FROM agents WHERE user_id = $1 AND session_id = $2 AND agent_id = $3`,
-				userID, info.SessionID, info.AgentID).Scan(&prev, &b.at.pending, &b.at.asst)
+			var dev *string
+			err := tx.QueryRow(ctx, `SELECT work_prev, pending_ms, turn_asst, last_turn_device::text FROM agents WHERE user_id = $1 AND session_id = $2 AND agent_id = $3`,
+				userID, info.SessionID, info.AgentID).Scan(&prev, &b.at.pending, &b.at.asst, &dev)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
 			if prev != nil {
 				b.at.prev = *prev
 			}
+			if dev != nil {
+				b.turnDevice = *dev
+			}
+			// the line timestamp carried across the batch border: that of the file's last line so far
+			var carry *time.Time
+			if err := tx.QueryRow(ctx, `SELECT nullif(o.ts, '-infinity') FROM raw_lines l JOIN line_order o ON o.user_id = l.user_id AND o.raw_line_id = l.id
+			  WHERE l.source_file_id = $1 AND l.id <= $2 ORDER BY l.id DESC LIMIT 1`, f.id, lastLine).Scan(&carry); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+			b.lineTS, b.lineSeeded = carry, carry != nil
 		}
 		var last int64
 		if f.snapshot {
@@ -261,7 +272,7 @@ func (d *Deriver) chunkN(ctx context.Context, userID string, f pendingFile, maxL
 				if perr != nil {
 					b.bad++
 				}
-				b.add(evs, 0)
+				b.add(evs, rawRow{})
 			}
 			n, last = 1, row.id
 			if err := b.flush(ctx, tx); err != nil {
@@ -304,15 +315,18 @@ func (d *Deriver) chunkN(ctx context.Context, userID string, f pendingFile, maxL
 				b.bad++
 				b.tooLarge++
 				b.badOffset = max(b.badOffset, row.offset)
+				b.lineOrder(row.id, nil)
 				continue
 			}
 			evs, perr := parse.ParseLine(row.data)
 			if perr != nil {
 				b.bad++
 				b.badOffset = max(b.badOffset, row.offset)
+				b.lineOrder(row.id, nil)
 				continue
 			}
-			b.add(evs, row.offset)
+			b.lineOrder(row.id, evs)
+			b.add(evs, row)
 		}
 		n, last = len(rows), rows[len(rows)-1].id
 		if b.bad > 0 { // counts only, never line content

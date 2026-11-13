@@ -34,6 +34,18 @@ type docAcc struct {
 	offset                    int64
 }
 
+// eventAcc is a session event (start or resume) found in this batch.
+type eventAcc struct {
+	kind, device, model string
+	at                  time.Time
+	offset              int64
+}
+
+type orderRow struct {
+	id int64
+	ts *time.Time // nil: no timestamp known yet (stored as -infinity until the file's first one shows up)
+}
+
 type usageAcc struct {
 	u      *parse.Usage
 	at     time.Time
@@ -64,6 +76,15 @@ type batch struct {
 	activeMs, activeTurns int64       // deltas of this batch
 	at                    activeState // running state, seeded from the agent row
 	prevTS                time.Time   // newest Touch so far, seeded from the cursor (failure timestamps)
+	// graph (main file only: events; main and subagent files: line order)
+	start             *eventAcc
+	resumes, open     []*eventAcc // open: events still waiting for the model of the next assistant line
+	turnDevice        string      // device of the last turn start, seeded from agents.last_turn_device
+	asstModel         string      // model of the first assistant line of this batch
+	asstOffset        int64
+	order             []orderRow
+	lineTS, lineFirst *time.Time // lineTS: ts carried to lines without one, seeded from line_order; lineFirst: first ts of a file that had none
+	lineSeeded        bool
 }
 
 // activeState is the open turn of an agent (see agents.work_prev, pending_ms, turn_asst).
@@ -110,6 +131,44 @@ func (b *batch) activeTime(e parse.Event) {
 	}
 }
 
+// graphEvent records the start and resume events of one Touch line of the main transcript.
+// It must run before activeTime, which resets the work_prev it reads.
+func (b *batch) graphEvent(e parse.Event, row rawRow) {
+	if b.start == nil || e.TS.Before(b.start.at) {
+		s := &eventAcc{kind: "start", at: e.TS, device: row.device, offset: row.offset}
+		if b.start != nil {
+			s.model = b.start.model
+		}
+		if s.model == "" {
+			b.open = append(b.open, s)
+		}
+		b.start = s
+	}
+	if !e.TurnStart || e.Sidechain {
+		return
+	}
+	if (!b.at.prev.IsZero() && e.TS.Sub(b.at.prev) > maxGap) || (b.turnDevice != "" && b.turnDevice != row.device) {
+		r := &eventAcc{kind: "resume", at: e.TS, device: row.device, offset: row.offset}
+		b.resumes, b.open = append(b.resumes, r), append(b.open, r)
+	}
+	b.turnDevice = row.device
+}
+
+// lineOrder adds the line_order row of a raw line; evs is nil for a line that did not parse.
+func (b *batch) lineOrder(id int64, evs []parse.Event) {
+	if !b.main && !b.sub {
+		return
+	}
+	if len(evs) > 0 && !evs[0].TS.IsZero() { // every event of a line carries the line's timestamp
+		ts := evs[0].TS
+		b.lineTS = &ts
+		if !b.lineSeeded && b.lineFirst == nil {
+			b.lineFirst = &ts
+		}
+	}
+	b.order = append(b.order, orderRow{id, b.lineTS})
+}
+
 func newBatch(userID string, fileID int64, fi parse.FileInfo) *batch {
 	return &batch{userID: userID, fileID: fileID, session: fi.SessionID, agent: fi.AgentID, main: fi.Kind == parse.FileMain, sub: fi.Kind == parse.FileSubagent, metaFile: fi.Kind == parse.FileAgentMeta,
 		devices: map[string]int64{}, projects: map[string]*projAcc{}, tools: map[string]*toolAcc{}, usage: map[string]*usageAcc{}, models: map[string]bool{}, failures: map[int64]*failureAcc{}, docs: map[int64]*docAcc{}}
@@ -134,7 +193,8 @@ func (b *batch) tool(id string) *toolAcc {
 	return t
 }
 
-func (b *batch) add(evs []parse.Event, offset int64) {
+func (b *batch) add(evs []parse.Event, row rawRow) {
+	offset := row.offset
 	doc := &docAcc{offset: offset} // snapshots yield no prompt/assistant events, so they never produce a doc
 	defer func() {
 		if doc.text != "" || doc.tools != "" {
@@ -147,6 +207,9 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 		}
 		switch e.Kind {
 		case parse.KindTouch:
+			if b.main {
+				b.graphEvent(e, row)
+			}
 			b.activeTime(e)
 			if later(b.prevTS, e.TS) {
 				b.prevTS = e.TS
@@ -206,6 +269,14 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 			b.meta = e.Meta
 		case parse.KindAssistant:
 			doc.role, doc.text, doc.at = "assistant", e.Text, e.TS
+			if m := NormalizeModel(e.Model); b.main && !e.Sidechain && e.Model != "" {
+				for _, ev := range b.open {
+					ev.model = m
+				}
+				if b.open = b.open[:0]; b.asstModel == "" {
+					b.asstModel, b.asstOffset = m, offset
+				}
+			}
 			if e.Usage == nil || e.TS.IsZero() {
 				break
 			}
@@ -328,8 +399,8 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 				m = &parse.AgentMeta{}
 			}
 			if err := exec(`INSERT INTO agents(user_id, session_id, agent_id, agent_type, description, parent_hint, spawn_tool_use_id, spawn_depth, finished, started_at, ended_at,
-			    active_ms, turn_count, work_prev, pending_ms, turn_asst)
-			  VALUES ($1, $2, $3, coalesce(nullif($4::text, ''), $12::text), nullif($5, ''), nullif($6, ''), nullif($7, ''), $8, $9, $10, $11, $14, $15, $16, $17, $18)
+			    active_ms, turn_count, work_prev, pending_ms, turn_asst, last_turn_device)
+			  VALUES ($1, $2, $3, coalesce(nullif($4::text, ''), $12::text), nullif($5, ''), nullif($6, ''), nullif($7, ''), $8, $9, $10, $11, $14, $15, $16, $17, $18, nullif($20, '')::uuid)
 			  ON CONFLICT (user_id, session_id, agent_id) DO UPDATE SET
 			    agent_type = coalesce(EXCLUDED.agent_type, agents.agent_type), description = coalesce(EXCLUDED.description, agents.description),
 			    parent_hint = coalesce(EXCLUDED.parent_hint, agents.parent_hint), spawn_tool_use_id = coalesce(EXCLUDED.spawn_tool_use_id, agents.spawn_tool_use_id),
@@ -337,12 +408,17 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 			    started_at = least(agents.started_at, EXCLUDED.started_at), ended_at = greatest(agents.ended_at, EXCLUDED.ended_at),
 			    active_ms = agents.active_ms + EXCLUDED.active_ms, turn_count = agents.turn_count + EXCLUDED.turn_count,
 			    work_prev = CASE WHEN $19 THEN EXCLUDED.work_prev ELSE agents.work_prev END, pending_ms = CASE WHEN $19 THEN EXCLUDED.pending_ms ELSE agents.pending_ms END,
-			    turn_asst = CASE WHEN $19 THEN EXCLUDED.turn_asst ELSE agents.turn_asst END`,
+			    turn_asst = CASE WHEN $19 THEN EXCLUDED.turn_asst ELSE agents.turn_asst END,
+			    last_turn_device = CASE WHEN $19 THEN EXCLUDED.last_turn_device ELSE agents.last_turn_device END`,
 				b.session, b.agent, m.AgentType, m.Description, m.ParentAgentID, m.ToolUseID, m.SpawnDepth, m.Finished,
-				nullTime(b.started), nullTime(b.ended), agentType, b.meta != nil, b.activeMs, b.activeTurns, nullTime(b.at.prev), b.at.pending, b.at.asst, b.main || b.sub); err != nil {
+				nullTime(b.started), nullTime(b.ended), agentType, b.meta != nil, b.activeMs, b.activeTurns, nullTime(b.at.prev), b.at.pending, b.at.asst, b.main || b.sub, b.turnDevice); err != nil {
 				return err
 			}
 		}
+	}
+
+	if err := b.flushGraph(ctx, tx); err != nil {
+		return err
 	}
 
 	if len(b.tools) > 0 {
@@ -453,6 +529,50 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 	return nil
 }
 
+func (b *batch) flushGraph(ctx context.Context, tx pgx.Tx) error {
+	u := b.userID
+	if b.session != "" && b.main {
+		if s := b.start; s != nil {
+			// one start per session: an earlier one replaces the stored one, an equal one keeps it (the first row wins, as in a reindex)
+			if _, err := tx.Exec(ctx, `DELETE FROM session_events WHERE user_id = $1 AND session_id = $2 AND kind = 'start' AND at > $3`, u, b.session, s.at); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO session_events(user_id, session_id, kind, at, device_id, model, source_file_id, "offset")
+			  SELECT $1, $2, 'start', $3, nullif($4, '')::uuid, nullif($5, ''), $6, $7
+			   WHERE NOT EXISTS (SELECT 1 FROM session_events WHERE user_id = $1 AND session_id = $2 AND kind = 'start' AND at <= $3)
+			  ON CONFLICT DO NOTHING`, u, b.session, s.at, s.device, stripNUL(s.model), b.fileID, s.offset); err != nil {
+				return err
+			}
+		}
+		for _, r := range b.resumes {
+			if _, err := tx.Exec(ctx, `INSERT INTO session_events(user_id, session_id, kind, at, device_id, model, source_file_id, "offset")
+			  VALUES ($1, $2, 'resume', $3, nullif($4, '')::uuid, nullif($5, ''), $6, $7) ON CONFLICT DO NOTHING`,
+				u, b.session, r.at, r.device, stripNUL(r.model), b.fileID, r.offset); err != nil {
+				return err
+			}
+		}
+	}
+	if b.session == "" || len(b.order) == 0 {
+		return nil
+	}
+	ids, ts := make([]int64, len(b.order)), make([]*time.Time, len(b.order))
+	for i, o := range b.order {
+		ids[i], ts[i] = o.id, o.ts
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO line_order(user_id, raw_line_id, session_id, agent_id, ts)
+	  SELECT $1, i, $2, $3, coalesce(t, '-infinity') FROM unnest($4::bigint[], $5::timestamptz[]) AS x(i, t)
+	  ON CONFLICT (user_id, raw_line_id) DO UPDATE SET session_id = EXCLUDED.session_id, agent_id = EXCLUDED.agent_id, ts = EXCLUDED.ts`,
+		u, b.session, stripNUL(b.agent), ids, ts); err != nil {
+		return err
+	}
+	if b.lineFirst != nil { // the leading lines of the file without a timestamp take the file's first one
+		_, err := tx.Exec(ctx, `UPDATE line_order o SET ts = $3 FROM raw_lines l
+		  WHERE o.user_id = $1 AND l.id = o.raw_line_id AND l.source_file_id = $2 AND o.ts = '-infinity'`, u, b.fileID, *b.lineFirst)
+		return err
+	}
+	return nil
+}
+
 // fixups recomputes everything that links rows of different files; idempotent and independent of arrival order.
 func (b *batch) fixups(ctx context.Context, tx pgx.Tx) error {
 	for _, q := range []string{
@@ -475,7 +595,13 @@ func (b *batch) fixups(ctx context.Context, tx pgx.Tx) error {
 			return err
 		}
 	}
-	return nil
+	if b.asstModel == "" {
+		return nil
+	}
+	// events of earlier batches that were still waiting for a reply
+	_, err := tx.Exec(ctx, `UPDATE session_events SET model = $3
+	  WHERE user_id = $1 AND session_id = $2 AND model IS NULL AND source_file_id = $4 AND "offset" < $5`, b.userID, b.session, stripNUL(b.asstModel), b.fileID, b.asstOffset)
+	return err
 }
 
 // stripNUL removes U+0000, which Postgres text cannot hold; used for every text value derive writes.
