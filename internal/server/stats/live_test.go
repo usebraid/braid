@@ -64,7 +64,7 @@ func TestFilterOptions(t *testing.T) {
 		t.Fatal(st)
 	}
 	if !slices.Equal(fo.Models, []string{opus, sonnet}) || !slices.Equal(fo.Skills, []string{"superpowers:writing-plans"}) ||
-		len(fo.Projects) != 2 || fo.Projects[0] != (stats.ProjectOption{Path: "/work/alpha", Name: "alpha", Sessions: 2}) || fo.Projects[1].Path != "/work/beta" {
+		len(fo.Projects) != 2 || fo.Projects[0].Path != "/work/alpha" || fo.Projects[0].Name != "alpha" || fo.Projects[0].Sessions != 2 || fo.Projects[0].LastActive.IsZero() || fo.Projects[1].Path != "/work/beta" {
 		t.Fatalf("%+v", fo)
 	}
 	if st := x.get(t, "/api/v1/stats/filters?from=2026-12-01T00:00:00Z&to=2026-11-01T00:00:00Z", nil); st != 400 {

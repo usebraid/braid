@@ -719,6 +719,11 @@ export interface components {
              * @description Sessions of the project in range.
              */
             sessions: number;
+            /**
+             * Format: date-time
+             * @description Newest session end of the project in range.
+             */
+            last_active: string;
         };
         FilterOptions: {
             projects: components["schemas"]["ProjectOption"][];

@@ -676,11 +676,12 @@ components:
         items: { type: array, items: { $ref: "#/components/schemas/LiveSession" } }
     ProjectOption:
       type: object
-      required: [path, name, sessions]
+      required: [path, name, sessions, last_active]
       properties:
         path: { type: string }
         name: { type: string }
         sessions: { type: integer, format: int64, description: Sessions of the project in range. }
+        last_active: { type: string, format: date-time, description: Newest session end of the project in range. }
     FilterOptions:
       type: object
       required: [projects, models, skills]

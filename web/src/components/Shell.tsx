@@ -11,6 +11,7 @@ import { ROUTES, titleFor } from '../routes'
 import { Footer } from './Footer'
 import { Avatar, ThemeButton } from './ui'
 
+const RECENT_PROJECTS = 10 // the sidebar shows the most recently active projects, not all
 const FILTERED = ['/', '/timeline', '/failures', '/search'] // views that read the project filter
 
 // The projects as on ponytail's board: All projects, then each with its colour and session count; a click filters.
@@ -27,13 +28,18 @@ function ProjectNav() {
       search: withFilter(sp, 'project', path).toString(),
     })
   const total = list.reduce((a, p) => a + p.sessions, 0)
+  const recent = [...list].sort((a, b) => b.last_active.localeCompare(a.last_active)).slice(0, RECENT_PROJECTS)
+  if (current && !recent.some((p) => p.path === current)) {
+    const sel = list.find((p) => p.path === current)
+    if (sel) recent.push(sel)
+  }
   return (
     <>
       <div className="side-label" id="projects-label">
         Projects
       </div>
       <nav className="proj-list" aria-labelledby="projects-label">
-        {[{ path: '', name: 'All projects', sessions: total }, ...list].map((p) => (
+        {[{ path: '', name: 'All projects', sessions: total }, ...recent].map((p) => (
           <button
             key={p.path}
             type="button"
