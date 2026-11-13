@@ -17,6 +17,27 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/About" } } } }
         "401": { $ref: "#/components/responses/Error" }
+  /api/v1/live:
+    get:
+      operationId: liveSocket
+      summary: WebSocket with push events of the current user
+      description: |
+        WebSocket upgrade (RFC 6455). Requires the session cookie and an Origin header equal to BRAID_PUBLIC_URL.
+        Frames are server-to-client JSON text and carry ids only, never data; client frames are ignored
+        (at most 256 bytes each, more than 20 per 10 s closes the socket). Frames:
+        `{"type":"hello","protocol":1}` right after the upgrade; `{"type":"ping"}` every 25 s;
+        `{"type":"session_updated","session_id":"..."}`; `{"type":"device_synced","device_id":"..."}`;
+        `{"type":"reindex","state":"started"|"done"}`; `{"type":"resync"}` (events were lost, refetch everything).
+        Close codes: 1001 server shutdown, 4401 session no longer valid, 4429 client sent too many frames.
+        At most 10 connections per user and 30 connection attempts per minute.
+      security:
+        - session: []
+      responses:
+        "101": { description: Switching Protocols }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /api/v1/me:
     get:
       operationId: getMe

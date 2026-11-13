@@ -17,18 +17,33 @@ import (
 	"github.com/usebraid/braid/internal/server/device"
 	"github.com/usebraid/braid/internal/server/httpx"
 	"github.com/usebraid/braid/internal/server/ingest"
+	"github.com/usebraid/braid/internal/server/live"
 	"github.com/usebraid/braid/internal/server/stats"
 	"github.com/usebraid/braid/internal/server/webauth"
 )
 
 // Server owns the DB pool and the route table.
 type Server struct {
-	db  *db.DB
-	mux *http.ServeMux
+	db         *db.DB
+	mux        *http.ServeMux
+	stopLive   context.CancelFunc
+	liveExited chan struct{}
 }
 
+type options struct{ live live.Options }
+
+// Option customises New.
+type Option func(*options)
+
+// WithLive overrides the live hub's limits and timings.
+func WithLive(o live.Options) Option { return func(c *options) { c.live = o } }
+
 // New opens the database (as braid_app) and registers all routes.
-func New(ctx context.Context, cfg config.Config) (*Server, error) {
+func New(ctx context.Context, cfg config.Config, opts ...Option) (*Server, error) {
+	var o options
+	for _, f := range opts {
+		f(&o)
+	}
 	d, err := db.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return nil, err
@@ -44,6 +59,11 @@ func New(ctx context.Context, cfg config.Config) (*Server, error) {
 	ingest.New(d).Register(mux, httpx.NewLimiter(600, time.Now))
 	api.New(cfg, d).Register(mux, auth)
 	stats.New(d).Register(mux, auth, httpx.NewLimiter(120, time.Now))
+	hub := live.NewHub(d.Listen, o.live)
+	lctx, stop := context.WithCancel(context.Background())
+	exited := make(chan struct{})
+	go func() { defer close(exited); _ = hub.Run(lctx) }()
+	mux.Handle("GET /api/v1/live", hub.Handler(cfg.PublicURL, auth.Check)) // authenticates itself
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		pctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
@@ -53,14 +73,18 @@ func New(ctx context.Context, cfg config.Config) (*Server, error) {
 		}
 		_, _ = w.Write([]byte("ok"))
 	})
-	return &Server{db: d, mux: mux}, nil
+	return &Server{db: d, mux: mux, stopLive: stop, liveExited: exited}, nil
 }
 
 // Handler returns the mux wrapped in the security headers.
 func (s *Server) Handler() http.Handler { return httpx.SecurityHeaders(s.mux) }
 
-// Close releases the DB pool.
-func (s *Server) Close() { s.db.Close() }
+// Close stops the live hub (connections close with 1001) and releases the DB pool.
+func (s *Server) Close() {
+	s.stopLive()
+	<-s.liveExited
+	s.db.Close()
+}
 
 // RunWorker runs the derivation worker until ctx is done.
 func (s *Server) RunWorker(ctx context.Context) error {

@@ -62,8 +62,18 @@ func (a *Auth) newSession(r *http.Request, userID string) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw), err
 }
 
-// lookup resolves the request's session cookie.
+// lookup resolves the request's session cookie and slides its expiry.
 func (a *Auth) lookup(r *http.Request) (Principal, []byte, bool) {
+	return a.resolve(r, "auth_session")
+}
+
+// Check validates the session cookie without side effects (no sliding expiry).
+func (a *Auth) Check(r *http.Request) (Principal, bool) {
+	p, _, ok := a.resolve(r, "auth_session_peek")
+	return p, ok
+}
+
+func (a *Auth) resolve(r *http.Request, fn string) (Principal, []byte, bool) {
 	c, err := r.Cookie(CookieName)
 	if err != nil {
 		return Principal{}, nil, false
@@ -74,7 +84,7 @@ func (a *Auth) lookup(r *http.Request) (Principal, []byte, bool) {
 	}
 	var p Principal
 	err = a.db.WithSystem(r.Context(), func(tx pgx.Tx) error {
-		return tx.QueryRow(r.Context(), `SELECT user_id::text, is_admin FROM auth_session($1)`, hashID(raw)).Scan(&p.UserID, &p.IsAdmin)
+		return tx.QueryRow(r.Context(), `SELECT user_id::text, is_admin FROM `+fn+`($1)`, hashID(raw)).Scan(&p.UserID, &p.IsAdmin)
 	})
 	return p, hashID(raw), err == nil
 }

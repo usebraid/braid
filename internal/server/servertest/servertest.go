@@ -36,7 +36,7 @@ type Env struct {
 }
 
 // Start builds the server; everything is torn down when t finishes.
-func Start(t testing.TB) *Env {
+func Start(t testing.TB, opts ...server.Option) *Env {
 	t.Helper()
 	ownerURL, appURL := testdb.New(t)
 	idp := oidctest.New(t, "braid", "secret")
@@ -53,7 +53,7 @@ func Start(t testing.TB) *Env {
 	}
 	s, err := server.New(context.Background(), config.Config{PublicURL: pub, DatabaseURL: appURL, DatabaseOwnerURL: ownerURL,
 		OIDCIssuer: idp.Issuer, OIDCClientID: "braid", OIDCClientSecret: "secret",
-		OIDCScopes: []string{"openid", "profile", "email", "groups"}, OIDCGroupsClaim: "groups", OIDCAdminGroup: "braid-admins"})
+		OIDCScopes: []string{"openid", "profile", "email", "groups"}, OIDCGroupsClaim: "groups", OIDCAdminGroup: "braid-admins"}, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
