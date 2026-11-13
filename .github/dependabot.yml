@@ -9,3 +9,12 @@ updates:
   - package-ecosystem: docker
     directory: /
     schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /site
+    schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /web
+    schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /band
+    schedule: { interval: weekly }

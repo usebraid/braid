@@ -9,3 +9,5 @@ syft 1.57.1 linux amd64 https://github.com/anchore/syft/releases/download/v1.57.
 syft 1.57.1 darwin arm64 https://github.com/anchore/syft/releases/download/v1.57.1/syft_1.57.1_darwin_arm64.tar.gz e0a74a5d2688d1254b4e17b71f068a83215e3625f846265bf6614c7ba06f3a96
 trivy 0.76.2 linux amd64 https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_Linux-64bit.tar.gz bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
 trivy 0.76.2 darwin arm64 https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_macOS-ARM64.tar.gz ae7ea358326960406b703c77b2ac490190797d80b306b5b50c2a27221da0a5b8
+actionlint 1.7.12 linux amd64 https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+actionlint 1.7.12 darwin arm64 https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_arm64.tar.gz aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f
