@@ -1,0 +1,112 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* Copyright (C) 2026 The Braid Authors */
+
+/* Adapted from ponytail (https://github.com/DietrichGebert/ponytail, hooks/band/board.ts @96608e0: CSS, LIGHT, PALETTE
+   and the KPI colour pairs), Copyright (c) 2026 DietrichGebert, MIT License; see THIRD_PARTY_NOTICES.md.
+   --faint and --muted are darker/lighter than ponytail's so every text token reaches 4.5:1 (theme.test.ts). */
+:root {
+  color-scheme: dark;
+  --bg: #060606;
+  --panel: #0c0c0c;
+  --card: linear-gradient(180deg, #0f0f0f, #090909);
+  --card-solid: #0c0c0c;
+  --line: #1c1c1b;
+  --line2: #262624;
+  --text: #f3f2ee;
+  --muted: #8d8b84;
+  --faint: #85837c;
+  --track: #141413;
+  --segOn: #1f1f1d;
+  --tip: #050505;
+  --tipText: #f3f2ee;
+  --ok: #5fe08a;
+  --okbg: #122016;
+  --bad: #ff6b5b;
+  --badbg: #2a1210;
+  --warn: #f1c96b;
+  --warnbg: #2a2412;
+  --focus: #7c8cff;
+  --nonebg: #161615;
+  --empty: #151514;
+  --tint: 0.2;
+  --glow: 1;
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 20px 50px rgba(0, 0, 0, 0.35);
+  --p1: #5fe08a;
+  --p2: #7c8cff;
+  --p3: #2fd4c0;
+  --p4: #ff8a3d;
+  --p5: #ff6fb5;
+  --p6: #ffd166;
+  --p7: #4cc3ff;
+  --p8: #b26bff;
+  --k-sessions-a: #4cc3ff;
+  --k-sessions-b: #7c8cff;
+  --k-time-a: #2fd4c0;
+  --k-time-b: #5fe08a;
+  --k-cost-a: #ffd166;
+  --k-cost-b: #ff8a3d;
+  --k-tokens-a: #ff6fb5;
+  --k-tokens-b: #b26bff;
+}
+
+/* biome-ignore format: theme.test.ts matches the unquoted selector */
+:root[data-theme=light] {
+  color-scheme: light;
+  --bg: #f5f5f3;
+  --panel: #ffffff;
+  --card: #ffffff;
+  --card-solid: #ffffff;
+  --line: #ebeae6;
+  --line2: #dedcd6;
+  --text: #1d1c1a;
+  --muted: #6f6d67;
+  --faint: #6a6862;
+  --track: #f2f1ed;
+  --segOn: #ffffff;
+  --tip: #1d1c1a;
+  --tipText: #ffffff;
+  --ok: #2f7d3b;
+  --okbg: #e8f5e9;
+  --bad: #b4401b;
+  --badbg: #fcebe4;
+  --warn: #946200;
+  --warnbg: #fbf2d7;
+  --focus: #3b4bd6;
+  --nonebg: #f2f1ed;
+  --empty: #eeede9;
+  --tint: 0.12;
+  --glow: 0.45;
+  --shadow: 0 1px 2px rgba(25, 25, 15, 0.05);
+}
+
+@media (prefers-color-scheme: light) {
+  /* biome-ignore format: keep the selector unquoted like the light block */
+  :root[data-theme=system] {
+    color-scheme: light;
+    --bg: #f5f5f3;
+    --panel: #ffffff;
+    --card: #ffffff;
+    --card-solid: #ffffff;
+    --line: #ebeae6;
+    --line2: #dedcd6;
+    --text: #1d1c1a;
+    --muted: #6f6d67;
+    --faint: #6a6862;
+    --track: #f2f1ed;
+    --segOn: #ffffff;
+    --tip: #1d1c1a;
+    --tipText: #ffffff;
+    --ok: #2f7d3b;
+    --okbg: #e8f5e9;
+    --bad: #b4401b;
+    --badbg: #fcebe4;
+    --warn: #946200;
+    --warnbg: #fbf2d7;
+    --focus: #3b4bd6;
+    --nonebg: #f2f1ed;
+    --empty: #eeede9;
+    --tint: 0.12;
+    --glow: 0.45;
+    --shadow: 0 1px 2px rgba(25, 25, 15, 0.05);
+  }
+}

@@ -1,6 +1,6 @@
 # Third-party notices
 
-Braid is licensed under AGPL-3.0-or-later. Code from ponytail is now included (the price table and cost formula, see `internal/server/derive/prices.go`; formatting helpers, see `web/src/lib/format.ts`); no code from the other projects below is included yet. This file holds their license texts (copied code keeps its original copyright header).
+Braid is licensed under AGPL-3.0-or-later. Code from ponytail is included (the price table and cost formula, the dashboard look and its UI and chart code; see "Included files" below); only ideas, no code, were taken from agents-observe. This file holds the license texts (copied code keeps its original copyright header).
 
 ## agents-observe (https://github.com/simple10/agents-observe)
 
@@ -50,6 +50,16 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+Included files (each adapted from `hooks/band/board.ts` @96608e0):
+
+- `internal/server/derive/prices.go`: the price table and cost formula.
+- `web/src/lib/format.ts`: `time`, `tok`, `money`, `modelName` (formatting helpers).
+- `web/src/theme/tokens.css`: the `CSS` constant's dark variables, `LIGHT`, `PALETTE` and the KPI colour pairs.
+- `web/src/styles/app.css`: the `CSS` constant's rules for `.card .kpi .pill .seg .btn .chip .tip .bar .legend .grid2 table .side .nav-item .brand .top h1 .num`.
+- `web/src/theme/theme.ts`: `THEMES` and `applyTheme`.
+- `web/src/components/ui.tsx`: the KPI, segmented control, chip and theme button markup.
+- `web/src/components/charts/Sparkline.tsx`, `StreamChart.tsx`, `smooth.ts`, `Honeycomb.tsx`, `BarList.tsx`: the sparkline, stream chart, smoothing, heatmap and bar drawing code (added with the dashboard charts).
+
 ## coder/websocket (https://github.com/coder/websocket)
 
 Used unmodified as a Go dependency (WebSocket server for `/api/v1/live`).
@@ -69,3 +79,5 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+The licenses of the third-party packages bundled into the web app are listed in `/third-party-licenses.txt` of the running app.
