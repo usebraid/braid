@@ -2,26 +2,12 @@
 // Copyright (C) 2026 The Braid Authors
 
 import dagre from '@dagrejs/dagre'
+import type { Edge, Node } from '@xyflow/react'
 import type { AgentItem, FailureItem, PhaseItem, SessionDetail } from '../api/types'
 
-// Local stand-ins for the React Flow types (Task 19 swaps them for the library's).
-export type GNode<D> = {
-  id: string
-  type: 'agent'
-  position: { x: number; y: number }
-  data: D
-  width: number
-  height: number
-}
-export type GEdge = {
-  id: string
-  source: string
-  target: string
-  type: 'smoothstep'
-  label?: string
-  data?: { orphan: true }
-  style?: { strokeDasharray: string }
-}
+// width and height are always set here, so they are required (the library types make them optional).
+export type GNode<D extends Record<string, unknown>> = Node<D, 'agent'> & { width: number; height: number }
+export type GEdge = Edge<{ orphan: true }>
 
 export const NODE_WIDTH = 264
 export const phaseHeight = 24

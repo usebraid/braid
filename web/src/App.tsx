@@ -10,6 +10,7 @@ import { ROUTES, type RouteDef } from './routes'
 import { NotFound } from './views/NotFound'
 import { Overview } from './views/Overview'
 import { Placeholder } from './views/Placeholder'
+import { Session } from './views/Session'
 import { Timeline } from './views/Timeline'
 
 function AdminOnly({ children }: { children: React.ReactNode }) {
@@ -38,7 +39,7 @@ export function App() {
                   />
                 ),
               )}
-              <Route path="/sessions/:id" element={<Placeholder title="Session" />} />
+              <Route path="/sessions/:id" element={<Session />} />
               <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>

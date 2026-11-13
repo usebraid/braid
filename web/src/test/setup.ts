@@ -25,3 +25,13 @@ vi.stubGlobal(
     disconnect() {}
   },
 )
+// React Flow reads the zoom from a parsed CSS transform
+vi.stubGlobal(
+  'DOMMatrixReadOnly',
+  class {
+    m22: number
+    constructor(t?: string) {
+      this.m22 = Number(/scale\(([\d.]+)\)/.exec(t ?? '')?.[1] ?? 1)
+    }
+  },
+)

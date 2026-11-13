@@ -804,3 +804,101 @@ main:focus {
   justify-content: center;
   padding: 14px;
 }
+
+/* Session canvas (Task 19) */
+.sess-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 6px;
+}
+.sess-body {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.agent-list {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agent-list h2 {
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+.agent-list button {
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.agent-list button[aria-current="true"] {
+  border-color: var(--focus);
+}
+.canvas {
+  height: 70vh;
+  min-height: 420px;
+  overflow: hidden;
+}
+.agent-node {
+  width: 264px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.agent-node[aria-current="true"] {
+  outline: 2px solid var(--focus);
+}
+.agent-node.live {
+  box-shadow: 0 0 14px var(--ok);
+}
+.agent-node header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+}
+.agent-node .desc {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-node .counts {
+  display: flex;
+  gap: 10px;
+  color: var(--muted);
+  margin: 4px 0;
+}
+.agent-node .phase {
+  height: 24px;
+  line-height: 24px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  color: #0b0b0b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 6px;
+}
+@media (max-width: 1100px) {
+  .sess-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .canvas {
+    overflow: auto;
+  }
+}
