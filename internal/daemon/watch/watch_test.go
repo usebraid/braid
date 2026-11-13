@@ -48,3 +48,23 @@ func TestTriggersRescan(t *testing.T) {
 		}
 	}
 }
+
+func TestSymlinkedRootIsWatched(t *testing.T) {
+	dir, link := t.TempDir(), filepath.Join(t.TempDir(), "projects")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Skip("no symlinks:", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, err := watch.Triggers(ctx, link, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-ch // start
+	_ = os.WriteFile(filepath.Join(dir, "a.jsonl"), []byte("x\n"), 0o600)
+	select {
+	case <-ch:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no trigger below a symlinked root")
+	}
+}

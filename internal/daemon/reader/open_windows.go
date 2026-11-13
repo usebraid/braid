@@ -8,10 +8,16 @@ package reader
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
 func open(path string) (*os.File, error) {
+	// CreateFile does not add the \\?\ prefix that os.Open adds, so paths over 260 characters would fail.
+	// shortcut: UNC paths (\\server\share) are passed as is; add \\?\UNC\ if they are ever spooled.
+	if abs, err := filepath.Abs(path); err == nil && len(abs) >= 248 && len(abs) > 2 && abs[1] == ':' {
+		path = `\\?\` + abs
+	}
 	p, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
 		return nil, err

@@ -37,6 +37,9 @@ func Triggers(ctx context.Context, root string, rescan time.Duration) (<-chan st
 			return nil
 		})
 	}
+	if r, err := filepath.EvalSymlinks(root); err == nil {
+		root = r // WalkDir does not follow a symlinked root (dotfile setups)
+	}
 	addTree(root)
 	fire()
 	go func() {

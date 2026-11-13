@@ -112,6 +112,8 @@ RestartSec=10
 WantedBy=default.target
 `, systemdEnv(env), s.Exe), nil
 	case "windows":
+		// shortcut: braid.exe is a console program, so a console window opens at logon and closing it stops the daemon;
+		// start it hidden (conhost --headless or a windowsgui build) once Windows is tested for real.
 		if s.User == "" {
 			return "", nil, errors.New("service: windows account name missing")
 		}
