@@ -51,7 +51,7 @@ export default {
     const unavailable = () => text(502, 'install script unavailable')
     let res
     try {
-      res = await fetch(url.href, { redirect: 'error', headers: { accept: 'text/plain' } })
+      res = await fetch(url.href, { redirect: 'manual', headers: { accept: 'text/plain' } })
     } catch {
       return unavailable()
     }

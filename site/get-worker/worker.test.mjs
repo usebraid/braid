@@ -39,7 +39,8 @@ describe('get worker', () => {
     assert.equal(r.headers.get('content-disposition'), null)
     assert.equal(calls.length, 1)
     assert.equal(calls[0].url, UPSTREAM)
-    assert.equal(calls[0].init.redirect, 'error')
+    // Workers reject redirect: 'error'; 'manual' hands back the 3xx, which is not 200 and so gives a 502.
+    assert.equal(calls[0].init.redirect, 'manual')
   })
 
   test('the query is ignored', async () => {
@@ -75,10 +76,8 @@ describe('get worker', () => {
       },
     ],
     [
-      '301 (redirect: error throws)',
-      () => {
-        throw new TypeError('redirect mode is set to error')
-      },
+      '301 (manual redirect)',
+      () => new Response('', { status: 301, headers: { location: 'https://evil.example/x.sh' } }),
     ],
   ]) {
     test(`upstream ${name} gives a generic 502`, async () => {
