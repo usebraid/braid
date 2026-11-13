@@ -12,12 +12,10 @@ import { Honeycomb } from '../components/charts/Honeycomb'
 import { StreamChart } from '../components/charts/StreamChart'
 import { FilterBar } from '../components/FilterBar'
 import { Card, Empty, ErrorNote, KpiCard, Segmented } from '../components/ui'
-import { fmtCost, fmtDuration, fmtLost, fmtTokens, modelName } from '../lib/format'
+import { dayLabel, fmtCost, fmtDuration, fmtLost, fmtTokens, modelName } from '../lib/format'
 
 type Metric = 'cost' | 'tokens' | 'sessions'
 const PALETTE = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)', 'var(--p5)', 'var(--p6)', 'var(--p7)', 'var(--p8)']
-const dayLabel = (day: string) =>
-  new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 
 export function Overview() {
   const me = useMe()

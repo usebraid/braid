@@ -2,7 +2,16 @@
 // Copyright (C) 2026 The Braid Authors
 
 import { get, type Query } from './client'
-import type { Device, FilterOptions, LinePage, LivePage, Overview, SessionDetail, SessionPage } from './types'
+import type {
+  Device,
+  FailurePage,
+  FilterOptions,
+  LinePage,
+  LivePage,
+  Overview,
+  SessionDetail,
+  SessionPage,
+} from './types'
 
 export const listDevices = (signal?: AbortSignal) => get<Device[]>('/api/v1/devices', undefined, signal)
 export const statsFilters = (q: Query, signal?: AbortSignal) => get<FilterOptions>('/api/v1/stats/filters', q, signal)
@@ -15,3 +24,4 @@ export const statsSession = (id: string, signal?: AbortSignal) =>
 export const statsSessionLines = (id: string, q: Query, signal?: AbortSignal) =>
   get<LinePage>(`/api/v1/stats/sessions/${enc(id)}/lines`, q, signal)
 export const statsLive = (signal?: AbortSignal) => get<LivePage>('/api/v1/stats/live', undefined, signal)
+export const statsFailures = (q: Query, signal?: AbortSignal) => get<FailurePage>('/api/v1/stats/failures', q, signal)

@@ -54,3 +54,6 @@ export function fmtDateTime(iso: string, timeZone: string): string {
     hourCycle: 'h23',
   }).format(new Date(iso))
 }
+
+export const dayLabel = (day: string) =>
+  new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
