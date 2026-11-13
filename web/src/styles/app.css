@@ -1505,3 +1505,109 @@ td.empty {
     scroll-behavior: auto !important;
   }
 }
+
+/* Session graph and chat: one row = time | graph | chat entry */
+.graph .grows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.grow {
+  display: grid;
+  grid-template-columns: 44px 90px minmax(0, 1fr);
+  align-items: stretch;
+  min-height: 30px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 40px;
+  font-size: var(--t-xs);
+  border-radius: 6px;
+}
+.grow[aria-current="true"] {
+  outline: 2px solid var(--focus);
+}
+.grow time {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  padding-top: 6px;
+}
+.gcell {
+  display: block;
+  height: 100%;
+  min-height: 30px;
+}
+.gcell line,
+.gcell path {
+  stroke-width: 2;
+}
+.gdot {
+  stroke-width: 1.5;
+}
+.gdot.pulse {
+  animation: gpulse 1.6s ease-in-out infinite;
+}
+@keyframes gpulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.gbody {
+  padding: 4px 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gbody .entry-text {
+  margin: 0;
+}
+.g-prompt {
+  background: var(--segOn);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.g-tool,
+.g-note,
+.g-fold summary {
+  color: var(--muted);
+}
+.g-tool {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.graph .g-tool b {
+  color: var(--text);
+  font-weight: 500;
+}
+.g-fold summary {
+  cursor: pointer;
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.g-peek {
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gtag {
+  color: var(--p4);
+  margin-right: 6px;
+}
+.g-branch,
+.g-merge {
+  color: var(--muted);
+}
+.g-branch .btn {
+  padding: 0 6px;
+  margin-right: 6px;
+}
+@media (max-width: 640px) {
+  .grow {
+    grid-template-columns: 40px 36px minmax(0, 1fr);
+  }
+  .gcell {
+    width: 36px;
+    overflow: hidden;
+  }
+}
