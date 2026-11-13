@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 The Braid Authors
+# Override for an external Postgres: docker compose -f docker-compose.yml -f docker-compose.external-db.yml up -d
+services:
+  postgres:
+    profiles: ["bundled"]
+  braid:
+    depends_on: !reset {}
+    environment:
+      BRAID_DATABASE_URL: ${BRAID_DATABASE_URL:?}
+      BRAID_DATABASE_OWNER_URL: ${BRAID_DATABASE_OWNER_URL:?}
