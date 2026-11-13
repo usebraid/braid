@@ -48,6 +48,7 @@ signs:
 brews:
   - ids: [braid]
     name: braid
+    skip_upload: auto               # prereleases do not touch the tap
     repository: { owner: usebraid, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
     homepage: https://usebraid.dev
     description: Sync Claude Code sessions from all your devices into one Braid server
