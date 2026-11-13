@@ -114,6 +114,11 @@ func (e *Engine) Pass(ctx context.Context) (res Result, err error) {
 		if errors.As(err, &perm) {
 			// The server rejects the whole request; find the file(s) that cause it, block those, keep the rest.
 			resp, metas, err = e.isolate(ctx, req, metas)
+			if err != nil { // retryable: keep the files that were already acked one by one
+				n, _ := e.apply(ctx, resp, metas)
+				res.Uploaded += n
+				return res, err
+			}
 		}
 		if err != nil {
 			return res, err
@@ -144,7 +149,7 @@ func (e *Engine) isolate(ctx context.Context, req protocol.IngestRequest, metas 
 			continue
 		}
 		if err != nil {
-			return out, nil, err
+			return out, okMetas, err
 		}
 		out.Files = append(out.Files, resp.Files...)
 		okMetas = append(okMetas, m)

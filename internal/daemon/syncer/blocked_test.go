@@ -5,6 +5,7 @@ package syncer_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,5 +69,42 @@ func TestUnreadableFileDoesNotBlockOtherFiles(t *testing.T) {
 	}
 	if len(fs.lines("a/1.jsonl")) == 0 || len(fs.lines("c/2.jsonl")) == 0 {
 		t.Fatal("healthy files stalled")
+	}
+}
+
+// flakyIsolate rejects multi-file requests permanently and answers 429 to the third single-file request.
+type flakyIsolate struct {
+	*fakeServer
+	singles int
+}
+
+func (p *flakyIsolate) Ingest(ctx context.Context, req protocol.IngestRequest) (protocol.IngestResponse, error) {
+	if len(req.Files) > 1 {
+		return protocol.IngestResponse{}, &client.PermanentError{Status: 413, Body: "too_large"}
+	}
+	if p.singles++; p.singles == 3 {
+		return protocol.IngestResponse{}, &client.RetryableError{Status: 429}
+	}
+	return p.fakeServer.Ingest(ctx, req)
+}
+
+func TestIsolateKeepsAcksWhenALaterRequestIsRetryable(t *testing.T) {
+	fs := newFakeServer()
+	e, root := newEngine(t, fs)
+	for _, r := range []string{"a/1.jsonl", "b/2.jsonl", "c/3.jsonl"} {
+		appendTo(t, root, r, "head-"+r+"\n")
+	}
+	e.Up = &flakyIsolate{fakeServer: fs}
+	var rerr *client.RetryableError
+	if _, err := e.Pass(context.Background()); !errors.As(err, &rerr) {
+		t.Fatalf("want the retryable error, got %v", err)
+	}
+	rows, _ := e.State.List(context.Background())
+	acked := map[string]int64{}
+	for _, r := range rows {
+		acked[r.RelPath] = r.AckedOffset
+	}
+	if acked["a/1.jsonl"] == 0 || acked["b/2.jsonl"] == 0 || acked["c/3.jsonl"] != 0 {
+		t.Fatalf("acks %v", acked)
 	}
 }
