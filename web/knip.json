@@ -5,6 +5,6 @@
   "ignoreIssues": {
     "src/api/live.tsx": ["exports"]
   },
-  "ignoreDependencies": ["@fontsource-variable/recursive"],
+  "ignoreDependencies": ["@fontsource-variable/jetbrains-mono"],
   "ignoreBinaries": ["go"]
 }

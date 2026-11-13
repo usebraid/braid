@@ -63,11 +63,11 @@ Included files (each adapted from `hooks/band/board.ts` @96608e0):
 - `band/hooks/band/*.ts(x)`: adapted from `hooks/band/register.tsx` and `hooks/band/types.d.ts` @96608e0 (module structure, palette names, slot stacking).
 - `band/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`: structural templates from ponytail's `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
 
-## Recursive (https://github.com/arrowtype/recursive), via @fontsource-variable/recursive 5.3.0
+## JetBrains Mono (https://github.com/JetBrains/JetBrainsMono), via @fontsource-variable/jetbrains-mono 5.3.0
 
-Bundled unmodified as the dashboard's only typeface: the self-hosted Latin subset with the weight and MONO axes (`recursive-latin-mono-normal.woff2`), loaded by `web/src/styles/fonts.css`.
+Bundled unmodified as the dashboard's face for numbers and the brand: the self-hosted Latin subset with the weight axis (`jetbrains-mono-latin-wght-normal.woff2`), loaded by `web/src/styles/fonts.css`. Text uses the system UI font.
 
-Copyright 2019 The Recursive Project Authors (github.com/arrowtype/recursive)
+Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
