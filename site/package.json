@@ -12,7 +12,8 @@
     "test": "node --test test/",
     "lint": "biome check .",
     "knip": "knip",
-    "check": "npm run lint && npm run knip && npm run build && npm test"
+    "linkcheck": "node linkcheck.mjs dist",
+    "check": "npm run lint && npm run knip && npm run build && npm run linkcheck && npm test"
   },
   "dependencies": {
     "marked": "18.2.0"
