@@ -28,6 +28,7 @@ type env struct {
 	srv   *httptest.Server
 	idp   *oidctest.Provider
 	owner string
+	d     *db.DB
 }
 
 func start(t *testing.T, mutate func(*config.Config)) env {
@@ -61,7 +62,7 @@ func start(t *testing.T, mutate func(*config.Config)) env {
 	})))
 	mux.Handle("GET /api/v1/adminonly", a.Require(a.RequireAdmin(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }))))
 	srv.Config.Handler = httpx.SecurityHeaders(mux)
-	return env{srv: srv, idp: idp, owner: ownerURL}
+	return env{srv: srv, idp: idp, owner: ownerURL, d: d}
 }
 
 func (e env) client(t *testing.T) *http.Client {
@@ -253,5 +254,36 @@ func TestSessionCookieRefreshedAndLoginAudited(t *testing.T) {
 	if err := conn.QueryRow(ctx, `SELECT count(*) FROM audit_log a JOIN users u ON u.id = a.subject_user_id
 		WHERE a.action = 'login' AND u.oidc_sub = 'aud'`).Scan(&n); err != nil || n != 1 {
 		t.Fatalf("login audit rows = %d, err %v", n, err)
+	}
+}
+
+func TestDatabaseErrorIsNotAnExpiredSession(t *testing.T) {
+	e := start(t, nil)
+	c := e.client(t)
+	login(t, e, c, oidctest.User{Sub: "u"}).Body.Close()
+	e.d.Close() // every query now fails, which says nothing about the session
+	resp, err := c.Get(e.srv.URL + "/api/v1/whoami")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 503 {
+		t.Fatalf("require on db error: %d", resp.StatusCode)
+	}
+	req, _ := http.NewRequest("POST", e.srv.URL+"/auth/logout", nil)
+	req.Header.Set("Origin", e.srv.URL)
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err = c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 503 {
+		t.Fatalf("logout on db error: %d", resp.StatusCode)
+	}
+	for _, ck := range resp.Cookies() {
+		if ck.Name == webauth.CookieName {
+			t.Fatalf("cookie touched on db error: %+v", ck)
+		}
 	}
 }

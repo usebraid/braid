@@ -27,10 +27,14 @@ const (
 )
 
 // Handler serves the WebSocket. It authenticates itself (session cookie, exact same-origin Origin).
-func (h *Hub) Handler(public *url.URL, check func(*http.Request) (webauth.Principal, bool)) http.Handler {
+func (h *Hub) Handler(public *url.URL, check func(*http.Request) (webauth.Principal, bool, error)) http.Handler {
 	origin := public.Scheme + "://" + public.Host
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p, ok := check(r)
+		p, ok, err := check(r)
+		if err != nil {
+			httpx.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "unavailable"})
+			return
+		}
 		if !ok {
 			httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
 			return
@@ -72,7 +76,7 @@ func (h *Hub) Handler(public *url.URL, check func(*http.Request) (webauth.Princi
 	})
 }
 
-func (h *Hub) serve(r *http.Request, c *websocket.Conn, p webauth.Principal, ob *outbox, check func(*http.Request) (webauth.Principal, bool)) {
+func (h *Hub) serve(r *http.Request, c *websocket.Conn, p webauth.Principal, ob *outbox, check func(*http.Request) (webauth.Principal, bool, error)) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	write := func(m Message) error {
@@ -122,7 +126,11 @@ func (h *Hub) serve(r *http.Request, c *websocket.Conn, p webauth.Principal, ob 
 				return
 			}
 		case <-recheck.C:
-			if np, ok := check(r.Clone(ctx)); !ok || np.UserID != p.UserID {
+			np, ok, err := check(r.Clone(ctx))
+			if err != nil { // a database hiccup is not an expired session: keep the socket, look again next time
+				continue
+			}
+			if !ok || np.UserID != p.UserID {
 				_ = c.Close(closeSessionEnded, "session ended")
 				return
 			}

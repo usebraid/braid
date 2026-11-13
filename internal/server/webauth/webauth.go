@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -227,7 +228,13 @@ func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {
 	if a.endSession != "" {
 		dest = a.endSession + "?" + url.Values{"post_logout_redirect_uri": {a.cfg.PublicURL.String() + "/"}, "client_id": {a.cfg.OIDCClientID}}.Encode()
 	}
-	if p, id, ok := a.lookup(r); ok {
+	p, id, ok, lerr := a.lookup(r)
+	if lerr != nil { // cannot tell whether the session exists: keep the cookie so the user can retry
+		slog.Error("logout lookup", "err", lerr)
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if ok {
 		err := a.db.WithUser(r.Context(), p.UserID, func(tx pgx.Tx) error {
 			if _, err := tx.Exec(r.Context(), `DELETE FROM web_sessions WHERE id_hash = $1`, id); err != nil {
 				return err

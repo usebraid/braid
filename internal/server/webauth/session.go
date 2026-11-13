@@ -8,6 +8,8 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -62,37 +64,48 @@ func (a *Auth) newSession(r *http.Request, userID string) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw), err
 }
 
-// lookup resolves the request's session cookie and slides its expiry.
-func (a *Auth) lookup(r *http.Request) (Principal, []byte, bool) {
+// lookup resolves the request's session cookie and slides its expiry. ok is false without a valid
+// session; err is set only when the lookup itself failed (database error), which is not "no session".
+func (a *Auth) lookup(r *http.Request) (p Principal, id []byte, ok bool, err error) {
 	return a.resolve(r, "auth_session")
 }
 
-// Check validates the session cookie without side effects (no sliding expiry).
-func (a *Auth) Check(r *http.Request) (Principal, bool) {
-	p, _, ok := a.resolve(r, "auth_session_peek")
-	return p, ok
+// Check validates the session cookie without side effects (no sliding expiry); see lookup for ok and err.
+func (a *Auth) Check(r *http.Request) (Principal, bool, error) {
+	p, _, ok, err := a.resolve(r, "auth_session_peek")
+	return p, ok, err
 }
 
-func (a *Auth) resolve(r *http.Request, fn string) (Principal, []byte, bool) {
+func (a *Auth) resolve(r *http.Request, fn string) (p Principal, id []byte, ok bool, err error) {
 	c, err := r.Cookie(CookieName)
 	if err != nil {
-		return Principal{}, nil, false
+		return Principal{}, nil, false, nil
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(c.Value)
 	if err != nil || len(raw) != 32 {
-		return Principal{}, nil, false
+		return Principal{}, nil, false, nil
 	}
-	var p Principal
 	err = a.db.WithSystem(r.Context(), func(tx pgx.Tx) error {
 		return tx.QueryRow(r.Context(), `SELECT user_id::text, is_admin FROM `+fn+`($1)`, hashID(raw)).Scan(&p.UserID, &p.IsAdmin)
 	})
-	return p, hashID(raw), err == nil
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return Principal{}, hashID(raw), false, nil
+	case err != nil:
+		return Principal{}, hashID(raw), false, err
+	}
+	return p, hashID(raw), true, nil
 }
 
 // Require authenticates the request or answers 401 (API) / redirects to login.
 func (a *Auth) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p, _, ok := a.lookup(r)
+		p, _, ok, err := a.lookup(r)
+		if err != nil { // a database error says nothing about the session: do not log the user out
+			slog.Error("session lookup", "err", err)
+			httpx.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "unavailable"})
+			return
+		}
 		if !ok {
 			if len(r.URL.Path) >= 5 && r.URL.Path[:5] == "/api/" {
 				httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
