@@ -7,6 +7,7 @@ import { useApi } from '../api/hooks'
 import { listDevices, statsSession } from '../api/stats'
 import type { AgentItem } from '../api/types'
 import { SessionCanvas } from '../components/canvas/SessionCanvas'
+import { TranscriptPanel } from '../components/TranscriptPanel'
 import { Card, Empty, ErrorNote, Pill } from '../components/ui'
 import { fmtCost, fmtDuration, modelName } from '../lib/format'
 import { buildGraph } from '../lib/graph'
@@ -20,6 +21,8 @@ export function Session() {
     on: (e) => e.type === 'session_updated' && e.session_id === id,
   })
   const devs = useApi('devices', listDevices)
+  const line = Number(sp.get('line'))
+  const focusLine = Number.isInteger(line) && line > 0 ? line : undefined
   const back = new URLSearchParams(sp)
   back.delete('agent')
   back.delete('line')
@@ -83,7 +86,7 @@ export function Session() {
           </div>
         </div>
       </div>
-      <div className="sess-body">
+      <div className={selected ? 'sess-body with-panel' : 'sess-body'}>
         <Card className="agent-list">
           <h2>Agents</h2>
           {list.map(({ id: aid, depth, agent }) => (
@@ -99,6 +102,9 @@ export function Session() {
           ))}
         </Card>
         <SessionCanvas detail={data} liveAgentIds={live} />
+        {selected ? (
+          <TranscriptPanel key={selected} sessionId={id} agentId={selected} focusLine={focusLine} liveTick={data} />
+        ) : null}
       </div>
     </>
   )
