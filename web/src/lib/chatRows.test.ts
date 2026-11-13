@@ -51,10 +51,26 @@ describe('buildRows', () => {
     const r = buildRows(lines, [sub('x')], lanes, new Set())
     expect(r.map((x) => x.kind)).toEqual(['branch', 'entry', 'entry', 'merge'])
     expect(r[1]).toMatchObject({ lane: 1 })
+    expect(r[0]).toMatchObject({ open: false })
+  })
+  it('emits a merge row when the result is loaded even without merged_at', () => {
+    const r = buildRows(lines, [sub(null)], lanes, new Set())
+    expect(r.map((x) => x.kind)).toEqual(['branch', 'entry', 'entry', 'merge'])
+    expect(r[0]).toMatchObject({ open: false })
+  })
+  it('pluralises one step', () => {
+    const r = buildRows(
+      [lines[0], say(2, 'a'), lines[3]].filter(Boolean) as ChatLine[],
+      [sub('x')],
+      lanes,
+      new Set(['a']),
+    )
+    expect(r[1]).toMatchObject({ summary: '1 step' })
   })
   it('leaves an unfinished agent without a merge row', () => {
     const r = buildRows(lines.slice(0, 3), [sub(null)], lanes, new Set())
     expect(r.map((x) => x.kind)).toEqual(['branch', 'entry', 'entry'])
+    expect(r[0]).toMatchObject({ open: true })
   })
   it('collapses to branch and merge with a step count', () => {
     const r = buildRows(lines, [sub('x')], lanes, new Set(['a']))
