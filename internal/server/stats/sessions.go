@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -95,6 +96,7 @@ type FailureItem struct {
 	LimitType  *string    `json:"limit_type"`
 	ResetsAt   *time.Time `json:"resets_at"`
 	TimeLostS  *int64     `json:"time_lost_s"`
+	LineID     int64      `json:"line_id"` // raw_lines.id of the failing line (highest id at its offset)
 }
 
 // SessionDetail is the response of GET /api/v1/stats/sessions/{id}.
@@ -116,7 +118,11 @@ type LineItem struct {
 type LinePage struct {
 	Lines []LineItem `json:"lines"`
 	Next  *string    `json:"next"`
+	Prev  *string    `json:"prev"` // id of the first line when an earlier line of the agent exists
 }
+
+// lineIDExpr is the raw_lines.id of failure f; with several rows at one offset (conflict) the highest.
+const lineIDExpr = `coalesce((SELECT max(r.id) FROM raw_lines r WHERE r.source_file_id = f.source_file_id AND r."offset" = f."offset"), 0)`
 
 // sessionSelect lists the SessionItem columns; whole-session figures, not clipped to the range.
 const sessionSelect = `SELECT s.session_id, coalesce(s.title, ''), coalesce(s.project_path, ''), coalesce(p.name, ''), s.primary_device_id::text,
@@ -249,10 +255,11 @@ func (h *Handler) sessionDetail(w http.ResponseWriter, r *http.Request) {
 		}
 		return collect(ctx, tx, `SELECT f.category, f.detail, f.occurred_at, f.session_id, f.agent_id, f.limit_type, f.resets_at,
 		    CASE WHEN f.category = 'usage_limit' AND f.resets_at IS NOT NULL
-		         THEN greatest(0, extract(epoch FROM (`+lostEnd+` - f.occurred_at)))::bigint END
+		         THEN greatest(0, extract(epoch FROM (`+lostEnd+` - f.occurred_at)))::bigint END,
+		    `+lineIDExpr+`
 		  FROM failures f WHERE f.session_id = $1 ORDER BY f.occurred_at, f.source_file_id, f."offset"`, []any{id}, func(rows pgx.Rows) error {
 			var fi FailureItem
-			err := rows.Scan(&fi.Category, &fi.Detail, &fi.OccurredAt, &fi.SessionID, &fi.AgentID, &fi.LimitType, &fi.ResetsAt, &fi.TimeLostS)
+			err := rows.Scan(&fi.Category, &fi.Detail, &fi.OccurredAt, &fi.SessionID, &fi.AgentID, &fi.LimitType, &fi.ResetsAt, &fi.TimeLostS, &fi.LineID)
 			det.Failures = append(det.Failures, fi)
 			return err
 		})
@@ -280,13 +287,19 @@ func (h *Handler) sessionLines(w http.ResponseWriter, r *http.Request) {
 			err = errInvalid
 		}
 	}
+	var before int64
+	if s := q.Get("before"); err == nil && s != "" {
+		if before, err = strconv.ParseInt(s, 10, 64); err != nil || before < 1 || q.Get("after") != "" {
+			err = errInvalid
+		}
+	}
 	if err != nil {
 		fail(w, r, errInvalid)
 		return
 	}
 	page := LinePage{Lines: []LineItem{}}
 	err = h.db.WithUser(r.Context(), p.UserID, func(tx pgx.Tx) error {
-		return h.readLines(r.Context(), tx, r.PathValue("id"), agent, after, limit, &page)
+		return h.readLines(r.Context(), tx, r.PathValue("id"), agent, after, before, limit, &page)
 	})
 	if err != nil {
 		fail(w, r, err)
@@ -295,7 +308,8 @@ func (h *Handler) sessionLines(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, page)
 }
 
-func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent string, after int64, limit int, page *LinePage) error {
+// readLines pages the lines of one agent: ascending after `after`, or with before > 0 the newest lines below `before`, ascending.
+func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent string, after, before int64, limit int, page *LinePage) error {
 	var ok bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM derive_cursor WHERE session_id = $1 AND agent_id = $2 AND kind IN ('main', 'subagent'))`,
 		session, agent).Scan(&ok); err != nil {
@@ -304,10 +318,15 @@ func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent strin
 	if !ok {
 		return errNotFound
 	}
-	rows, err := tx.Query(ctx, `SELECT r.id, r."offset", r.line FROM raw_lines r
-	  WHERE r.id > $3 AND r.source_file_id IN (SELECT c.source_file_id FROM derive_cursor c
-	    WHERE c.session_id = $1 AND c.agent_id = $2 AND c.kind IN ('main', 'subagent'))
-	  ORDER BY r.id`, session, agent, after)
+	const files = `r.source_file_id IN (SELECT c.source_file_id FROM derive_cursor c
+	    WHERE c.session_id = $1 AND c.agent_id = $2 AND c.kind IN ('main', 'subagent'))`
+	order := "r.id"
+	cond := "r.id > $3"
+	arg := after
+	if before > 0 {
+		order, cond, arg = "r.id DESC", "r.id < $3", before
+	}
+	rows, err := tx.Query(ctx, `SELECT r.id, r."offset", r.line FROM raw_lines r WHERE `+cond+` AND `+files+` ORDER BY `+order, session, agent, arg)
 	if err != nil {
 		return err
 	}
@@ -315,9 +334,11 @@ func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent strin
 	size := 0
 	for rows.Next() {
 		if len(page.Lines) == limit || (size >= maxLinePageBytes && len(page.Lines) > 0) { // one more row exists
-			next := strconv.FormatInt(page.Lines[len(page.Lines)-1].ID, 10)
-			page.Next = &next
-			return nil
+			if before == 0 {
+				next := strconv.FormatInt(page.Lines[len(page.Lines)-1].ID, 10)
+				page.Next = &next
+			}
+			break
 		}
 		var it LineItem
 		var raw []byte
@@ -332,5 +353,23 @@ func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent strin
 		size += len(raw)
 		page.Lines = append(page.Lines, it)
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	if before > 0 {
+		slices.Reverse(page.Lines)
+	}
+	if len(page.Lines) == 0 {
+		return nil
+	}
+	var earlier bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM raw_lines r WHERE r.id < $3 AND `+files+`)`, session, agent, page.Lines[0].ID).Scan(&earlier); err != nil {
+		return err
+	}
+	if earlier {
+		prev := strconv.FormatInt(page.Lines[0].ID, 10)
+		page.Prev = &prev
+	}
+	return nil
 }

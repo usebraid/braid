@@ -213,6 +213,7 @@ paths:
         - $ref: "#/components/parameters/SessionId"
         - { name: agent, in: query, description: Agent id., schema: { type: string, default: main } }
         - { name: after, in: query, description: Return lines with id above this line id., schema: { type: integer, format: int64, minimum: 0 } }
+        - { name: before, in: query, description: Return the newest lines with id below this line id, ascending. Not combinable with after., schema: { type: integer, format: int64, minimum: 1 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LinePage" } } } }
@@ -590,7 +591,7 @@ components:
         ended_at: { type: [string, "null"], format: date-time }
     FailureItem:
       type: object
-      required: [category, detail, occurred_at, session_id, agent_id, limit_type, resets_at, time_lost_s]
+      required: [category, detail, occurred_at, session_id, agent_id, limit_type, resets_at, time_lost_s, line_id]
       properties:
         category: { type: string }
         detail: { type: string }
@@ -600,6 +601,7 @@ components:
         limit_type: { type: [string, "null"] }
         resets_at: { type: [string, "null"], format: date-time }
         time_lost_s: { type: [integer, "null"], format: int64 }
+        line_id: { type: integer, format: int64, description: "raw_lines id of the failing line (0 if unavailable)." }
     SessionDetail:
       type: object
       required: [session, agents, skill_phases, failures]
@@ -617,10 +619,11 @@ components:
         line: { type: object, description: The raw transcript line. }
     LinePage:
       type: object
-      required: [lines, next]
+      required: [lines, next, prev]
       properties:
         lines: { type: array, items: { $ref: "#/components/schemas/LineItem" } }
         next: { type: [string, "null"] }
+        prev: { type: [string, "null"], description: Id of the first returned line when an earlier line of the agent exists. }
     FailureAgg:
       type: object
       required: [key, count, time_lost_s]
@@ -640,7 +643,7 @@ components:
         time_lost_s: { type: integer, format: int64 }
     SearchHit:
       type: object
-      required: [session_id, agent_id, role, at, title, snippet, rank]
+      required: [session_id, agent_id, role, at, title, snippet, rank, line_id]
       properties:
         session_id: { type: string }
         agent_id: { type: string }
@@ -649,6 +652,7 @@ components:
         title: { type: string }
         snippet: { type: string }
         rank: { type: number }
+        line_id: { type: integer, format: int64, description: "raw_lines id of the hit line (0 if unavailable)." }
     SearchResult:
       type: object
       required: [hits]

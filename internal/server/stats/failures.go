@@ -106,7 +106,8 @@ func (h *Handler) failures(w http.ResponseWriter, r *http.Request) {
 		// shortcut: all matching failures are loaded and aggregated in Go, fine for personal volumes; push into SQL if lists grow past ~100k.
 		rows, err := tx.Query(r.Context(), `SELECT f.category, f.detail, f.occurred_at, f.session_id, f.agent_id, f.limit_type, f.resets_at,
 		    CASE WHEN f.category = 'usage_limit' AND f.resets_at IS NOT NULL THEN `+lostEnd+` END,
-		    f.source_file_id, f."offset", to_char(date(timezone($7, f.occurred_at)), 'YYYY-MM-DD')
+		    f.source_file_id, f."offset", to_char(date(timezone($7, f.occurred_at)), 'YYYY-MM-DD'),
+		    `+lineIDExpr+`
 		  FROM failures f WHERE f.occurred_at >= $1 AND f.occurred_at < $2
 		    AND f.session_id IN (SELECT s.session_id FROM sessions s WHERE `+setPred+`)
 		  ORDER BY f.occurred_at DESC, f.source_file_id DESC, f."offset" DESC`, append(f.args(), tz)...)
@@ -118,7 +119,7 @@ func (h *Handler) failures(w http.ResponseWriter, r *http.Request) {
 		for rows.Next() {
 			var fr failRow
 			var end *time.Time
-			if err := rows.Scan(&fr.Category, &fr.Detail, &fr.OccurredAt, &fr.SessionID, &fr.AgentID, &fr.LimitType, &fr.ResetsAt, &end, &fr.file, &fr.off, &fr.day); err != nil {
+			if err := rows.Scan(&fr.Category, &fr.Detail, &fr.OccurredAt, &fr.SessionID, &fr.AgentID, &fr.LimitType, &fr.ResetsAt, &end, &fr.file, &fr.off, &fr.day, &fr.LineID); err != nil {
 				return err
 			}
 			if end != nil {

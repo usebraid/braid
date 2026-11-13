@@ -26,6 +26,7 @@ type SearchHit struct {
 	Title     string     `json:"title"`
 	Snippet   string     `json:"snippet"`
 	Rank      float64    `json:"rank"`
+	LineID    int64      `json:"line_id"` // raw_lines.id of the hit line (highest id at its offset)
 }
 
 // SearchResult is the response of GET /api/v1/stats/search.
@@ -77,7 +78,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		}
 		for i, rf := range refs {
 			var raw []byte
-			err := tx.QueryRow(r.Context(), `SELECT line FROM raw_lines WHERE source_file_id = $1 AND "offset" = $2 ORDER BY id DESC LIMIT 1`, rf.file, rf.off).Scan(&raw)
+			err := tx.QueryRow(r.Context(), `SELECT id, line FROM raw_lines WHERE source_file_id = $1 AND "offset" = $2 ORDER BY id DESC LIMIT 1`, rf.file, rf.off).Scan(&res.Hits[i].LineID, &raw)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
