@@ -20,10 +20,8 @@ const mergeLines = (a: ChatLine[], b: ChatLine[]) => {
   const seen = new Set(a.map((l) => l.id))
   return [...a, ...b.filter((l) => !seen.has(l.id))].sort(order)
 }
-const hhmm = (iso: string | null, tz: string) =>
-  iso
-    ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz }).format(new Date(iso))
-    : ''
+const WINDOW = 2000 // a live tick rechecks at most this many of the newest loaded lines
+const PAGE = 500
 
 export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
   const { agents, session } = p.detail
@@ -34,6 +32,10 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
   const [next, setNext] = useState<string | null>(null)
   const [error, setError] = useState<unknown>()
   const [loading, setLoading] = useState(true)
+  const hhmm = useMemo(() => {
+    const f = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz })
+    return (iso: string | null) => (iso ? f.format(new Date(iso)) : '')
+  }, [tz])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const root = useRef<HTMLOListElement>(null)
   const more = useRef<HTMLButtonElement>(null)
@@ -42,9 +44,11 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
   const focused = useRef<number>(undefined)
   const stick = useRef(false)
   const first = useRef(true)
+  const epoch = useRef(0) // bumps when the session or deep link changes, so stale page loads are dropped
 
   useEffect(() => {
     const ctl = new AbortController()
+    epoch.current++
     setLines([])
     setPrev(null)
     setNext(null)
@@ -68,8 +72,9 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     return () => ctl.abort()
   }, [id, p.focusLine])
 
-  // Live: the session detail reloads on session_updated; once the end is loaded, refetch from the last line on.
-  // shortcut: a line synced late into an earlier time position shows after a reload, not on the tick.
+  // Live: the session detail reloads on session_updated; once the end is loaded, refetch the newest loaded window
+  // forward, so late lines (a subagent synced after its parent) land in their time position.
+  // shortcut: a line later than WINDOW lines behind the end shows only after a reload of the view.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the detail object is the trigger, the rest is read from the ref
   useEffect(() => {
     if (first.current) {
@@ -79,15 +84,22 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     const { lines: cur, next: n, loading: busy } = state.current
     if (n !== null || busy || cur.length === 0) return
     const ctl = new AbortController()
-    statsSessionChat(id, { at: cur[cur.length - 1]?.id }, ctl.signal).then(
-      (pg) => {
-        if (ctl.signal.aborted) return
-        stick.current = nearBottom()
-        setLines((old) => mergeLines(old, pg.lines ?? []))
-        setNext(pg.next ?? null)
-      },
-      () => {},
-    )
+    void (async () => {
+      let q: { at?: number; after?: string } = { at: cur[Math.max(0, cur.length - WINDOW)]?.id }
+      const got: ChatLine[] = []
+      let nxt: string | null = null
+      for (let i = 0; i < WINDOW / PAGE + 2; i++) {
+        const pg = await statsSessionChat(id, { ...q, limit: PAGE }, ctl.signal)
+        got.push(...(pg.lines ?? []))
+        nxt = pg.next ?? null
+        if (nxt === null) break
+        q = { after: nxt }
+      }
+      if (ctl.signal.aborted) return
+      stick.current = nearBottom()
+      setLines((old) => mergeLines(old, got))
+      setNext(nxt)
+    })().catch(() => {})
     return () => ctl.abort()
   }, [p.detail])
 
@@ -101,13 +113,17 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     q: { after?: string; before?: string },
     apply: (pg: Awaited<ReturnType<typeof statsSessionChat>>) => void,
   ) => {
+    const mine = epoch.current
     setLoading(true)
+    setError(undefined)
     statsSessionChat(id, q).then(
       (pg) => {
+        if (mine !== epoch.current) return
         apply(pg)
         setLoading(false)
       },
       (e: unknown) => {
+        if (mine !== epoch.current) return
         setError(e)
         setLoading(false)
       },
@@ -131,11 +147,11 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: `later` is rebuilt every render; the deps below cover what it reads
   useEffect(() => {
     const el = more.current
-    if (!el || next === null || loading || typeof IntersectionObserver === 'undefined') return
+    if (!el || next === null || loading || error !== undefined || typeof IntersectionObserver === 'undefined') return
     const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && later())
     io.observe(el)
     return () => io.disconnect()
-  }, [next, loading, lines.length])
+  }, [next, loading, error, lines.length])
 
   const byId = useMemo(() => new Map(agents.map((a) => [a.agent_id, a])), [agents])
   const lanes = useMemo(
@@ -175,7 +191,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     el.focus()
   }, [rows, p.focusLine])
 
-  // Which lanes run through each row; shortcut: a branch opened above the loaded window is not drawn above its first row.
+  // Which lanes run through each row, including branches opened above the loaded window.
   const cells = useMemo(() => {
     const lastEntry = new Map<string, number>()
     rows.forEach((r, i) => {
@@ -188,6 +204,15 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
       ends.set(at, [...(ends.get(at) ?? []), r.agentId])
     })
     const running = new Map<string, number>()
+    const t0 = prev !== null && lines[0]?.ts ? Date.parse(lines[0].ts) : Number.NaN
+    for (const a of agents) {
+      if (a.agent_id === 'main' || collapsed.has(a.agent_id) || !a.spawned_at || !(Date.parse(a.spawned_at) < t0))
+        continue
+      if (a.merged_at && !(Date.parse(a.merged_at) > t0)) continue
+      running.set(a.agent_id, lanes.get(a.agent_id) ?? 0)
+      const end = lastEntry.get(a.agent_id)
+      if (!a.merged_at && end !== undefined) ends.set(end, [...(ends.get(end) ?? []), a.agent_id])
+    }
     let lastDot = -1
     rows.forEach((r, i) => {
       if (r.kind === 'entry') lastDot = i
@@ -203,7 +228,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
         pulse: session.is_live && next === null && i === lastDot,
       }
     })
-  }, [rows, session.is_live, next])
+  }, [rows, session.is_live, next, prev, lines, agents, lanes, collapsed])
 
   const allCollapsed = subs.length > 0 && subs.every((a) => collapsed.has(a))
   const toggle = (a: string) =>
@@ -271,7 +296,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
           return (
             <li key={r.key} className={`grow ${r.kind}`} tabIndex={-1} aria-current={focus ? 'true' : undefined}>
               <time dateTime={at ?? undefined} title={at ? fmtDateTime(at, tz) : undefined}>
-                {hhmm(at, tz)}
+                {hhmm(at)}
               </time>
               <GraphCell row={r} through={c?.through ?? []} last={c?.last ?? false} pulse={c?.pulse ?? false} />
               <div className="gbody">{render(r)}</div>

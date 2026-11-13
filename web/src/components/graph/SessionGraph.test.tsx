@@ -3,6 +3,7 @@
 
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { LiveSource } from '../../api/live'
@@ -150,8 +151,8 @@ async function liveCase(scrolledUp: boolean) {
   const { live, emit } = liveHarness()
   get.mockImplementation(async (p: string, q?: Record<string, string | number>) => {
     if (p.endsWith('/chat'))
-      return q?.at === 5
-        ? { lines: [LINES[4], L(6, 'main', 6, asst('fresh line'))], next: null, prev: null }
+      return q?.at === 1 // a late line: newer id, but a time before the last loaded line
+        ? { lines: [...LINES, L(6, 'a1', 1, asst('fresh line'))], next: null, prev: null }
         : { lines: LINES, next: null, prev: null }
     return p.endsWith('/devices') ? [] : { ...liveDetail } // a reload yields a new object, as parsed JSON does
   })
@@ -165,7 +166,13 @@ async function liveCase(scrolledUp: boolean) {
   if (scrolledUp) Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 9000 })
   emit({ type: 'session_updated', session_id: 'g1' })
   expect(await screen.findByText('fresh line')).toBeInTheDocument()
-  expect(get.mock.calls.some(([, q]) => q?.at === 5)).toBe(true)
+  expect(get.mock.calls.some(([, q]) => q?.at === 1)).toBe(true)
+  const texts = within(screen.getByLabelText('Session chat'))
+    .getAllByRole('listitem')
+    .map((li) => li.textContent ?? '')
+  const at = (t: string) => texts.findIndex((x) => x.includes(t))
+  expect(at('fresh line')).toBeGreaterThan(at('build the export'))
+  expect(at('fresh line')).toBeLessThan(at('d-a1'))
   expect(within(screen.getByLabelText('Session chat')).getAllByText('all done')).toHaveLength(1)
 }
 it('appends a live line and keeps the bottom in view when the reader is at the end', async () => {
@@ -175,4 +182,51 @@ it('appends a live line and keeps the bottom in view when the reader is at the e
 it('appends a live line without moving the scroll position when the reader scrolled up', async () => {
   await liveCase(true)
   expect(window.scrollTo).not.toHaveBeenCalled()
+})
+
+function Host() {
+  const [line, setLine] = useState<number>()
+  return (
+    <>
+      <button type="button" onClick={() => setLine(3)}>
+        go
+      </button>
+      <SessionGraph detail={detail()} focusLine={line} />
+    </>
+  )
+}
+
+it('expands a collapsed branch when a deep link points into it', async () => {
+  renderApp(<Host />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Collapse subagents' }))
+  expect(screen.queryByText('grepping inside the subagent')).toBeNull()
+  await userEvent.click(screen.getByRole('button', { name: 'go' }))
+  expect(await screen.findByText('grepping inside the subagent')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /Subagent Explore/ })).toHaveAttribute('aria-expanded', 'true')
+})
+
+it('stops auto-loading after an error and keeps the button as a manual retry', async () => {
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(private cb: (e: { isIntersecting: boolean }[]) => void) {}
+      observe() {
+        this.cb([{ isIntersecting: true }])
+      }
+      disconnect() {}
+    },
+  )
+  try {
+    get.mockResolvedValueOnce({ lines: LINES.slice(0, 1), next: 'c1', prev: null })
+    get.mockRejectedValue(new Error('boom'))
+    renderApp(<SessionGraph detail={detail()} />)
+    await screen.findByRole('alert')
+    await new Promise((r) => setTimeout(r, 200))
+    expect(get).toHaveBeenCalledTimes(2) // first page plus one failed attempt
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeEnabled()
+  } finally {
+    vi.unstubAllGlobals()
+    get.mockReset()
+    get.mockResolvedValue({ lines: LINES, next: null, prev: null })
+  }
 })
