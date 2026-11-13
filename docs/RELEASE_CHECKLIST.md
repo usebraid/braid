@@ -9,7 +9,7 @@ Manual checks around a release. Replace `<version>` with the release version wit
 
 ## 2. After the release workflow
 
-3. `gh release view <tag> -R usebraid/braid --json assets --jq '.assets[].name'`. Pass: 6 `braid_*` archives (linux, darwin, windows; amd64, arm64), 2 `braid-server_*` archives, `checksums.txt`, `checksums.txt.sigstore.json`, and one `.sbom.json` per archive.
+3. `gh release view <tag> -R usebraid/braid --json assets --jq '.assets[].name'`. If assets are missing, the `goreleaser` job failed after release-please published the release: re-run it (until then `releases/latest` has no checksums). Pass: 6 `braid_*` archives (linux, darwin, windows; amd64, arm64), 2 `braid-server_*` archives, `checksums.txt`, `checksums.txt.sigstore.json`, and one `.sbom.json` per archive.
 4. Download everything into a clean directory: `mkdir rel && cd rel && gh release download <tag> -R usebraid/braid`.
 
 ## 3. Signatures

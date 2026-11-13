@@ -23,6 +23,8 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+  # shortcut: release-please publishes the GitHub release before goreleaser attaches the assets, so "latest" has
+  # no checksums for a few minutes (or until a failed run is re-run); upgrade to draft releases if that window matters.
   goreleaser:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
@@ -66,38 +68,39 @@ jobs:
         run: |
           for t in trivy cosign; do scripts/install-tool.sh "$t" "$RUNNER_TEMP/bin"; done
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Build and scan each platform
-        env:
-          VERSION: ${{ needs.release-please.outputs.version }}
-        run: |
-          for arch in amd64 arm64; do
-            docker buildx build --platform "linux/$arch" --build-arg "VERSION=$VERSION" --build-arg "COMMIT=$GITHUB_SHA" \
-              -o "type=oci,dest=$RUNNER_TEMP/$arch.tar" .
-            trivy image --input "$RUNNER_TEMP/$arch.tar" --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed=false
-          done
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Push once by digest (no tag), scan exactly that digest, then tag and sign it: the scanned image is the published one.
       - id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/usebraid/braid-server:${{ needs.release-please.outputs.version }}
-            ghcr.io/usebraid/braid-server:latest
+          outputs: type=image,name=ghcr.io/usebraid/braid-server,push-by-digest=true,name-canonical=true,push=true
           build-args: |
             VERSION=${{ needs.release-please.outputs.version }}
             COMMIT=${{ github.sha }}
           provenance: mode=max
           sbom: true
-      - name: Sign image
+      - name: Scan the pushed digest
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
-        run: cosign sign --yes "ghcr.io/usebraid/braid-server@$DIGEST"
+        run: |
+          for arch in amd64 arm64; do
+            trivy image --platform "linux/$arch" --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed=false \
+              "ghcr.io/usebraid/braid-server@$DIGEST"
+          done
+      - name: Tag and sign
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          VERSION: ${{ needs.release-please.outputs.version }}
+        run: |
+          docker buildx imagetools create -t "ghcr.io/usebraid/braid-server:$VERSION" -t ghcr.io/usebraid/braid-server:latest \
+            "ghcr.io/usebraid/braid-server@$DIGEST"
+          cosign sign --yes "ghcr.io/usebraid/braid-server@$DIGEST"
   pages:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'

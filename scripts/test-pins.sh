@@ -22,6 +22,7 @@ wf() { echo "$1" >> "$t/tree/.github/workflows/ci.yml"; }
 ok
 bad "tag-pinned action" wf "      - uses: actions/checkout@v4"
 bad "curl | sh" wf "      - run: curl -sfL https://x.example/i.sh | sh -s"
+bad "tag-only service image" wf "        image: postgres:16-alpine"
 bad "@latest" wf "      - run: go install x@latest"
 bad "short sha lock row" sh -c "echo 'tool 1.0 linux amd64 https://example.com/t abc123' >> '$t/tree/scripts/tools.lock'"
 bad "http lock url" sh -c "echo 'tool 1.0 linux arm64 http://example.com/t $lock64' >> '$t/tree/scripts/tools.lock'"

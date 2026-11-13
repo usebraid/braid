@@ -12,6 +12,9 @@ for f in "$root"/.github/workflows/*.yml; do
     case "$ref" in ./*) continue ;; esac
     [[ "$ref" =~ @[0-9a-f]{40}$ ]] || err "$f: action not pinned to a 40-hex sha: $ref"
   done < <(sed -nE 's/^[[:space:]-]*uses:[[:space:]]*([^[:space:]#]+).*/\1/p' "$f")
+  while IFS= read -r img; do
+    [[ "$img" =~ @sha256:[0-9a-f]{64}$ ]] || err "$f: container image not pinned by digest: $img"
+  done < <(sed -nE 's/^[[:space:]]*image:[[:space:]]*([^[:space:]#]+).*/\1/p' "$f")
   grep -nE 'curl[^|]*\|[[:space:]]*(sudo[[:space:]]+)?(ba)?sh' "$f" >&2 && err "$f: curl piped to a shell"
   grep -n '@latest' "$f" >&2 && err "$f: @latest"
 done
