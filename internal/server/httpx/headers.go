@@ -6,7 +6,18 @@ package httpx
 import (
 	"net/http"
 	"net/url"
+	"strings"
 )
+
+// UserAgent returns the request's User-Agent for persistence: at most 256 bytes,
+// with invalid UTF-8 (including a rune cut by the limit) removed (Postgres rejects it).
+func UserAgent(r *http.Request) string {
+	ua := r.UserAgent()
+	if len(ua) > 256 {
+		ua = ua[:256]
+	}
+	return strings.ToValidUTF8(ua, "")
+}
 
 // SecurityHeaders sets the fixed response security headers.
 func SecurityHeaders(next http.Handler) http.Handler {
@@ -14,7 +25,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Referrer-Policy", "same-origin")
 		next.ServeHTTP(w, r)
 	})
 }

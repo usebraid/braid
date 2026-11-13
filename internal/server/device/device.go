@@ -81,10 +81,7 @@ func nilIfEmpty(s string) any {
 
 // audit is best effort: a failed audit write must not change the outcome of the request.
 func (h *Handler) audit(ctx context.Context, r *http.Request, subject any, action string, detail any) {
-	ua := r.UserAgent()
-	if len(ua) > 256 {
-		ua = ua[:256]
-	}
+	ua := httpx.UserAgent(r)
 	d, _ := json.Marshal(detail)
 	err := h.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `SELECT write_audit($1::uuid, $1::uuid, NULL, $2, $3::inet, $4, $5::jsonb)`, subject, action, nilIfEmpty(h.ip(r)), ua, d)

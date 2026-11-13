@@ -149,10 +149,7 @@ func (a *Auth) audit(ctx context.Context, tx pgx.Tx, r *http.Request, subject an
 	if addr := httpx.ClientIP(r, a.cfg.TrustedProxies); addr.IsValid() {
 		ip = addr.String()
 	}
-	ua := r.UserAgent()
-	if len(ua) > 256 {
-		ua = ua[:256]
-	}
+	ua := httpx.UserAgent(r)
 	d, _ := json.Marshal(detail)
 	_, err := tx.Exec(ctx, `SELECT write_audit($1::uuid, $1::uuid, NULL, $2, $3::inet, $4, $5::jsonb)`, subject, action, ip, ua, d)
 	return err

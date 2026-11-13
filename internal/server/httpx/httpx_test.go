@@ -133,7 +133,7 @@ func TestSecurityHeaders(t *testing.T) {
 	if w.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Error("nosniff missing")
 	}
-	if w.Header().Get("Referrer-Policy") != "no-referrer" {
+	if w.Header().Get("Referrer-Policy") != "same-origin" {
 		t.Error("referrer policy missing")
 	}
 }
@@ -157,5 +157,20 @@ func TestReadJSON(t *testing.T) {
 	r = httptest.NewRequestWithContext(context.Background(), "POST", "/", strings.NewReader(`{"a":`+strings.Repeat("1", 200)+`}`))
 	if err := ReadJSON(r, 100, &v); err == nil {
 		t.Error("oversized body accepted")
+	}
+}
+
+func TestUserAgentSanitised(t *testing.T) {
+	cases := map[string]string{
+		"ok":                           "ok",
+		"a\xffb":                       "ab",
+		strings.Repeat("a", 255) + "é": strings.Repeat("a", 255), // é straddles byte 256
+	}
+	for in, want := range cases {
+		r := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
+		r.Header.Set("User-Agent", in)
+		if got := UserAgent(r); got != want {
+			t.Errorf("%q: got len %d want len %d", in[:min(len(in), 5)], len(got), len(want))
+		}
 	}
 }

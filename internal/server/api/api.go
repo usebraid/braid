@@ -240,10 +240,7 @@ func (h *Handler) ipUA(r *http.Request) (ip any, ua string) {
 	if a := httpx.ClientIP(r, h.cfg.TrustedProxies); a.IsValid() {
 		ip = a.String()
 	}
-	ua = r.UserAgent()
-	if len(ua) > 256 {
-		ua = strings.ToValidUTF8(ua[:256], "")
-	}
+	ua = httpx.UserAgent(r)
 	return
 }
 
