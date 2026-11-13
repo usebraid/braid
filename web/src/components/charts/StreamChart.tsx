@@ -63,44 +63,46 @@ export function StreamChart(p: {
   return (
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: mouse-only convenience to clear the hover, keyboard has Escape
     <figure className="chart-wrap" onMouseLeave={() => setActive(null)}>
-      <svg
-        className="stream"
-        viewBox={`0 0 ${W} ${H}`}
-        role="img"
-        aria-label={`${p.title}: total ${p.format(sum)}, ${n} days`}
-      >
-        <defs>
-          <Blur id={`${uid}-glow`} sd={10} />
-          {shapes.map((s) => (
-            <Gradient
-              key={s.l.key}
-              id={`${uid}-f${s.li}`}
-              x2={0}
-              y2={BASE}
-              stops={[
-                [0, s.l.color, 0.95],
-                [1, s.l.color, 0.55],
-              ]}
-            />
+      {/* biome-ignore lint/a11y/noSvgWithoutTitle: the labelled <g role="img"> inside names the picture; a <title> here would add a hover tooltip over the whole chart */}
+      <svg className="stream" viewBox={`0 0 ${W} ${H}`}>
+        {/* the picture is the img; the focusable columns sit beside it, since an img may not contain interactive children */}
+        {/* biome-ignore lint/a11y/noInteractiveElementToNoninteractiveRole: a <g> is not interactive, biome mistakes it for the SVG anchor-like set */}
+        <g role="img" aria-label={`${p.title}: total ${p.format(sum)}, ${n} days`}>
+          <defs>
+            <Blur id={`${uid}-glow`} sd={10} />
+            {shapes.map((s) => (
+              <Gradient
+                key={s.l.key}
+                id={`${uid}-f${s.li}`}
+                x2={0}
+                y2={BASE}
+                stops={[
+                  [0, s.l.color, 0.95],
+                  [1, s.l.color, 0.55],
+                ]}
+              />
+            ))}
+          </defs>
+          <line x1={0} x2={W} y1={BASE + 22} y2={BASE + 22} className="base" />
+          {ticks.map((i) => (
+            <text key={i} x={x(i)} y={H - 6} className="axis" textAnchor={i ? 'middle' : 'start'}>
+              {p.points[i]?.label}
+            </text>
           ))}
-        </defs>
-        <line x1={0} x2={W} y1={BASE + 22} y2={BASE + 22} className="base" />
-        {ticks.map((i) => (
-          <text key={i} x={x(i)} y={H - 6} className="axis" textAnchor={i ? 'middle' : 'start'}>
-            {p.points[i]?.label}
-          </text>
-        ))}
-        <path
-          d={`${top.up}L${W},${BASE}L0,${BASE}Z`}
-          fill={top.l.color}
-          filter={`url(#${uid}-glow)`}
-          className="glow"
-        />
-        {shapes.map((s) => (
-          <path key={s.l.key} d={s.d} fill={`url(#${uid}-f${s.li})`} />
-        ))}
-        <path d={top.up} className="top-line" strokeWidth={1.2} />
-        {active !== null ? <line x1={x(active)} x2={x(active)} y1={TOP - 12} y2={BASE} className="hover-line" /> : null}
+          <path
+            d={`${top.up}L${W},${BASE}L0,${BASE}Z`}
+            fill={top.l.color}
+            filter={`url(#${uid}-glow)`}
+            className="glow"
+          />
+          {shapes.map((s) => (
+            <path key={s.l.key} d={s.d} fill={`url(#${uid}-f${s.li})`} />
+          ))}
+          <path d={top.up} className="top-line" strokeWidth={1.2} />
+          {active !== null ? (
+            <line x1={x(active)} x2={x(active)} y1={TOP - 12} y2={BASE} className="hover-line" />
+          ) : null}
+        </g>
         {p.points.map((q, i) => (
           // biome-ignore lint/a11y/useSemanticElements: an SVG rect cannot be a <button>; role+tabindex+key handler is the contract
           <rect
