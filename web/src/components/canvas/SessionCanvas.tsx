@@ -6,12 +6,13 @@ import '@xyflow/react/dist/style.css'
 import { useMemo } from 'react'
 import type { SessionDetail } from '../../api/types'
 import { type AgentNodeData, buildGraph, skillColor } from '../../lib/graph'
-import { getTheme } from '../../theme/theme'
+import { useTheme } from '../../theme/useTheme'
 import { AgentNode } from './AgentNode'
 
 const nodeTypes = { agent: AgentNode }
 
 export function SessionCanvas({ detail, liveAgentIds }: { detail: SessionDetail; liveAgentIds: Set<string> }) {
+  const theme = useTheme()
   // ids are stable keys, so React Flow keeps the viewport when a live update replaces the data
   const { nodes, edges } = useMemo(() => buildGraph(detail, { liveAgentIds }), [detail, liveAgentIds])
   return (
@@ -26,7 +27,7 @@ export function SessionCanvas({ detail, liveAgentIds }: { detail: SessionDetail;
         elementsSelectable
         fitView
         minZoom={0.2}
-        colorMode={getTheme()}
+        colorMode={theme}
         aria-label="Agent graph"
       >
         <Background />
