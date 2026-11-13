@@ -5,17 +5,14 @@
 package device
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"embed"
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -29,13 +26,9 @@ import (
 	"github.com/usebraid/braid/internal/server/db"
 	"github.com/usebraid/braid/internal/server/httpx"
 	"github.com/usebraid/braid/internal/server/ingest"
+	"github.com/usebraid/braid/internal/server/page"
 	"github.com/usebraid/braid/internal/server/webauth"
 )
-
-//go:embed templates/device.html
-var tmplFS embed.FS
-
-var tmpl = template.Must(template.ParseFS(tmplFS, "templates/device.html"))
 
 // Handler serves the device endpoints.
 type Handler struct {
@@ -199,27 +192,9 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 
 type info struct{ Hostname, DefaultName, OS, Arch, OSUser, IP, Requested, DaemonVersion string }
 
-type view struct {
-	Nonce, View, Title, Error, UserCode string
-	Info                                info
-}
+type view = page.View
 
-func (h *Handler) page(w http.ResponseWriter, status int, v view) {
-	nonce := make([]byte, 16)
-	_, _ = rand.Read(nonce)
-	v.Nonce = base64.RawURLEncoding.EncodeToString(nonce)
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, v); err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	hd := w.Header()
-	hd.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; style-src 'nonce-"+v.Nonce+"'")
-	hd.Set("Content-Type", "text/html; charset=utf-8")
-	hd.Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-	_, _ = w.Write(buf.Bytes())
-}
+func (h *Handler) page(w http.ResponseWriter, status int, v view) { page.Render(w, status, v) }
 
 func sessionKey(r *http.Request) string {
 	c, err := r.Cookie(webauth.CookieName)
@@ -343,9 +318,9 @@ func (h *Handler) decide(approve bool) func(http.ResponseWriter, *http.Request) 
 			h.miss(r, p)
 			h.page(w, http.StatusBadRequest, view{View: "none", Title: "Error", Error: "Code expired or already used."})
 		case approve:
-			h.page(w, http.StatusOK, view{View: "none", Title: "Device approved — you can close this tab"})
+			h.page(w, http.StatusOK, view{View: "none", Title: "Device approved", Body: "Your terminal will continue now. You can close this tab."})
 		default:
-			h.page(w, http.StatusOK, view{View: "none", Title: "Denied"})
+			h.page(w, http.StatusOK, view{View: "none", Title: "Denied", Body: "The device was not connected. You can close this tab."})
 		}
 	}
 }

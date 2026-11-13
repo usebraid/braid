@@ -1,0 +1,68 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<!-- Copyright (C) 2026 The Braid Authors -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>{{.Title}} - Braid</title>
+<style nonce="{{.Nonce}}">
+/* Tokens copied from web/src/theme/tokens.css and web/src/styles/app.css; the dashboard's font files have hashed URLs, so mono falls back to the system stack. */
+:root{--bg:#060606;--card:#0c0c0c;--line:#1c1c1b;--line2:#262624;--text:#f3f2ee;--muted:#8d8b84;--track:#141413;--ok:#5fe08a;--bad:#ff6b5b;--badbg:#2a1210;--focus:#7c8cff;--shadow:inset 0 1px 0 rgba(255,255,255,.035),0 20px 50px rgba(0,0,0,.35);--onok:#060606;--font:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;--font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;color-scheme:dark}
+@media (prefers-color-scheme:light){:root{--bg:#f5f5f3;--card:#fff;--line:#ebeae6;--line2:#dedcd6;--text:#1d1c1a;--muted:#6f6d67;--track:#f2f1ed;--ok:#2f7d3b;--bad:#b4401b;--badbg:#fcebe4;--focus:#3b4bd6;--shadow:0 1px 2px rgba(25,25,15,.05);--onok:#fff;color-scheme:light}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;background:var(--bg);color:var(--text);font:15px/1.5 var(--font)}
+.card{width:100%;max-width:26rem;background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:28px}
+.brand{display:flex;align-items:center;gap:10px;font:600 15px/1 var(--font-mono);margin-bottom:24px}
+h1{font-size:20px;line-height:1.3;margin:0 0 12px}
+p{margin:0 0 16px;color:var(--muted)}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:16px}
+input{display:block;width:100%;height:34px;margin-top:6px;padding:0 10px;border:1px solid var(--line2);border-radius:11px;background:var(--track);color:var(--text);font-size:13px}
+input.code{height:44px;font:600 20px var(--font-mono);text-transform:uppercase;letter-spacing:.2em;text-align:center}
+input.code::placeholder{text-transform:none;letter-spacing:.1em;font-weight:400;opacity:.5}
+input:focus-visible,.btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 20px;padding:12px 14px;background:var(--track);border:1px solid var(--line);border-radius:11px;font-size:13px}
+dt{color:var(--muted)}dd{margin:0;word-break:break-all;font-family:var(--font-mono);font-size:12px}
+.actions{display:flex;gap:8px}
+.btn{display:inline-flex;align-items:center;text-decoration:none;height:34px;padding:0 14px;border:1px solid var(--line2);border-radius:11px;background:var(--track);color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--ok);border-color:var(--ok);color:var(--onok);font-weight:600}
+.err{padding:10px 12px;margin-bottom:16px;border-radius:11px;background:var(--badbg);color:var(--bad);font-size:13px}
+</style>
+</head>
+<body>
+<main class="card">
+<div class="brand"><img src="/favicon.svg" width="24" height="24" alt="">Braid</div>
+<h1>{{.Title}}</h1>
+{{if .Error}}<div class="err" role="alert">{{.Error}}</div>{{end}}
+{{if .Body}}<p>{{.Body}}</p>{{end}}
+{{if .Retry}}<div class="actions"><a class="btn primary" href="/">Back to sign in</a></div>{{end}}
+{{if eq .View "form"}}
+<form method="get" action="/device">
+<label>Code<input class="code" name="user_code" value="{{.UserCode}}" autocomplete="off" autofocus placeholder="XXXX-XXXX"></label>
+<div class="actions"><button type="submit" class="btn primary">Continue</button></div>
+</form>
+{{else if eq .View "confirm"}}
+<p>Only approve if you started this login on your own machine.</p>
+<dl>
+<dt>Hostname</dt><dd>{{.Info.Hostname}}</dd>
+<dt>OS</dt><dd>{{.Info.OS}}</dd>
+<dt>Architecture</dt><dd>{{.Info.Arch}}</dd>
+<dt>OS user</dt><dd>{{.Info.OSUser}}</dd>
+<dt>IP</dt><dd>{{.Info.IP}}</dd>
+<dt>Requested</dt><dd>{{.Info.Requested}}</dd>
+<dt>Daemon</dt><dd>{{.Info.DaemonVersion}}</dd>
+</dl>
+<form method="post" action="/device/approve">
+<input type="hidden" name="user_code" value="{{.UserCode}}">
+<label>Device name<input name="name" value="{{.Info.DefaultName}}" maxlength="64" required></label>
+<div class="actions">
+<button type="submit" class="btn primary">Approve</button>
+<button type="submit" class="btn" formaction="/device/deny" formnovalidate>Deny</button>
+</div>
+</form>
+{{end}}
+</main>
+</body>
+</html>

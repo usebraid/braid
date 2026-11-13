@@ -28,6 +28,7 @@ import (
 	"github.com/usebraid/braid/internal/server/config"
 	"github.com/usebraid/braid/internal/server/db"
 	"github.com/usebraid/braid/internal/server/httpx"
+	"github.com/usebraid/braid/internal/server/page"
 )
 
 const loginCookie = "__Host-braid_login"
@@ -162,42 +163,47 @@ func (a *Auth) auditSystem(r *http.Request, subject any, action string, detail a
 	_ = a.db.WithSystem(r.Context(), func(tx pgx.Tx) error { return a.audit(r.Context(), tx, r, subject, action, detail) })
 }
 
+// fail renders a styled error page with fixed text: never IdP error text, tokens or codes.
+func fail(w http.ResponseWriter, status int, title, body string) {
+	page.Render(w, status, page.View{View: "none", Title: title, Body: body, Retry: true})
+}
+
 func (a *Auth) callback(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	c, err := r.Cookie(loginCookie)
 	setCookie(w, loginCookie, "", -1) // single use, whatever happens next
 	if err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		fail(w, http.StatusBadRequest, "Sign-in expired", "The sign-in attempt is invalid or has expired.")
 		return
 	}
 	s, ok := a.unseal(c.Value)
 	q := r.URL.Query()
 	if !ok || q.Get("code") == "" || subtle.ConstantTimeCompare([]byte(q.Get("state")), []byte(s.State)) != 1 {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		fail(w, http.StatusBadRequest, "Sign-in expired", "The sign-in attempt is invalid or has expired.")
 		return
 	}
 	tok, err := a.oauth.Exchange(ctx, q.Get("code"), oauth2.VerifierOption(s.Verifier))
 	if err != nil {
-		http.Error(w, "login failed", http.StatusBadRequest)
+		fail(w, http.StatusBadRequest, "Sign-in failed", "The identity provider could not confirm your sign-in.")
 		return
 	}
 	rawID, _ := tok.Extra("id_token").(string)
 	idt, err := a.verifier.Verify(ctx, rawID)
 	if err != nil || subtle.ConstantTimeCompare([]byte(idt.Nonce), []byte(s.Nonce)) != 1 {
-		http.Error(w, "login failed", http.StatusBadRequest)
+		fail(w, http.StatusBadRequest, "Sign-in failed", "The identity provider could not confirm your sign-in.")
 		return
 	}
 	var claims map[string]json.RawMessage
 	var std struct{ Email, Name, Picture string }
 	if idt.Claims(&claims) != nil || idt.Claims(&std) != nil {
-		http.Error(w, "login failed", http.StatusBadRequest)
+		fail(w, http.StatusBadRequest, "Sign-in failed", "The identity provider could not confirm your sign-in.")
 		return
 	}
 	groups := groupsFrom(claims[a.cfg.OIDCGroupsClaim])
 	isAdmin := a.cfg.OIDCAdminGroup != "" && slices.Contains(groups, a.cfg.OIDCAdminGroup)
 	if len(a.cfg.OIDCAllowedGroups) > 0 && !isAdmin && !slices.ContainsFunc(groups, func(g string) bool { return slices.Contains(a.cfg.OIDCAllowedGroups, g) }) {
 		a.auditSystem(r, nil, "login_denied", map[string]string{"sub": idt.Subject, "reason": "allowlist"})
-		http.Error(w, "access denied", http.StatusForbidden)
+		fail(w, http.StatusForbidden, "Access denied", "Your account is not allowed to use this Braid server.")
 		return
 	}
 	var userID string
@@ -207,17 +213,17 @@ func (a *Auth) callback(w http.ResponseWriter, r *http.Request) {
 			a.cfg.OIDCIssuer, idt.Subject, std.Email, std.Name, isAdmin, picture(std.Picture)).Scan(&userID, &disabled)
 	})
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		fail(w, http.StatusInternalServerError, "Something went wrong", "The server hit an error. Please try again.")
 		return
 	}
 	if disabled {
 		a.auditSystem(r, userID, "login_denied", map[string]string{"sub": idt.Subject, "reason": "disabled"})
-		http.Error(w, "access denied", http.StatusForbidden)
+		fail(w, http.StatusForbidden, "Access denied", "Your account is not allowed to use this Braid server.")
 		return
 	}
 	sess, err := a.newSession(r, userID)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		fail(w, http.StatusInternalServerError, "Something went wrong", "The server hit an error. Please try again.")
 		return
 	}
 	setCookie(w, CookieName, sess, int(sessionTTL.Seconds()))
@@ -241,7 +247,7 @@ func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {
 	p, id, ok, lerr := a.lookup(r)
 	if lerr != nil { // cannot tell whether the session exists: keep the cookie so the user can retry
 		slog.Error("logout lookup", "err", lerr)
-		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		fail(w, http.StatusServiceUnavailable, "Temporarily unavailable", "The server cannot sign you out right now. Please try again.")
 		return
 	}
 	if ok {
@@ -252,7 +258,7 @@ func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {
 			return a.audit(r.Context(), tx, r, p.UserID, "logout", map[string]any{})
 		})
 		if err != nil { // keep the cookie so the user can retry
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			fail(w, http.StatusInternalServerError, "Something went wrong", "The server hit an error. Please try again.")
 			return
 		}
 	}

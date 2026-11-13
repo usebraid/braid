@@ -176,9 +176,19 @@ func TestCallbackWithoutStateCookieRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	html, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 400 {
 		t.Fatalf("status %d", resp.StatusCode)
+	}
+	// styled shell (logo, title, way back), no echo of the request
+	for _, w := range []string{`src="/favicon.svg"`, "Sign-in expired", `href="/"`} {
+		if !strings.Contains(string(html), w) {
+			t.Errorf("missing %q", w)
+		}
+	}
+	if strings.Contains(string(html), "state=y") || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
+		t.Errorf("unexpected page: %s", resp.Header.Get("Content-Type"))
 	}
 }
 
