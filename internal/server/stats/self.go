@@ -36,12 +36,20 @@ type SelfSession struct {
 	Tokens       int64      `json:"tokens"`
 	StartedAt    *time.Time `json:"started_at"`
 	EndedAt      *time.Time `json:"ended_at"`
+	Failures     int64      `json:"failures"`
+}
+
+// SelfLimit is the active usage limit; an enum string and a time only.
+type SelfLimit struct {
+	Type     string    `json:"type"`
+	ResetsAt time.Time `json:"resets_at"`
 }
 
 // Self is the response of GET /v1/stats/self.
 type Self struct {
 	Today   SelfToday    `json:"today"`
 	Session *SelfSession `json:"session"`
+	Limit   *SelfLimit   `json:"limit"`
 }
 
 func (h *Handler) self(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +84,14 @@ func (h *Handler) self(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		t.TimeLostS = MergeSeconds(lost)
+		var l SelfLimit
+		switch err := tx.QueryRow(ctx, `SELECT coalesce(limit_type, 'unknown'), resets_at FROM failures
+		  WHERE category = 'usage_limit' AND resets_at > $1 ORDER BY occurred_at DESC LIMIT 1`, h.now()).Scan(&l.Type, &l.ResetsAt); {
+		case err == nil:
+			out.Limit = &l
+		case !errors.Is(err, pgx.ErrNoRows):
+			return err
+		}
 		if id == "" {
 			return nil
 		}
@@ -84,8 +100,9 @@ func (h *Handler) self(w http.ResponseWriter, r *http.Request) {
 		    coalesce((SELECT sum(a.duration_ms) FILTER (WHERE a.agent_id = 'main') FROM agents a WHERE a.session_id = s.session_id), 0)::bigint,
 		    coalesce((SELECT sum(a.duration_ms) FROM agents a WHERE a.session_id = s.session_id), 0)::bigint,
 		    coalesce((SELECT sum(u.cost_usd) FROM usage u WHERE u.session_id = s.session_id), 0)::float8,
-		    coalesce((SELECT sum(`+tokExpr+`) FROM usage u WHERE u.session_id = s.session_id), 0)::bigint
-		  FROM sessions s WHERE s.session_id = $1`, id).Scan(&s.StartedAt, &s.EndedAt, &s.AgentMs, &s.TotalAgentMs, &s.CostUSD, &s.Tokens)
+		    coalesce((SELECT sum(`+tokExpr+`) FROM usage u WHERE u.session_id = s.session_id), 0)::bigint,
+		    (SELECT count(*) FROM failures f WHERE f.session_id = s.session_id)
+		  FROM sessions s WHERE s.session_id = $1`, id).Scan(&s.StartedAt, &s.EndedAt, &s.AgentMs, &s.TotalAgentMs, &s.CostUSD, &s.Tokens, &s.Failures)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil // unknown session: null
 		}

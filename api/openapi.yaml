@@ -719,7 +719,7 @@ components:
         time_lost_s: { type: integer, format: int64 }
     SelfSession:
       type: object
-      required: [session_id, agent_ms, total_agent_ms, cost_usd, tokens, started_at, ended_at]
+      required: [session_id, agent_ms, total_agent_ms, cost_usd, tokens, started_at, ended_at, failures]
       properties:
         session_id: { type: string }
         agent_ms: { type: integer, format: int64 }
@@ -728,12 +728,20 @@ components:
         tokens: { type: integer, format: int64 }
         started_at: { type: [string, "null"], format: date-time }
         ended_at: { type: [string, "null"], format: date-time }
+        failures: { type: integer, format: int64 }
+    SelfLimit:
+      type: object
+      required: [type, resets_at]
+      properties:
+        type: { type: string }
+        resets_at: { type: string, format: date-time }
     Self:
       type: object
-      required: [today, session]
+      required: [today, session, limit]
       properties:
         today: { $ref: "#/components/schemas/SelfToday" }
         session: { oneOf: [{ $ref: "#/components/schemas/SelfSession" }, { type: "null" }] }
+        limit: { oneOf: [{ $ref: "#/components/schemas/SelfLimit" }, { type: "null" }] }
     AdminUserStats:
       type: object
       required: [id, email, name, is_admin, disabled_at, last_login_at, last_sync_at, devices, stored_bytes, sessions, cost_usd, tokens, last_activity_at, derive_errors, rebuilding]

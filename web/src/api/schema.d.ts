@@ -764,10 +764,18 @@ export interface components {
             started_at: string | null;
             /** Format: date-time */
             ended_at: string | null;
+            /** Format: int64 */
+            failures: number;
+        };
+        SelfLimit: {
+            type: string;
+            /** Format: date-time */
+            resets_at: string;
         };
         Self: {
             today: components["schemas"]["SelfToday"];
             session: components["schemas"]["SelfSession"] | null;
+            limit: components["schemas"]["SelfLimit"] | null;
         };
         AdminUserStats: {
             /** Format: uuid */

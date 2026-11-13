@@ -90,7 +90,7 @@ func TestSchemasMatchGoTypes(t *testing.T) {
 		"AgentItem": stats.AgentItem{}, "AgentUsage": stats.AgentUsage{}, "PhaseItem": stats.PhaseItem{}, "FailureItem": stats.FailureItem{},
 		"SessionDetail": stats.SessionDetail{}, "LineItem": stats.LineItem{}, "LinePage": stats.LinePage{}, "FailureAgg": stats.FailureAgg{},
 		"FailurePage": stats.FailurePage{}, "SearchHit": stats.SearchHit{}, "SearchResult": stats.SearchResult{}, "SelfToday": stats.SelfToday{},
-		"SelfSession": stats.SelfSession{}, "Self": stats.Self{}, "AdminUserStats": srvapi.AdminUserStats{}, "AdminTotals": srvapi.AdminTotals{},
+		"SelfSession": stats.SelfSession{}, "SelfLimit": stats.SelfLimit{}, "Self": stats.Self{}, "AdminUserStats": srvapi.AdminUserStats{}, "AdminTotals": srvapi.AdminTotals{},
 		"AdminStats": srvapi.AdminStats{},
 	} {
 		got, want := schemaProps(t, doc, name), jsonFields(reflect.TypeOf(v))

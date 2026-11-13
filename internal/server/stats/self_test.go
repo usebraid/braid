@@ -93,3 +93,78 @@ func TestSelfStatsAreTodaysAggregatesOnly(t *testing.T) {
 		t.Fatalf("scope: %d", st)
 	}
 }
+
+func TestSelfLimitIsMostRecentUnexpired(t *testing.T) {
+	x := newEnv(t)
+	token, _ := x.NewDevice(t, x.c, "band")
+	now := time.Now().UTC()
+	ts := func(d time.Duration) string { return now.Add(d).Format("2006-01-02T15:04:05.000Z") }
+	limitErr := func(at time.Duration, kind string, resets time.Duration) string {
+		return dt.APIError(ts(at), "error", "rate_limit", "apiError", "usage_limit_reached", "apiErrorStatus", 429,
+			"quotaLimits", map[string]any{"resetsAt": now.Add(resets).Unix(), "rateLimitType": kind})
+	}
+	x.dt.Put(t, x.uid, x.dev, dt.File{Rel: "-work-alpha/lim.jsonl", Lines: []string{
+		dt.Prompt(ts(-4*time.Hour), "p"),
+		limitErr(-3*time.Hour, "five_hour", time.Hour),            // unexpired, older
+		limitErr(-2*time.Hour, "seven_day", 2*time.Hour),          // unexpired, newest unexpired: wins
+		limitErr(-time.Hour, "five_hour", -time.Minute),           // newest, but expired: ignored
+		dt.APIError(ts(-30*time.Minute), "error", "server_error"), // not a limit
+	}})
+	x.dt.Derive(t, x.uid, 0)
+
+	get := func(q string) map[string]any {
+		req, _ := http.NewRequest("GET", x.URL+"/v1/stats/self"+q, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Braid-Protocol", "1")
+		resp, err := x.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var m map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&m); err != nil || resp.StatusCode != 200 {
+			t.Fatalf("%d %v", resp.StatusCode, err)
+		}
+		return m
+	}
+	m := get("?session=lim")
+	l, _ := m["limit"].(map[string]any)
+	if l == nil || l["type"] != "seven_day" {
+		t.Fatalf("limit %v", m["limit"])
+	}
+	at, err := time.Parse(time.RFC3339, l["resets_at"].(string))
+	if err != nil || at.Unix() != now.Add(2*time.Hour).Unix() {
+		t.Fatalf("resets_at %v %v", l["resets_at"], err)
+	}
+	if len(l) != 2 {
+		t.Fatalf("limit keys %v", l)
+	}
+	s, _ := m["session"].(map[string]any)
+	if s == nil || s["failures"] != float64(4) {
+		t.Fatalf("session failures %v", m["session"])
+	}
+}
+
+func TestSelfLimitNullWhenAllExpired(t *testing.T) {
+	x := newEnv(t)
+	token, _ := x.NewDevice(t, x.c, "band")
+	now := time.Now().UTC()
+	x.dt.Put(t, x.uid, x.dev, dt.File{Rel: "-work-alpha/old.jsonl", Lines: []string{
+		dt.Prompt(now.Add(-3*time.Hour).Format("2006-01-02T15:04:05.000Z"), "p"),
+		dt.APIError(now.Add(-2*time.Hour).Format("2006-01-02T15:04:05.000Z"), "error", "rate_limit", "apiError", "usage_limit_reached", "apiErrorStatus", 429,
+			"quotaLimits", map[string]any{"resetsAt": now.Add(-time.Hour).Unix(), "rateLimitType": "five_hour"}),
+	}})
+	x.dt.Derive(t, x.uid, 0)
+	req, _ := http.NewRequest("GET", x.URL+"/v1/stats/self", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Braid-Protocol", "1")
+	resp, err := x.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(b), `"limit":null`) {
+		t.Fatalf("%s", b)
+	}
+}
