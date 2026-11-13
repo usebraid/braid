@@ -27,6 +27,7 @@ func TestCost(t *testing.T) {
 		{"web search", "claude-sonnet-5-5", parse.Usage{WebSearch: 3}, 0.03, false, false},
 		{"thinking is not added", "claude-opus-5-5", parse.Usage{Output: 1_000_000, Thinking: 400_000}, 20.0, false, false},
 		{"unknown version uses closest known id", "claude-fable-5-2", parse.Usage{Input: 1_000_000}, 10.0, true, false},
+		{"legacy naming scheme keeps its family", "claude-3-5-sonnet-20241022", parse.Usage{Input: 1_000_000}, 2.0, true, false},
 		{"unknown version uses family default", "claude-opus-6", parse.Usage{Input: 1_000_000}, 4.0, true, false},
 		{"fast mode uses base price", "claude-opus-5-5", parse.Usage{Input: 1_000_000, Speed: "fast"}, 4.0, true, false},
 		{"no family match", "gpt-x", parse.Usage{Input: 1}, 0, false, true},

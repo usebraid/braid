@@ -77,6 +77,13 @@ func lookup(m string) (id string, exact, ok bool) {
 			return def, false, true
 		}
 	}
+	if strings.HasPrefix(m, "claude-3") { // legacy scheme claude-3-5-sonnet: family comes last
+		for _, f := range []string{"fable", "opus", "sonnet", "haiku"} {
+			if strings.Contains(m, "-"+f) {
+				return familyDefault["claude-"+f+"-"], false, true
+			}
+		}
+	}
 	return "", false, false
 }
 
