@@ -33,6 +33,14 @@ CREATE TABLE IF NOT EXISTS files (
   last_ack_at   TEXT,
   device_scoped INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (rel_path, head_hash)
+);
+CREATE TABLE IF NOT EXISTS skipped (
+  rel_path  TEXT NOT NULL,
+  head_hash TEXT NOT NULL,
+  off       INTEGER NOT NULL,
+  length    INTEGER NOT NULL,
+  sha256    TEXT NOT NULL,
+  PRIMARY KEY (rel_path, head_hash, off)
 );`
 
 // File is one row of the files table.
@@ -246,4 +254,43 @@ func (d *DB) Backlog(ctx context.Context) (Backlog, error) {
 		}
 	}
 	return b, nil
+}
+
+// Skipped is a line (or snapshot, Offset 0) too large for the protocol, left out of the upload.
+type Skipped struct {
+	RelPath, HeadHash string
+	Offset, Length    int64
+	SHA256            string
+}
+
+// AddSkipped records an entry; recording it again is a no-op.
+func (d *DB) AddSkipped(ctx context.Context, s Skipped) error {
+	_, err := d.db.ExecContext(ctx, `INSERT OR IGNORE INTO skipped (rel_path, head_hash, off, length, sha256) VALUES (?,?,?,?,?)`,
+		s.RelPath, s.HeadHash, s.Offset, s.Length, s.SHA256)
+	return err
+}
+
+// HasSkipped reports whether the file has a skipped entry (its spool copy must be kept).
+func (d *DB) HasSkipped(ctx context.Context, relPath, headHash string) (bool, error) {
+	var n int
+	err := d.db.QueryRowContext(ctx, `SELECT count(*) FROM skipped WHERE rel_path=? AND head_hash=?`, relPath, headHash).Scan(&n)
+	return n > 0, err
+}
+
+// ListSkipped returns all skipped entries ordered by path and offset.
+func (d *DB) ListSkipped(ctx context.Context) ([]Skipped, error) {
+	rows, err := d.db.QueryContext(ctx, `SELECT rel_path, head_hash, off, length, sha256 FROM skipped ORDER BY rel_path, head_hash, off`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Skipped
+	for rows.Next() {
+		var s Skipped
+		if err := rows.Scan(&s.RelPath, &s.HeadHash, &s.Offset, &s.Length, &s.SHA256); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
 }

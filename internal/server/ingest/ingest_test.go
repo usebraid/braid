@@ -655,3 +655,122 @@ func TestFilesArePaginatedAndTheClientResumesAll(t *testing.T) {
 		t.Fatalf("duplicates across pages: %d distinct", len(seen))
 	}
 }
+
+// postParts sends the chunks of one line one per request, in order given, and returns the last reply.
+func (e *env) postParts(t *testing.T, tok, path string, from int64, parts []protocol.Line, order []int) protocol.IngestResponse {
+	t.Helper()
+	var last protocol.IngestResponse
+	for _, i := range order {
+		req := protocol.IngestRequest{Files: []protocol.FileBatch{{Kind: protocol.KindAppend, Path: path, HeadHash: head, FromOffset: from, Lines: []protocol.Line{parts[i]}}}}
+		resp, out := e.post(t, tok, req, nil)
+		if resp.StatusCode != 200 {
+			t.Fatalf("part %d: %d %s", i, resp.StatusCode, resp.body)
+		}
+		last = out
+	}
+	return last
+}
+
+func seq(n int) []int {
+	o := make([]int, n)
+	for i := range o {
+		o[i] = i
+	}
+	return o
+}
+
+func bigLine() []byte {
+	b := make([]byte, 20<<20)
+	for i := range b {
+		b[i] = "abcdé\"\\\t"[i%9%8] // text with multibyte runes and escapes
+	}
+	return b
+}
+
+func TestLargeLineIsStoredByteExactBetweenOtherLines(t *testing.T) {
+	e := newEnv(t)
+	if resp, _ := e.post(t, e.tokA, appendReq(0, `{"a":0}`), nil); resp.StatusCode != 200 {
+		t.Fatal(resp.StatusCode)
+	}
+	big := bigLine()
+	parts := protocol.SplitLine(big, protocol.ChunkSize)
+	out := e.postParts(t, e.tokA, "p/s.jsonl", 8, parts, seq(len(parts)))
+	if st := out.Files[0].Status; st != protocol.StatusOK || out.Files[0].EndOffset != 8+int64(len(big))+1 {
+		t.Fatalf("last part: %+v", out.Files[0])
+	}
+	if resp, _ := e.post(t, e.tokA, appendReq(8+int64(len(big))+1, `{"c":1}`), nil); resp.StatusCode != 200 {
+		t.Fatal(resp.StatusCode)
+	}
+	var got []byte
+	c, _ := pgx.Connect(context.Background(), e.owner)
+	defer func() { _ = c.Close(context.Background()) }()
+	if err := c.QueryRow(context.Background(), `SELECT line FROM raw_lines WHERE "offset" = 8`).Scan(&got); err != nil || !bytes.Equal(got, big) {
+		t.Fatalf("line differs (err %v, len %d)", err, len(got))
+	}
+	if e.countLines(t) != 3 || e.ownerInt(t, `SELECT count(*) FROM raw_line_parts`) != 0 {
+		t.Fatal("lines or leftover parts wrong")
+	}
+}
+
+func TestPartsOutOfOrderAndTwice(t *testing.T) {
+	e := newEnv(t)
+	big := bigLine()[:3<<20+5]
+	parts := protocol.SplitLine(big, protocol.ChunkSize)
+	n := len(parts)
+	order := []int{n - 2, 0, 0, n - 2}
+	order = append(order, seq(n - 2)[1:]...)
+	order = append(order, n-1, n-1) // the second delivery of the completing part is a dedupe
+	out := e.postParts(t, e.tokA, "p/s.jsonl", 0, parts, order)
+	if out.Files[0].Status != protocol.StatusOK || e.countLines(t) != 1 {
+		t.Fatalf("%+v lines %d", out.Files[0], e.countLines(t))
+	}
+}
+
+func TestTamperedPartFailsTheHashCheck(t *testing.T) {
+	e := newEnv(t)
+	parts := protocol.SplitLine(bigLine()[:3<<20], protocol.ChunkSize)
+	last := len(parts) - 1
+	e.postParts(t, e.tokA, "p/s.jsonl", 0, parts, seq(last))
+	bad := "tampered"
+	parts[last].Text, parts[last].B64 = &bad, nil
+	req := protocol.IngestRequest{Files: []protocol.FileBatch{{Kind: protocol.KindAppend, Path: "p/s.jsonl", HeadHash: head, Lines: []protocol.Line{parts[last]}}}}
+	if resp, _ := e.post(t, e.tokA, req, nil); resp.StatusCode != 400 {
+		t.Fatalf("tampered: %d", resp.StatusCode)
+	}
+	if e.countLines(t) != 0 {
+		t.Fatal("tampered line stored")
+	}
+}
+
+func TestPartsAreIsolatedPerUser(t *testing.T) {
+	e := newEnv(t)
+	parts := protocol.SplitLine(bigLine()[:3<<20], protocol.ChunkSize)
+	last := len(parts) - 1
+	e.postParts(t, e.tokA, "p/s.jsonl", 0, parts, seq(last))
+	out := e.postParts(t, e.tokB, "p/s.jsonl", 0, parts, []int{last}) // B cannot complete A's line
+	if out.Files[0].Status != protocol.StatusPending || e.countLines(t) != 0 {
+		t.Fatalf("B completed A's parts: %+v", out.Files[0])
+	}
+	if n := e.ownerInt(t, `SELECT count(*) FROM raw_line_parts`); n != last+1 {
+		t.Fatalf("parts %d", n)
+	}
+}
+
+func TestLargeSnapshotIsChunked(t *testing.T) {
+	e := newEnv(t)
+	content := bytes.Repeat([]byte(`{"k":"v"}`), 400000) // 3.6 MiB
+	parts := protocol.SplitLine(content, protocol.ChunkSize)
+	for _, p := range parts {
+		c := p
+		req := protocol.IngestRequest{Files: []protocol.FileBatch{{Kind: protocol.KindSnapshot, Path: "p/s/x.meta.json", Content: &c}}}
+		if resp, _ := e.post(t, e.tokA, req, nil); resp.StatusCode != 200 {
+			t.Fatalf("%d %s", resp.StatusCode, resp.body)
+		}
+	}
+	var got []byte
+	c, _ := pgx.Connect(context.Background(), e.owner)
+	defer func() { _ = c.Close(context.Background()) }()
+	if err := c.QueryRow(context.Background(), `SELECT content FROM raw_snapshots`).Scan(&got); err != nil || !bytes.Equal(got, content) {
+		t.Fatalf("snapshot differs: %v", err)
+	}
+}

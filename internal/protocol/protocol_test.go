@@ -9,6 +9,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestEncodeLineRoundTrip(t *testing.T) {
@@ -224,5 +225,29 @@ func TestScopeValidation(t *testing.T) {
 		if err := (IngestRequest{Files: []FileBatch{tc.fb}}).Validate(); (err != nil) != tc.wantErr {
 			t.Errorf("%s: err=%v", name, err)
 		}
+	}
+}
+
+func TestSplitLineKeepsRunesWholeAndRoundTrips(t *testing.T) {
+	raw := []byte(strings.Repeat("aé€😀", 700000)) // multibyte runes straddle every chunk edge
+	parts := SplitLine(raw, ChunkSize)
+	var back []byte
+	for i, p := range parts {
+		b, _ := p.Bytes()
+		if p.Text == nil || !utf8.Valid(b) || len(b) > ChunkSize || p.Part.Index != i || p.Part.Count != len(parts) {
+			t.Fatalf("chunk %d: text %v len %d", i, p.Text != nil, len(b))
+		}
+		back = append(back, b...)
+	}
+	if !bytes.Equal(back, raw) || parts[0].Part.TotalLen != int64(len(raw)) || parts[0].Part.SHA256 != HashHex(raw) {
+		t.Fatal("round trip differs")
+	}
+	req := IngestRequest{Files: []FileBatch{{Kind: KindAppend, Path: "p/a.jsonl", HeadHash: HashHex(nil), Lines: parts[:1]}}}
+	if err := req.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	req.Files[0].Lines = parts[:2] // a part must be the only line
+	if req.Validate() == nil {
+		t.Fatal("two lines with a part accepted")
 	}
 }

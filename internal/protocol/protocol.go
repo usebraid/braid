@@ -30,6 +30,15 @@ const (
 	MaxFilesPerRequest  = 5000 // the daemon never sends more entries than lines per batch
 )
 
+// Chunking of lines and snapshots too large for one request. ChunkSize raw bytes escape to at most
+// six times as many JSON bytes, so a request holding one chunk stays below MaxCompressedBody
+// (and MaxDecompressedBody) even uncompressed and at worst-case escaping.
+const (
+	ChunkSize    = MaxCompressedBody / 8
+	MaxLineBytes = 1<<30 - 1 // Postgres caps bytea at 1 GB; larger lines are never uploaded
+	maxParts     = MaxLineBytes/ChunkSize + 1
+)
+
 // Kind is the sync mode of a file: append-only log or whole-file snapshot.
 type Kind string
 
@@ -48,10 +57,50 @@ var ErrTooManyFiles = errors.New("protocol: too many files in request")
 // ErrBadLine means a Line has both or neither of Text and B64 set.
 var ErrBadLine = errors.New("protocol: line must set exactly one of text or b64")
 
-// Line carries raw bytes: Text when valid UTF-8, otherwise B64.
+// Part marks a Line as one chunk of a longer line (or snapshot): chunk Index of Count, of a
+// line of TotalLen bytes with the given hex SHA-256. A request carries one part entry alone.
+type Part struct {
+	Index    int    `json:"index"`
+	Count    int    `json:"count"`
+	TotalLen int64  `json:"total_len"`
+	SHA256   string `json:"sha256"`
+}
+
+// Line carries raw bytes: Text when valid UTF-8, otherwise B64. With Part set, the bytes are one chunk.
 type Line struct {
 	Text *string `json:"text,omitempty"`
 	B64  []byte  `json:"b64,omitempty"`
+	Part *Part   `json:"part,omitempty"`
+}
+
+// SplitLine cuts raw into chunks of at most size bytes, on rune boundaries when raw is valid UTF-8.
+func SplitLine(raw []byte, size int) []Line {
+	valid := utf8.Valid(raw)
+	var cuts [][]byte
+	for len(raw) > 0 {
+		n := min(size, len(raw))
+		for valid && n < len(raw) && !utf8.RuneStart(raw[n]) {
+			n--
+		}
+		cuts = append(cuts, raw[:n])
+		raw = raw[n:]
+	}
+	sum := HashHex(bytes.Join(cuts, nil))
+	total := int64(0)
+	for _, c := range cuts {
+		total += int64(len(c))
+	}
+	out := make([]Line, len(cuts))
+	for i, c := range cuts {
+		out[i] = EncodeLine(c)
+		out[i].Part = &Part{Index: i, Count: len(cuts), TotalLen: total, SHA256: sum}
+	}
+	return out
+}
+
+func (p Part) valid() bool {
+	return p.Count >= 2 && p.Count <= maxParts && p.Index >= 0 && p.Index < p.Count &&
+		p.TotalLen > ChunkSize && p.TotalLen <= MaxLineBytes && validHash(p.SHA256)
 }
 
 // EncodeLine wraps raw bytes as Text when valid UTF-8, otherwise as B64.
@@ -89,6 +138,9 @@ type FileBatch struct {
 	Lines      []Line `json:"lines,omitempty"`
 	Content    *Line  `json:"content,omitempty"`
 	Scope      Scope  `json:"scope,omitempty"`
+	// AllowGap lets from_offset exceed the server's end: the daemon skipped a line or snapshot
+	// the protocol can never carry (see MaxLineJSON) and keeps it locally.
+	AllowGap bool `json:"allow_gap,omitempty"`
 }
 
 // IngestRequest is the body of POST /v1/ingest.
@@ -104,6 +156,7 @@ const (
 	StatusOK       FileStatus = "ok"
 	StatusGap      FileStatus = "gap"
 	StatusConflict FileStatus = "conflict"
+	StatusPending  FileStatus = "pending" // a part was stored; the line is not complete yet
 )
 
 // FileResult reports the server state of one ingested file.
@@ -239,6 +292,12 @@ func (r IngestRequest) Validate() error {
 				if err != nil {
 					return fmt.Errorf("files[%d].lines[%d]: %w", i, j, err)
 				}
+				if l.Part != nil {
+					if len(f.Lines) != 1 || !l.Part.valid() || len(b) > ChunkSize {
+						return fmt.Errorf("files[%d].lines[%d]: bad part", i, j)
+					}
+					continue
+				}
 				if bytes.IndexByte(b, '\n') >= 0 { // EndOffset assumes one '\n' per line
 					return fmt.Errorf("files[%d].lines[%d]: embedded newline", i, j)
 				}
@@ -247,8 +306,12 @@ func (r IngestRequest) Validate() error {
 			if f.HeadHash != "" || len(f.Lines) != 0 || f.Content == nil {
 				return fmt.Errorf("files[%d]: snapshot needs content only", i)
 			}
-			if _, err := f.Content.Bytes(); err != nil {
+			b, err := f.Content.Bytes()
+			if err != nil {
 				return fmt.Errorf("files[%d].content: %w", i, err)
+			}
+			if p := f.Content.Part; p != nil && (!p.valid() || len(b) > ChunkSize) {
+				return fmt.Errorf("files[%d].content: bad part", i)
 			}
 		}
 	}

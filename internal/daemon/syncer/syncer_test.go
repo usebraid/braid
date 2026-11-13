@@ -40,6 +40,9 @@ type fakeServer struct {
 	snaps        map[string][]string // path -> content hashes (append-only, newest last)
 	conflictFor  string              // path answered with conflict while Scope == ""
 	lastScope    protocol.Scope
+	chunks       map[string]map[int][]byte // path|sha -> index -> chunk
+	partCalls    map[int]int               // chunk index -> times received
+	failOnPart   int                       // fail the first delivery of this chunk index with a retryable error (0: never)
 }
 
 func newFakeServer() *fakeServer {
@@ -59,6 +62,14 @@ func (f *fakeServer) Ingest(_ context.Context, req protocol.IngestRequest) (prot
 	f.calls++
 	var resp protocol.IngestResponse
 	for _, fb := range req.Files {
+		if whole, pending, retry := f.assemble(&fb); retry {
+			return protocol.IngestResponse{}, &client.RetryableError{Status: 429}
+		} else if pending {
+			resp.Files = append(resp.Files, protocol.FileResult{Path: fb.Path, HeadHash: fb.HeadHash, Status: protocol.StatusPending, EndOffset: f.ends[[2]string{fb.Path, fb.HeadHash}]})
+			continue
+		} else if whole {
+			_ = whole
+		}
 		if fb.Kind == protocol.KindSnapshot {
 			c, _ := fb.Content.Bytes()
 			h := sum(c)
@@ -78,7 +89,7 @@ func (f *fakeServer) Ingest(_ context.Context, req protocol.IngestRequest) (prot
 			suffix = "|device"
 		}
 		k := [2]string{fb.Path, fb.HeadHash + suffix}
-		if fb.FromOffset > f.ends[k] {
+		if fb.FromOffset > f.ends[k] && !fb.AllowGap {
 			resp.Files = append(resp.Files, protocol.FileResult{Path: fb.Path, HeadHash: fb.HeadHash, Status: protocol.StatusGap, EndOffset: f.ends[k]})
 			continue
 		}
@@ -106,6 +117,50 @@ func (f *fakeServer) Ingest(_ context.Context, req protocol.IngestRequest) (prot
 		return protocol.IngestResponse{}, &client.RetryableError{Status: 503}
 	}
 	return resp, nil
+}
+
+// assemble replaces a part entry by the whole line or snapshot once all chunks are there.
+func (f *fakeServer) assemble(fb *protocol.FileBatch) (whole, pending, retry bool) {
+	var l *protocol.Line
+	switch {
+	case fb.Content != nil && fb.Content.Part != nil:
+		l = fb.Content
+	case len(fb.Lines) == 1 && fb.Lines[0].Part != nil:
+		l = &fb.Lines[0]
+	default:
+		return false, false, false
+	}
+	p := l.Part
+	if f.chunks == nil {
+		f.chunks, f.partCalls = map[string]map[int][]byte{}, map[int]int{}
+	}
+	if f.partCalls[p.Index]++; f.failOnPart == p.Index && f.partCalls[p.Index] == 1 && p.Index > 0 {
+		return false, false, true
+	}
+	k := fb.Path + p.SHA256
+	if f.chunks[k] == nil {
+		f.chunks[k] = map[int][]byte{}
+	}
+	b, _ := l.Bytes()
+	f.chunks[k][p.Index] = b
+	if len(f.chunks[k]) < p.Count {
+		return false, true, false
+	}
+	var all []byte
+	for i := 0; i < p.Count; i++ {
+		all = append(all, f.chunks[k][i]...)
+	}
+	delete(f.chunks, k)
+	if sum(all) != p.SHA256 || int64(len(all)) != p.TotalLen {
+		panic("assembled part mismatch")
+	}
+	nl := protocol.EncodeLine(all)
+	if fb.Content != nil {
+		fb.Content = &nl
+	} else {
+		fb.Lines = []protocol.Line{nl}
+	}
+	return true, false, false
 }
 
 func (f *fakeServer) Files(context.Context) ([]protocol.RemoteFile, error) {

@@ -4,9 +4,12 @@
 package ingest
 
 import (
+	"bytes"
 	"cmp"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -69,7 +72,62 @@ func (h *Handler) Register(mux *http.ServeMux, lim *httpx.Limiter) {
 	mux.Handle("GET /v1/files", RequireDevice(h.db, "ingest:write", lim, http.HandlerFunc(h.files)))
 }
 
-var errKindMismatch = errors.New("kind mismatch")
+var (
+	errKindMismatch = errors.New("kind mismatch")
+	errBadParts     = errors.New("assembled line does not match its length or hash")
+)
+
+// storePart upserts one chunk of the line at offset and, once all chunks of that line are present,
+// assembles and verifies it, deletes the parts and returns the whole line.
+func storePart(ctx context.Context, tx pgx.Tx, id, offset int64, p *protocol.Part, chunk []byte) (whole []byte, done bool, err error) {
+	sum, err := hex.DecodeString(p.SHA256)
+	if err != nil {
+		return nil, false, err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM raw_line_parts WHERE received_at < now() - interval '7 days'`); err != nil {
+		return nil, false, err
+	}
+	// Chunks of a different line at this offset (changed content) can never complete this one.
+	if _, err = tx.Exec(ctx, `DELETE FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND sha256 <> $3`, id, offset, sum); err != nil {
+		return nil, false, err
+	}
+	if _, err = tx.Exec(ctx, `
+		INSERT INTO raw_line_parts(user_id, source_file_id, "offset", idx, count, total_len, sha256, chunk)
+		VALUES (app_user(), $1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (user_id, source_file_id, "offset", idx)
+		DO UPDATE SET count = excluded.count, total_len = excluded.total_len, sha256 = excluded.sha256, chunk = excluded.chunk, received_at = now()`,
+		id, offset, p.Index, p.Count, p.TotalLen, sum, chunk); err != nil {
+		return nil, false, err
+	}
+	var have int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND sha256 = $3 AND count = $4`,
+		id, offset, sum, p.Count).Scan(&have); err != nil || have < p.Count {
+		return nil, false, err
+	}
+	rows, err := tx.Query(ctx, `SELECT chunk FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND sha256 = $3 ORDER BY idx`, id, offset, sum)
+	if err != nil {
+		return nil, false, err
+	}
+	for rows.Next() {
+		var c []byte
+		if err = rows.Scan(&c); err != nil {
+			break
+		}
+		whole = append(whole, c...)
+	}
+	rows.Close()
+	if err == nil {
+		err = rows.Err()
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if h := sha256.Sum256(whole); int64(len(whole)) != p.TotalLen || !bytes.Equal(h[:], sum) {
+		return nil, false, errBadParts
+	}
+	_, err = tx.Exec(ctx, `DELETE FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2`, id, offset)
+	return whole, err == nil, err
+}
 
 func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 	dev, _ := DeviceFrom(r.Context())
@@ -124,7 +182,7 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	switch {
-	case errors.Is(err, errKindMismatch):
+	case errors.Is(err, errKindMismatch), errors.Is(err, errBadParts):
 		errJSON(w, http.StatusBadRequest, "bad_request")
 	case err != nil:
 		slog.Error("ingest", "err", err) // pgx errors carry no line contents
@@ -215,6 +273,17 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 		if err != nil {
 			return res, err
 		}
+		if p := f.Content.Part; p != nil {
+			whole, done, err := storePart(ctx, tx, id, 0, p, c)
+			if err != nil {
+				return res, err
+			}
+			if !done {
+				res.Status, res.EndOffset = protocol.StatusPending, end
+				return res, nil
+			}
+			c = whole
+		}
 		h := sha256.Sum256(c)
 		// Append-only: skip only if the newest row already has this hash (the file row lock serialises this).
 		_, err = tx.Exec(ctx, `INSERT INTO raw_snapshots(user_id, source_file_id, content_hash, content, received_at, device_id)
@@ -224,7 +293,7 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 			dev.UserID, id, h[:], c, dev.DeviceID)
 		return res, err
 	}
-	if f.FromOffset > end {
+	if f.FromOffset > end && !f.AllowGap {
 		res.Status, res.EndOffset = protocol.StatusGap, end
 		return res, nil
 	}
@@ -236,6 +305,26 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 		b, err := l.Bytes()
 		if err != nil {
 			return res, err
+		}
+		if l.Part != nil { // Validate allows a part only as the sole line
+			var stored bool // a resend after a lost ack: the line is already complete
+			if sum, err := hex.DecodeString(l.Part.SHA256); err != nil {
+				return res, err
+			} else if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM raw_lines WHERE source_file_id = $1 AND "offset" = $2 AND line_hash = $3)`, id, cur, sum).Scan(&stored); err != nil {
+				return res, err
+			} else if stored {
+				res.EndOffset = cur + l.Part.TotalLen + 1
+				return res, nil
+			}
+			whole, done, err := storePart(ctx, tx, id, cur, l.Part, b)
+			if err != nil {
+				return res, err
+			}
+			if !done {
+				res.Status, res.EndOffset = protocol.StatusPending, end
+				return res, nil
+			}
+			b = whole
 		}
 		h := sha256.Sum256(b)
 		offs[i], hashes[i], lines[i] = cur, h[:], b

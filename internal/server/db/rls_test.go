@@ -191,3 +191,23 @@ func ownerRead(t *testing.T, ownerURL, q string, dest ...any) {
 		t.Fatal(err)
 	}
 }
+
+func TestPartsAreInvisibleAndImmutableToOtherUsers(t *testing.T) {
+	f := setup(t)
+	testdb.Exec(t, f.owner, `INSERT INTO raw_line_parts(user_id,source_file_id,"offset",idx,count,total_len,sha256,chunk) SELECT $1,id,0,0,2,9,'\x01','\x7b' FROM source_files`, f.userA)
+	var n int
+	err := f.d.WithUser(context.Background(), f.userB, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(context.Background(), `SELECT count(*) FROM raw_line_parts`).Scan(&n); err != nil {
+			return err
+		}
+		_, err := tx.Exec(context.Background(), `DELETE FROM raw_line_parts`)
+		return err
+	})
+	if err != nil || n != 0 {
+		t.Fatalf("B sees %d parts, err %v", n, err)
+	}
+	ownerRead(t, f.owner, `SELECT count(*) FROM raw_line_parts`, &n)
+	if n != 1 {
+		t.Fatalf("A's part was deleted by B: %d", n)
+	}
+}

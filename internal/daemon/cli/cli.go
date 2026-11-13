@@ -310,6 +310,13 @@ func (e *env) status() int {
 	if blocked, _, _ := db.Setting(e.ctx, "blocked"); blocked != "" {
 		warn(1, blocked)
 	}
+	if sk, _ := db.ListSkipped(e.ctx); len(sk) > 0 {
+		_, _ = fmt.Fprintf(e.out, "skipped: %d entries too large to upload (kept in the spool)\n", len(sk))
+		for _, s := range sk {
+			_, _ = fmt.Fprintf(e.out, "  %s offset %d, %d bytes, sha256 %s\n", s.RelPath, s.Offset, s.Length, s.SHA256)
+		}
+		warn(1, "some lines or snapshots were too large to upload and are only stored locally")
+	}
 	return code
 }
 

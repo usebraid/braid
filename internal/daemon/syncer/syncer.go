@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/usebraid/braid/internal/daemon/client"
@@ -36,8 +37,10 @@ type Engine struct {
 	MaxBatchBytes int // uncompressed line bytes per request, default 4 MiB
 	MaxBatchLines int // default 5000
 	Now           func() time.Time
+	MaxLine       int // lines and snapshots above this many bytes are never uploaded, only recorded as skipped; default protocol.MaxLineBytes
 
-	fileErrs []error // per-file failures of the running pass; the pass goes on without those files
+	parts    map[partKey]*partState // chunks of oversized lines in flight, kept across passes so a retry resumes
+	fileErrs []error                // per-file failures of the running pass; the pass goes on without those files
 }
 
 // Result summarises a pass.
@@ -59,6 +62,37 @@ type sent struct {
 	it   *item
 	from int64
 	hash string // snapshot content hash
+	part *partRef
+}
+
+// partKey identifies one oversized line (offset) or snapshot (offset 0) by content.
+type partKey struct {
+	rel, head string
+	off       int64
+	sum       string
+}
+
+type partState struct {
+	next   int // index of the next chunk to send; chunks before it are stored on the server
+	chunks []protocol.Line
+}
+
+type partRef struct {
+	key partKey
+	idx int
+}
+
+// nextPart returns the next chunk of raw to send for key.
+func (e *Engine) nextPart(key partKey, raw []byte) (protocol.Line, int) {
+	if e.parts == nil {
+		e.parts = map[partKey]*partState{}
+	}
+	ps := e.parts[key]
+	if ps == nil {
+		ps = &partState{chunks: protocol.SplitLine(raw, protocol.ChunkSize)}
+		e.parts[key] = ps
+	}
+	return ps.chunks[ps.next], ps.next
 }
 
 // Pass runs until everything currently on disk is acked or an error occurs.
@@ -78,6 +112,9 @@ func (e *Engine) Pass(ctx context.Context) (res Result, err error) {
 	}
 	if e.Now == nil {
 		e.Now = time.Now
+	}
+	if e.MaxLine <= 0 {
+		e.MaxLine = protocol.MaxLineBytes
 	}
 	e.fileErrs = nil
 	defer func() { // visible to `braid status`; "" when nothing is stuck
@@ -392,10 +429,18 @@ func (e *Engine) ensureSpool(it *item) error {
 	return nil
 }
 
+// skip records an entry above MaxLine, which is never uploaded; its spool copy then stays for good.
+func (e *Engine) skip(ctx context.Context, it *item, off int64, raw []byte, length int64) error {
+	return e.State.AddSkipped(ctx, state.Skipped{RelPath: it.row.RelPath, HeadHash: it.row.HeadHash, Offset: off, Length: length, SHA256: protocol.HashHex(raw)})
+}
+
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 // drop removes the spool entry and the row of an item that is done and has no original.
 func (e *Engine) drop(ctx context.Context, it *item) error {
+	if keep, err := e.State.HasSkipped(ctx, it.row.RelPath, it.row.HeadHash); err != nil || keep {
+		return err // the spool copy holds an entry the server never took
+	}
 	if it.row.SpoolPath != "" {
 		if err := e.Spool.Remove(it.row.SpoolPath); err != nil {
 			return err
@@ -406,9 +451,15 @@ func (e *Engine) drop(ctx context.Context, it *item) error {
 
 // finish handles a fully acked item: gone → forget it; present → release the spool entry.
 func (e *Engine) finish(ctx context.Context, it *item) error {
+	keep, err := e.State.HasSkipped(ctx, it.row.RelPath, it.row.HeadHash)
+	if err != nil {
+		return err
+	}
 	if it.drain { // old file drained: switch the same row over to the new file
-		if err := e.Spool.Remove(it.row.SpoolPath); err != nil {
-			return err
+		if !keep {
+			if err := e.Spool.Remove(it.row.SpoolPath); err != nil {
+				return err
+			}
 		}
 		r := &it.row
 		r.SpoolPath, r.FileID, r.AckedOffset = "", "", 0
@@ -430,7 +481,7 @@ func (e *Engine) finish(ctx context.Context, it *item) error {
 	if it.abs == "" {
 		return e.drop(ctx, it)
 	}
-	if it.row.SpoolPath == "" {
+	if it.row.SpoolPath == "" || keep {
 		return nil
 	}
 	if err := e.Spool.Remove(it.row.SpoolPath); err != nil {
@@ -478,7 +529,23 @@ func (e *Engine) build(ctx context.Context, items []*item) (protocol.IngestReque
 				}
 				continue
 			}
-			if len(metas) > 0 && len(content) > rem {
+			if len(content) > e.MaxLine {
+				if it.abs != "" && !it.spooled {
+					if err := e.ensureSpool(it); err != nil {
+						return req, nil, err
+					}
+				}
+				if err := e.skip(ctx, it, 0, content, int64(len(content))); err != nil {
+					return req, nil, err
+				}
+				it.row.ContentHash, it.row.SizeSeen, it.done = hash, 0, true // treated as handled until it changes again
+				if err := e.State.Put(ctx, it.row); err != nil {
+					return req, nil, err
+				}
+				continue
+			}
+			big := len(content) > protocol.ChunkSize
+			if len(metas) > 0 && (big || len(content) > rem) {
 				break // goes alone in the next batch
 			}
 			if it.abs != "" && !it.spooled {
@@ -493,8 +560,18 @@ func (e *Engine) build(ctx context.Context, items []*item) (protocol.IngestReque
 				}
 			}
 			c := protocol.EncodeLine(content)
+			var ref *partRef
+			if big {
+				key := partKey{r.RelPath, "", 0, hash}
+				var idx int
+				c, idx = e.nextPart(key, content)
+				ref = &partRef{key, idx}
+			}
 			req.Files = append(req.Files, protocol.FileBatch{Kind: protocol.KindSnapshot, Path: r.RelPath, Content: &c})
-			metas = append(metas, sent{it: it, hash: hash})
+			metas = append(metas, sent{it: it, hash: hash, part: ref})
+			if big {
+				return req, metas, nil // a part goes in a request of its own
+			}
 			used += len(content)
 			nlines++
 			continue
@@ -519,6 +596,38 @@ func (e *Engine) build(ctx context.Context, items []*item) (protocol.IngestReque
 			}
 			continue
 		}
+		if i := slices.IndexFunc(lines, func(l []byte) bool { return len(l) > protocol.ChunkSize }); i == 0 && len(lines[0]) <= e.MaxLine {
+			if len(metas) > 0 {
+				break // a part goes in a request of its own
+			}
+			key := partKey{r.RelPath, r.HeadHash, r.AckedOffset, protocol.HashHex(lines[0])}
+			chunk, idx := e.nextPart(key, lines[0])
+			fb := protocol.FileBatch{Kind: protocol.KindAppend, Path: r.RelPath, HeadHash: r.HeadHash, FromOffset: r.AckedOffset, Lines: []protocol.Line{chunk}}
+			if r.DeviceScoped {
+				fb.Scope = protocol.ScopeDevice
+			}
+			gap, err := e.State.HasSkipped(ctx, r.RelPath, r.HeadHash)
+			if err != nil {
+				return req, nil, err
+			}
+			fb.AllowGap = gap
+			req.Files = append(req.Files, fb)
+			return req, []sent{{it: it, from: r.AckedOffset, part: &partRef{key, idx}}}, nil
+		} else if i == 0 {
+			// Advance past the line so the rest of the file syncs; the gap stays visible in `braid status`.
+			n := int64(len(lines[0])) + 1
+			if err := e.skip(ctx, it, r.AckedOffset, lines[0], n); err != nil {
+				return req, nil, err
+			}
+			it.row.AckedOffset += n
+			if err := e.State.Put(ctx, it.row); err != nil {
+				return req, nil, err
+			}
+			goto retry
+		} else if i > 0 {
+			lines = lines[:i]
+			next = protocol.EndOffset(r.AckedOffset, lines)
+		}
 		if len(metas) > 0 && next-r.AckedOffset > int64(rem) {
 			break // oversized first line goes alone
 		}
@@ -530,6 +639,11 @@ func (e *Engine) build(ctx context.Context, items []*item) (protocol.IngestReque
 		if r.DeviceScoped {
 			fb.Scope = protocol.ScopeDevice
 		}
+		gap, err := e.State.HasSkipped(ctx, r.RelPath, r.HeadHash)
+		if err != nil {
+			return req, nil, err
+		}
+		fb.AllowGap = gap
 		for _, l := range lines {
 			fb.Lines = append(fb.Lines, protocol.EncodeLine(l))
 		}
@@ -557,7 +671,23 @@ func (e *Engine) apply(ctx context.Context, resp protocol.IngestResponse, metas 
 		seen++
 		r := &m.it.row
 		switch fr.Status {
+		case protocol.StatusPending:
+			if m.part == nil {
+				return uploaded, errors.New("syncer: server answered pending to a whole line")
+			}
+			if ps := e.parts[m.part.key]; ps != nil {
+				if m.part.idx+1 < len(ps.chunks) {
+					ps.next = m.part.idx + 1
+				} else { // all chunks sent yet not assembled (server lost some): start over next pass
+					delete(e.parts, m.part.key)
+					m.it.done = true
+				}
+			}
+			continue
 		case protocol.StatusOK:
+			if m.part != nil {
+				delete(e.parts, m.part.key)
+			}
 			if r.Kind == protocol.KindSnapshot {
 				r.ContentHash, r.SizeSeen = m.hash, 0
 			} else {

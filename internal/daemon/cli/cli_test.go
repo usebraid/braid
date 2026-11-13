@@ -73,6 +73,25 @@ func TestStatusReportsBlockedFiles(t *testing.T) {
 	}
 }
 
+func TestStatusListsSkippedEntries(t *testing.T) {
+	var out, errb bytes.Buffer
+	h := cli.Hooks{NoKeychain: true, FakeToken: "braid_dev_a", ConfigDir: t.TempDir(), DataDir: t.TempDir()} //nolint:gosec // G101: test fixture
+	if code := cli.RunWithHooks(context.Background(), []string{"login", "https://braid.example"}, strings.NewReader("y\n"), &out, &errb, h); code != 0 {
+		t.Fatalf("login %d: %s", code, errb.String())
+	}
+	db, err := state.Open(filepath.Join(h.DataDir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.AddSkipped(context.Background(), state.Skipped{RelPath: "p/huge.jsonl", HeadHash: "h", Offset: 12, Length: 2 << 30, SHA256: "ab"})
+	_ = db.Close()
+	out.Reset()
+	if code := cli.RunWithHooks(context.Background(), []string{"status"}, nil, &out, &errb, h); code != 1 ||
+		!strings.Contains(out.String(), "skipped: 1") || !strings.Contains(out.String(), "p/huge.jsonl") {
+		t.Fatalf("%d %s", code, out.String())
+	}
+}
+
 func TestLoginElsewhereResetsAckedState(t *testing.T) {
 	var out, errb bytes.Buffer
 	h := cli.Hooks{NoKeychain: true, FakeToken: "braid_dev_a", ConfigDir: t.TempDir(), DataDir: t.TempDir()} //nolint:gosec // G101: test fixture
