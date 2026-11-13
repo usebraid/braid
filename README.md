@@ -14,13 +14,7 @@ Braid is a self-hosted daemon and server that syncs Claude Code transcripts from
 
 ## Install
 
-Daemon (macOS and Linux):
-
-```
-brew install usebraid/tap/braid
-```
-
-or the install script, which checks a SHA-256 sum before installing (read it first at <https://usebraid.dev/install.sh>):
+Daemon (macOS and Linux), with the install script that checks a SHA-256 sum before installing (read it first at <https://usebraid.dev/install.sh>):
 
 ```
 curl -fsSL https://get.usebraid.dev | sh

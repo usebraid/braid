@@ -1,6 +1,8 @@
 ---
 title: OIDC providers
 order: 3
+group: Run the server
+description: Sign in with Pocket ID, Authentik, Keycloak, Authelia, Zitadel or any OIDC provider.
 ---
 
 # OIDC providers

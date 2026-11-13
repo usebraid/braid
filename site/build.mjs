@@ -36,7 +36,13 @@ function frontMatter(src, name) {
   }
   if (!meta.title) throw new Error(`${name}: front matter needs a title`)
   if (!/^\d+$/.test(meta.order ?? '')) throw new Error(`${name}: front matter needs a numeric order`)
-  return { title: meta.title, order: Number(meta.order), body: src.slice(m[0].length) }
+  return {
+    title: meta.title,
+    order: Number(meta.order),
+    group: meta.group || 'Docs',
+    description: meta.description || '',
+    body: src.slice(m[0].length),
+  }
 }
 
 const slug = (s) =>
@@ -49,6 +55,7 @@ const slug = (s) =>
 
 function renderer() {
   const seen = new Map()
+  const toc = []
   const safeUrl = (h) => /^(https?:|mailto:|#|\/|\.{0,2}\/|[^:]*$)/i.test(h ?? '')
   const marked = new Marked({
     renderer: {
@@ -62,6 +69,7 @@ function renderer() {
         const n = seen.get(base) ?? 0
         seen.set(base, n + 1)
         const id = n ? `${base}-${n}` : base
+        if (depth === 2) toc.push({ id, text })
         return `<h${depth} id="${id}">${text}</h${depth}>\n`
       },
       link({ href, title, tokens }) {
@@ -74,7 +82,29 @@ function renderer() {
       },
     },
   })
-  return marked
+  return { marked, toc }
+}
+
+// The hero picture: three strands (one per device) braid with a shrinking amplitude into one stream. Drawn in a
+// 1000x220 box and stretched to the width (preserveAspectRatio none, non-scaling strokes), so it fits any screen.
+function braidSvg() {
+  const end = 760
+  const strands = [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3].map((phase, i) => {
+    const pts = []
+    for (let x = 0; x <= end; x += 5) {
+      const t = x / end
+      const amp = 62 * (1 - t) ** 1.4
+      pts.push(`${x} ${(110 - amp * Math.sin(2 * Math.PI * 2.2 * t + phase)).toFixed(1)}`)
+    }
+    return `<path class="s s${i + 1}" d="M${pts.join(' L')}"/>`
+  })
+  // Each strand twice: a background-coloured halo under it, so crossings read as over and under.
+  const halo = strands.map((p) => p.replace('class="s ', 'class="halo '))
+  const woven = strands.flatMap((p, i) => [halo[i], p])
+  return `<svg class="braid" viewBox="0 0 1000 220" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+${woven.join('\n')}
+<path class="s s0" d="M${end} 110 L992 110"/>
+</svg>`
 }
 
 async function loadDocs() {
@@ -117,19 +147,51 @@ async function main() {
       )
     }
   }
-  const diagram = await readFile(path.join(here, 'assets', 'diagram.svg'), 'utf8')
   const index = await readFile(path.join(here, 'index.html'), 'utf8')
-  await writeFile(path.join(out, 'index.html'), fill(index, { shots: figures.join('\n'), diagram }))
+  await writeFile(path.join(out, 'index.html'), fill(index, { shots: figures.join('\n'), braid: braidSvg() }))
 
   const tpl = await readFile(path.join(here, 'docs.html'), 'utf8')
-  const nav = docs.map((d) => `      <li><a href="/docs/${d.slug}/">${esc(d.title)}</a></li>`).join('\n')
-  const page = async (dir, title, content) => {
+  const groups = [...new Set(docs.map((d) => d.group))]
+  const nav = (current) =>
+    groups
+      .map((g) => {
+        const items = docs
+          .filter((d) => d.group === g)
+          .map((d) => {
+            const cur = d.slug === current ? ' aria-current="page"' : ''
+            return `<li><a href="/docs/${d.slug}/"${cur}>${esc(d.title)}</a></li>`
+          })
+        return `<li class="group"><span>${esc(g)}</span><ul>${items.join('')}</ul></li>`
+      })
+      .join('\n')
+  const page = async (dir, title, current, content, toc = '') => {
     await mkdir(path.join(out, 'docs', dir), { recursive: true })
-    await writeFile(path.join(out, 'docs', dir, 'index.html'), fill(tpl, { title: esc(title), nav, content }))
+    const html = fill(tpl, { title: esc(title), nav: nav(current), content, toc })
+    await writeFile(path.join(out, 'docs', dir, 'index.html'), html)
   }
-  for (const d of docs) await page(d.slug, d.title, renderer().parse(d.body))
-  const list = docs.map((d) => `<li><a href="/docs/${d.slug}/">${esc(d.title)}</a></li>`).join('\n')
-  await page('.', 'Documentation', `<h1>Documentation</h1>\n<ul>\n${list}\n</ul>`)
+  for (const [i, d] of docs.entries()) {
+    const { marked, toc } = renderer()
+    const body = marked.parse(d.body)
+    const link = (o, rel, label) =>
+      o ? `<a rel="${rel}" href="/docs/${o.slug}/"><span>${label}</span>${esc(o.title)}</a>` : '<span></span>'
+    const pager = `<nav class="pager" aria-label="Pages">${link(docs[i - 1], 'prev', 'Previous')}${link(docs[i + 1], 'next', 'Next')}</nav>`
+    const edit = `<p class="edit"><a href="https://github.com/usebraid/braid/edit/main/site/docs/${d.file}">Edit this page on GitHub</a></p>`
+    const side = toc.length
+      ? `<nav class="toc" aria-label="On this page"><p>On this page</p><ul>${toc.map((h) => `<li><a href="#${h.id}">${h.text}</a></li>`).join('')}</ul></nav>`
+      : ''
+    await page(d.slug, d.title, d.slug, `${body}${edit}${pager}`, side)
+  }
+  const list = groups
+    .map((g) => {
+      const items = docs
+        .filter((d) => d.group === g)
+        .map((d) => `<li><a href="/docs/${d.slug}/">${esc(d.title)}</a><p>${esc(d.description)}</p></li>`)
+      return `<h2>${esc(g)}</h2>\n<ul class="index">${items.join('')}</ul>`
+    })
+    .join('\n')
+  const intro =
+    '<p class="lead">Braid has two parts: a daemon on each device and a server you run. New here? Start with the quick start.</p>'
+  await page('.', 'Documentation', '', `<h1>Documentation</h1>\n${intro}\n${list}`)
 }
 
 main().catch((e) => {

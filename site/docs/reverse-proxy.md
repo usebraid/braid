@@ -1,6 +1,8 @@
 ---
 title: Reverse proxy
 order: 4
+group: Run the server
+description: Put TLS in front of Braid with Caddy, Traefik or nginx.
 ---
 
 # Reverse proxy

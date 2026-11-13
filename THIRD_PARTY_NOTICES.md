@@ -65,7 +65,7 @@ Included files (each adapted from `hooks/band/board.ts` @96608e0):
 
 ## JetBrains Mono (https://github.com/JetBrains/JetBrainsMono), via @fontsource-variable/jetbrains-mono 5.3.0
 
-Bundled unmodified as the dashboard's face for numbers and the brand: the self-hosted Latin subset with the weight axis (`jetbrains-mono-latin-wght-normal.woff2`), loaded by `web/src/styles/fonts.css`. Text uses the system UI font.
+Bundled unmodified as the dashboard's face for numbers and the brand: the self-hosted Latin subset with the weight axis (`jetbrains-mono-latin-wght-normal.woff2`), loaded by `web/src/styles/fonts.css`; the site ships the same file as `site/assets/fonts/jetbrains-mono.woff2` for its headings and code. Text uses the system UI font.
 
 Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
 

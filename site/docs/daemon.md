@@ -1,6 +1,8 @@
 ---
 title: Daemon
-order: 6
+order: 2
+group: Start
+description: Install the braid daemon on macOS, Linux and Windows, and fix sync problems.
 ---
 
 # Daemon

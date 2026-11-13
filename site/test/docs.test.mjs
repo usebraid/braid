@@ -9,15 +9,15 @@ import { fileURLToPath } from 'node:url'
 
 const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const docsDir = path.join(site, 'docs')
-const pages = ['quick-start', 'external-postgres', 'oidc-providers', 'reverse-proxy', 'operations', 'daemon']
+const pages = ['quick-start', 'daemon', 'oidc-providers', 'reverse-proxy', 'external-postgres', 'operations']
 const read = (p) => readFileSync(p, 'utf8')
 const doc = (n) => read(path.join(docsDir, `${n}.md`))
 
 describe('docs', () => {
-  test('the six pages exist with order 1..6', () => {
+  test('the six pages exist with order 1..6, a group and a description', () => {
     assert.deepEqual(readdirSync(docsDir).sort(), pages.map((p) => `${p}.md`).sort())
     pages.forEach((p, i) => {
-      assert.match(doc(p), new RegExp(`^---\\ntitle: .+\\norder: ${i + 1}\\n---\\n`), p)
+      assert.match(doc(p), new RegExp(`^---\\ntitle: .+\\norder: ${i + 1}\\ngroup: .+\\ndescription: .+\\n---\\n`), p)
     })
   })
 

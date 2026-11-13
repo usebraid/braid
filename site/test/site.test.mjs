@@ -34,7 +34,7 @@ describe('landing page', () => {
 
   test('has the hero sentence and every section id', () => {
     assert.ok(html.includes('Every Claude Code session, every device, one stream'))
-    for (const id of ['features', 'how-it-works', 'install', 'self-hosting', 'credits', 'license']) {
+    for (const id of ['install', 'features', 'how-it-works', 'self-hosting', 'credits', 'license']) {
       assert.ok(html.includes(`id="${id}"`), id)
     }
   })
@@ -53,7 +53,7 @@ describe('landing page', () => {
   })
 
   test('hero holds exactly the one-liner', () => {
-    const hero = html.slice(html.indexOf('class="hero"'), html.indexOf('id="screenshots"'))
+    const hero = html.slice(html.indexOf('class="hero"'), html.indexOf('class="stream"'))
     assert.equal(hero.split('curl -fsSL https://get.usebraid.dev | sh').length - 1, 1)
     assert.equal(hero.split('curl').length - 1, 1)
   })
@@ -62,6 +62,17 @@ describe('landing page', () => {
     assert.equal(main.read('CNAME'), 'usebraid.dev')
     main.read('.nojekyll')
     accessSync(path.join(main.outDir, 'install.sh'), constants.X_OK)
+  })
+
+  test('draws the three device strands and the merged stream', () => {
+    assert.equal(html.match(/<path class="s s[1-3]"/g)?.length, 3)
+    assert.equal(html.match(/<path class="halo s[1-3]"/g)?.length, 3)
+    assert.ok(html.includes('class="s s0"'))
+    assert.ok(!html.includes('{{'))
+  })
+
+  test('self-hosts its font', () => {
+    accessSync(path.join(main.outDir, 'assets', 'fonts', 'jetbrains-mono.woff2'))
   })
 
   test('does not publish the get worker', () => {
@@ -77,12 +88,27 @@ describe('docs', () => {
     })
     assert.equal(b.r.status, 0, b.r.stderr)
     const page = b.read('docs/daemon/index.html')
-    assert.ok(page.includes('<a href="/docs/daemon/">Daemon</a>'))
+    assert.ok(page.includes('<a href="/docs/daemon/" aria-current="page">Daemon</a>'))
     assert.ok(page.includes('id="windows"'))
     assert.ok(!page.includes('<script>alert'))
     assert.ok(page.includes('&lt;script&gt;'))
     assert.ok(page.includes('<!-- sql:ok -->'))
     assert.ok(!page.includes('javascript:'))
+    assert.ok(page.includes('<a href="#windows">Windows</a>'), 'on-page contents')
+  })
+
+  test('groups the nav and links previous and next pages', () => {
+    const b = build('docs-pager', {
+      'a.md': '---\ntitle: A\norder: 1\ngroup: Start\ndescription: First.\n---\n# A\n',
+      'b.md': '---\ntitle: B\norder: 2\ngroup: Server\ndescription: Second.\n---\n# B\n',
+    })
+    assert.equal(b.r.status, 0, b.r.stderr)
+    const a = b.read('docs/a/index.html')
+    assert.ok(a.includes('<span>Start</span>') && a.includes('<span>Server</span>'))
+    assert.ok(a.includes('<a rel="next" href="/docs/b/">'))
+    assert.ok(!a.includes('rel="prev"'))
+    assert.ok(b.read('docs/b/index.html').includes('<a rel="prev" href="/docs/a/">'))
+    assert.ok(b.read('docs/index.html').includes('<p>Second.</p>'))
   })
 
   test('fails on a missing title, a missing order and a duplicate order', () => {

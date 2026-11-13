@@ -1,6 +1,8 @@
 ---
 title: External Postgres
-order: 2
+order: 5
+group: Run the server
+description: Use a PostgreSQL you already run instead of the bundled one.
 ---
 
 # External Postgres

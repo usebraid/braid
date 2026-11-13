@@ -5,13 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{title}} - Braid docs</title>
 <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+<link rel="preload" href="/assets/fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/style.css">
 </head>
-<body>
+<body class="docs-page">
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
-  <a class="brand" href="/"><img src="/assets/logo.svg" alt="" width="28" height="28"><span>Braid</span></a>
-  <nav aria-label="Main"><a href="/docs/">Docs</a><a href="https://github.com/usebraid/braid">GitHub</a></nav>
+  <a class="brand" href="/"><img src="/assets/logo.svg" alt="" width="26" height="26"><span>Braid</span></a>
+  <nav aria-label="Main">
+    <a href="/docs/" aria-current="page">Docs</a>
+    <a href="https://github.com/usebraid/braid">GitHub</a>
+  </nav>
 </header>
 <div class="docs">
   <nav class="side" aria-label="Documentation">
@@ -22,6 +26,7 @@
   <main id="main" class="prose">
 {{content}}
   </main>
+{{toc}}
 </div>
 </body>
 </html>

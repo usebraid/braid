@@ -1,6 +1,8 @@
 ---
 title: Quick start
 order: 1
+group: Start
+description: Run a server with a login provider and connect your first device.
 ---
 
 # Quick start
@@ -13,14 +15,15 @@ This gets a Braid server, a login provider and your first device running on one 
 curl -fsSL https://get.usebraid.dev | sh
 ```
 
-The script verifies a SHA-256 sum before it installs anything and puts `braid` in `~/.local/bin`. You can read it first at <https://usebraid.dev/install.sh>. With Homebrew: `brew install usebraid/tap/braid`. On Windows see [the daemon page](/docs/daemon/#windows).
+The script verifies a SHA-256 sum before it installs anything and puts `braid` in `~/.local/bin`. You can read it first at <https://usebraid.dev/install.sh>. On Windows see [the daemon page](/docs/daemon/#windows).
 
 ## 2. Run the server
 
-You need Docker with Compose. Get the `deploy/` directory from the repository, then:
+You need Docker with Compose. The Compose file and its helpers are in the `deploy/` directory of the repository:
 
 ```
-cd deploy
+git clone --depth 1 https://github.com/usebraid/braid
+cd braid/deploy
 cp .env.example .env
 ```
 
@@ -65,11 +68,18 @@ braid install
 Download `checksums.txt` and `checksums.txt.sigstore.json` from the release page.
 
 ```
-cosign verify-blob --bundle checksums.txt.sigstore.json --certificate-identity https://github.com/usebraid/braid/.github/workflows/release.yml@refs/heads/main --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity https://github.com/usebraid/braid/.github/workflows/release.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
 ```
 
 Then check the archives with `sha256sum -c checksums.txt`. The server image is signed too:
 
 ```
-cosign verify --certificate-identity https://github.com/usebraid/braid/.github/workflows/release.yml@refs/heads/main --certificate-oidc-issuer https://token.actions.githubusercontent.com ghcr.io/usebraid/braid-server:<version>
+cosign verify \
+  --certificate-identity https://github.com/usebraid/braid/.github/workflows/release.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/usebraid/braid-server:<version>
 ```
