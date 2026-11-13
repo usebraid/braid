@@ -8,7 +8,7 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/go-jose/go-jose/v4 v4.1.6
+	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/gofrs/flock v0.13.2
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/zalando/go-keyring v0.2.8
