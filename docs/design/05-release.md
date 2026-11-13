@@ -15,6 +15,7 @@ Braid can be installed and self-hosted by others: signed binaries for all platfo
   - Version injected via `-ldflags -X` into both binaries (a `version` package is added).
 - Image `ghcr.io/usebraid/braid-server:<version>` multi-arch, built from the existing Dockerfile, base images pinned by digest, trivy scan must pass (HIGH/CRITICAL) before push.
 - Homebrew: tap `usebraid/homebrew-tap`, formula `braid`, updated by GoReleaser. After install: `braid login <server>` then `braid install`.
+- One-line install: `curl -fsSL https://get.usebraid.dev | sh`. `get.usebraid.dev` is a tiny Cloudflare Worker (source in `site/get-worker/`, deployed with the cf CLI) that answers `/` with the current `https://usebraid.dev/install.sh` as `text/plain` — proxied, not redirected, so plain `curl … | sh` works without `-L`. The canonical URL `https://usebraid.dev/install.sh` keeps working.
 - `install.sh` (served from usebraid.dev): detects OS/arch, downloads the release, verifies the checksum, installs to `~/.local/bin`, prints next steps. Windows: zip with `braid.exe`, documented manual steps (`braid login`, `braid install`).
 - All GitHub Actions pinned by commit SHA; tools installed in CI pinned by version and checksum.
 
