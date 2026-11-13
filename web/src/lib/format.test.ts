@@ -2,7 +2,7 @@
 // Copyright (C) 2026 The Braid Authors
 
 import { describe, expect, it } from 'vitest'
-import { dayKey, fmtCost, fmtDateTime, fmtDuration, fmtLost, fmtTokens, modelName } from './format'
+import { dayKey, fmtBytes, fmtCost, fmtDateTime, fmtDuration, fmtLost, fmtTokens, modelName } from './format'
 
 describe('format', () => {
   it('durations', () => {
@@ -20,6 +20,9 @@ describe('format', () => {
   })
   it('cost', () => {
     expect([0, 0.004, 0.0195, 12.5, 1234.567].map(fmtCost)).toEqual(['$0.00', '<$0.01', '$0.02', '$12.50', '$1,234.57'])
+  })
+  it('bytes', () => {
+    expect([0, 1023, 2048, 5 * 1024 ** 3].map(fmtBytes)).toEqual(['0 B', '1023 B', '2.0 KiB', '5.0 GiB'])
   })
   it('time lost', () => {
     expect([45, 600, 5400, 7200].map(fmtLost)).toEqual(['45s', '10m', '1h 30m', '2h 0m'])

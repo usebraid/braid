@@ -23,6 +23,18 @@ export function fmtCost(usd: number): string {
   return `$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+export function fmtBytes(n: number): string {
+  const u = ['KiB', 'MiB', 'GiB', 'TiB']
+  if (n < 1024) return `${n} B`
+  let i = -1
+  let v = n
+  do {
+    v /= 1024
+    i++
+  } while (v >= 1024 && i < u.length - 1)
+  return `${v.toFixed(1)} ${u[i]}`
+}
+
 export function fmtLost(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`

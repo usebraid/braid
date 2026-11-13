@@ -11,6 +11,7 @@ const body = (path: string): unknown => {
   if (path === '/api/v1/me') return ME
   if (path === '/api/v1/about') return { version: '0.2.0', commit: 'abc', source_url: 'https://example.com/src' }
   if (path === '/api/v1/devices') return []
+  if (path === '/api/v1/audit') return { entries: [], next: null }
   if (path === '/api/v1/stats/live') return { items: [] }
   if (path === '/api/v1/stats/failures')
     return { by_category: [], by_limit_type: [], by_day: [], time_lost_s: 0, items: [], next: null }
@@ -54,6 +55,7 @@ const routed: [string, string][] = [
   ['/failures', 'Failures'],
   ['/search', 'Search'],
   ['/devices', 'Devices'],
+  ['/audit', 'Audit'],
   ['/settings', 'Settings'],
 ]
 it.each(routed)('routes %s to its view', async (path, title) => {

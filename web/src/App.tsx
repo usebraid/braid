@@ -7,6 +7,8 @@ import { LiveProvider } from './api/live'
 import { MeProvider, useMe } from './api/session'
 import { Shell } from './components/Shell'
 import { ROUTES, type RouteDef } from './routes'
+import { Admin } from './views/Admin'
+import { Audit } from './views/Audit'
 import { Devices } from './views/Devices'
 import { Failures } from './views/Failures'
 import { LiveView } from './views/LiveView'
@@ -29,6 +31,8 @@ const VIEWS: Record<string, ReactNode> = {
   '/failures': <Failures />,
   '/search': <Search />,
   '/devices': <Devices />,
+  '/audit': <Audit />,
+  '/admin': <Admin />,
   '/settings': <Settings />,
 }
 const view = (r: RouteDef) => VIEWS[r.path] ?? <Placeholder title={r.label} />
