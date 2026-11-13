@@ -1,6 +1,6 @@
 # Third-party notices
 
-Braid is licensed under AGPL-3.0-or-later. Code from ponytail is now included (the price table and cost formula, see `internal/server/derive/prices.go`); no code from the other projects below is included yet. This file holds their license texts (copied code keeps its original copyright header).
+Braid is licensed under AGPL-3.0-or-later. Code from ponytail is now included (the price table and cost formula, see `internal/server/derive/prices.go`; formatting helpers, see `web/src/lib/format.ts`); no code from the other projects below is included yet. This file holds their license texts (copied code keeps its original copyright header).
 
 ## agents-observe (https://github.com/simple10/agents-observe)
 
