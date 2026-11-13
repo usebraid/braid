@@ -27,7 +27,7 @@
   },
   "overrides": [
     {
-      "includes": ["tests/claude-code.fake.ts"],
+      "includes": ["tests/**"],
       "linter": {
         "rules": {
           "suspicious": {

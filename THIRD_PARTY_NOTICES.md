@@ -59,7 +59,7 @@ Included files (each adapted from `hooks/band/board.ts` @96608e0):
 - `web/src/theme/theme.ts`: `THEMES` and `applyTheme`.
 - `web/src/components/ui.tsx`: the KPI, segmented control, chip and theme button markup.
 - `web/src/components/charts/Sparkline.tsx`, `StreamChart.tsx`, `smooth.ts`, `Honeycomb.tsx`, `BarList.tsx`: the sparkline, stream chart, smoothing, heatmap and bar drawing code (added with the dashboard charts).
-- `band/hooks/band/*.ts(x)`: adapted from `hooks/band/register.tsx` and `hooks/band/types.d.ts` (module structure, palette names, slot stacking).
+- `band/hooks/band/*.ts(x)`: adapted from `hooks/band/register.tsx` and `hooks/band/types.d.ts` @96608e0 (module structure, palette names, slot stacking).
 - `band/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`: structural templates from ponytail's `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
 
 ## coder/websocket (https://github.com/coder/websocket)
