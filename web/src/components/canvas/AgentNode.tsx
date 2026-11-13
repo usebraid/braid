@@ -2,60 +2,81 @@
 // Copyright (C) 2026 The Braid Authors
 
 import { Handle, type Node, type NodeProps, Position } from '@xyflow/react'
-import type { KeyboardEvent } from 'react'
-import { fmtCost, fmtDuration, fmtTokens } from '../../lib/format'
-import { type AgentNodeData, skillColor } from '../../lib/graph'
+import type { CSSProperties, KeyboardEvent } from 'react'
+import { fmtCost, fmtDuration } from '../../lib/format'
+import { type AgentNodeData, type MoreNodeData, skillColor } from '../../lib/graph'
 import { useAgentParam } from '../../lib/useAgentParam'
-import { Pill } from '../ui'
 
-const skillName = (s: string) => s.slice(s.indexOf(':') + 1)
+const activate = (fn: () => void) => (e: KeyboardEvent) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    fn()
+  }
+}
+
+const agentState = (a: AgentNodeData) => (a.live ? 'running' : a.failures.length > 0 ? 'failed' : 'finished')
 
 export function AgentNode({ data }: NodeProps<Node<AgentNodeData, 'agent'>>) {
   const { agent: a, phases, failures, live } = data
   const [selected, select] = useAgentParam()
-  const calls = Object.values(a.tool_calls).reduce((n, v) => n + v, 0)
-  const key = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      select(a.agent_id)
-    }
-  }
+  const state = agentState(data)
+  const skills = phases.map((p) => p.skill.slice(p.skill.indexOf(':') + 1))
+  // the full text lives in the tooltip and the transcript panel; the card truncates
+  const title = [a.description, skills.length ? `Skills: ${skills.join(', ')}` : ''].filter(Boolean).join('\n')
   return (
     // biome-ignore lint/a11y/useSemanticElements: a button cannot hold the block content of the node card
     <div
-      className={live ? 'card agent-node live' : 'card agent-node'}
+      className={`agent-node${live ? ' live' : ''}${state === 'failed' ? ' failed' : ''}`}
+      style={{ '--c': skillColor(a.agent_type) } as CSSProperties}
       role="button"
       tabIndex={0}
+      title={title}
       data-testid={`agent-node-${a.agent_id}`}
-      aria-label={`${a.agent_type} agent ${a.agent_id}`}
+      aria-label={`${a.agent_type}: ${a.description || a.agent_id}, ${state}`}
       aria-current={selected === a.agent_id ? 'true' : undefined}
       onClick={() => select(a.agent_id)}
-      onKeyDown={key}
+      onKeyDown={activate(() => select(a.agent_id))}
     >
-      <Handle type="target" position={Position.Top} isConnectable={false} />
+      <Handle type="target" position={Position.Left} isConnectable={false} />
       <header>
-        <span>{a.agent_type}</span>
-        <span className="num">
-          {a.duration_estimated ? '≈ ' : ''}
-          {fmtDuration(a.duration_ms)}
-        </span>
+        <span className="type">{a.agent_type}</span>
+        <span className={`state ${state === 'running' ? 'live' : state === 'failed' ? 'bad' : 'ok'}`} />
       </header>
-      <div className="desc">{a.description}</div>
-      <div className="counts num">
-        <span>{calls} calls</span>
-        <span>{a.tool_errors} errors</span>
+      <div className="desc">{a.description || (a.agent_id === 'main' ? 'Main conversation' : a.agent_id)}</div>
+      <div className="stats">
+        <span>{fmtDuration(a.duration_ms)}</span>
         <span>{fmtCost(a.usage.cost_usd)}</span>
-        <span>{fmtTokens(a.usage.tokens)} tok</span>
+        {failures.length > 0 ? (
+          <span className="err-n">{`${failures.length} ${failures.length === 1 ? 'failure' : 'failures'}`}</span>
+        ) : null}
       </div>
-      {phases.map((p) => (
-        <div key={p.seq} className="phase" style={{ background: skillColor(p.skill) }} title={p.skill}>
-          {skillName(p.skill)}
+      {phases.length ? (
+        <div className="phases" aria-hidden="true">
+          {phases.map((p) => (
+            <span key={p.seq} style={{ background: skillColor(p.skill) }} />
+          ))}
         </div>
-      ))}
-      {failures.length > 0 ? (
-        <Pill kind="bad">{`${failures.length} ${failures.length === 1 ? 'failure' : 'failures'}`}</Pill>
       ) : null}
-      <Handle type="source" position={Position.Bottom} isConnectable={false} />
+      <Handle type="source" position={Position.Right} isConnectable={false} />
+    </div>
+  )
+}
+
+export function MoreNode({ data }: NodeProps<Node<MoreNodeData & { onExpand: (id: string) => void }, 'more'>>) {
+  const open = () => data.onExpand(data.parent)
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: React Flow positions this div; it acts as a button
+    <div
+      className="agent-node group"
+      role="button"
+      tabIndex={0}
+      data-testid={`more-${data.parent}`}
+      aria-label={`Show ${data.hidden} more agents`}
+      onClick={open}
+      onKeyDown={activate(open)}
+    >
+      <Handle type="target" position={Position.Left} isConnectable={false} />
+      {`+${data.hidden} more`}
     </div>
   )
 }

@@ -16,6 +16,8 @@ const pages = [
   '/admin',
   '/settings',
   '/sessions/g1',
+  '/sessions/big1',
+  '/sessions/big1?view=list',
 ]
 
 for (const theme of ['dark', 'light'] as const) {

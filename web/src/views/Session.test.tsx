@@ -2,7 +2,7 @@
 // Copyright (C) 2026 The Braid Authors
 
 // web/src/views/Session.test.tsx
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { renderApp } from '../test/render'
@@ -59,12 +59,31 @@ vi.mock('../api/client', async (orig) => ({
   get: vi.fn(async (p: string) => (p.endsWith('/devices') ? [] : detail)),
 }))
 
-it('draws main plus nested subagents, phase bands and failure markers, and selects an agent from the list', async () => {
+it('draws main plus nested subagents, phase bands and failure markers, and selects an agent from its node', async () => {
   renderApp(<Session />, { route: '/sessions/g1' })
   expect(await screen.findByRole('heading', { name: 'Golden custom' })).toBeInTheDocument()
   for (const id of ['main', 'a1', 'a2', 'a3']) expect(await screen.findByTestId(`agent-node-${id}`)).toBeInTheDocument()
-  expect(screen.getByTestId('agent-node-main')).toHaveTextContent('brainstorming')
+  expect(screen.getByTestId('agent-node-main')).toHaveAttribute('title', expect.stringContaining('brainstorming'))
   expect(screen.getByTestId('agent-node-a2')).toHaveTextContent('1 failure')
-  await userEvent.click(screen.getByRole('button', { name: /d-a3/ }))
+  screen.getByRole('button', { name: /d-a3/ }).focus() // a pointer click starts d3-zoom, which jsdom cannot run
+  await userEvent.keyboard('{Enter}')
   expect(screen.getByTestId('agent-node-a3')).toHaveAttribute('aria-current', 'true')
+})
+
+it('offers an always-readable list of every agent, nested by spawn depth', async () => {
+  renderApp(<Session />, { route: '/sessions/g1?view=list' })
+  const list = await screen.findByRole('list', { name: 'Agents' })
+  expect(screen.queryByTestId('agent-node-main')).toBeNull()
+  const rows = within(list).getAllByRole('button')
+  expect(rows.map((r) => r.textContent)).toEqual([
+    expect.stringContaining('d-main'),
+    expect.stringContaining('d-a1'),
+    expect.stringContaining('d-a3'),
+    expect.stringContaining('d-a2'),
+  ])
+  expect(rows[2]).toHaveStyle({ '--depth': '2' })
+  await userEvent.click(rows[2] as HTMLElement)
+  expect(rows[2]).toHaveAttribute('aria-current', 'true')
+  await userEvent.click(screen.getByRole('button', { name: 'Canvas' }))
+  expect(await screen.findByTestId('agent-node-a3')).toHaveAttribute('aria-current', 'true')
 })

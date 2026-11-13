@@ -19,7 +19,7 @@ test.describe('views as alice', () => {
     await expect(page.getByTestId('kpi-failures')).toContainText('7')
     await expect(page.getByRole('img', { name: /Cost per day/ })).toBeVisible()
     await page.goto(`/?${RANGE}`)
-    await expect(page.getByTestId('kpi-sessions')).toContainText('3') // g1, b1 and the live session
+    await expect(page.getByTestId('kpi-sessions')).toContainText('4') // g1, b1, big1 and the live session
     expect(csp).toEqual([])
   })
 

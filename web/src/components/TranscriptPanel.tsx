@@ -2,8 +2,10 @@
 // Copyright (C) 2026 The Braid Authors
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMe } from '../api/session'
 import { statsSessionLines } from '../api/stats'
 import type { LineItem } from '../api/types'
+import { fmtDateTime } from '../lib/format'
 import { type Entry, entriesOf } from '../lib/transcript'
 import { useAgentParam } from '../lib/useAgentParam'
 import { ErrorNote, Pill } from './ui'
@@ -50,6 +52,7 @@ function Body({ e }: { e: Entry }) {
 // Everything from the transcript is rendered as text, never as markup.
 export function TranscriptPanel(p: { sessionId: string; agentId: string; focusLine?: number; liveTick: unknown }) {
   const [, select] = useAgentParam()
+  const { time_zone: tz } = useMe()
   const [items, setItems] = useState<LineItem[]>([])
   const [prev, setPrev] = useState<string | null>(null)
   const [next, setNext] = useState<string | null>(null)
@@ -146,7 +149,7 @@ export function TranscriptPanel(p: { sessionId: string; agentId: string; focusLi
     <aside className="card transcript" aria-label="Transcript" ref={root}>
       <div className="list-head">
         <h2>{p.agentId}</h2>
-        <button type="button" className="btn" onClick={() => select(null)}>
+        <button type="button" className="btn ghost" onClick={() => select(null)}>
           Close
         </button>
       </div>
@@ -165,7 +168,7 @@ export function TranscriptPanel(p: { sessionId: string; agentId: string; focusLi
         >
           <header>
             <b>{LABEL[e.kind]}</b>
-            {e.at ? <time dateTime={e.at}>{e.at}</time> : null}
+            {e.at ? <time dateTime={e.at}>{fmtDateTime(e.at, tz)}</time> : null}
             {e.isError ? <Pill kind="bad">error</Pill> : null}
           </header>
           <Body e={e} />
