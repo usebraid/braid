@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/usebraid/braid/compare/v0.1.0...v0.2.0) (2026-11-13)
+
+
+### Features
+
+* **site:** redesign the landing page and the docs ([7751e78](https://github.com/usebraid/braid/commit/7751e7822147649f6ebcc3f1ab5af6c26d48c7c1))
+
+
+### Bug Fixes
+
+* **site:** fetch the install script with redirect: manual ([468d7ee](https://github.com/usebraid/braid/commit/468d7eeecc7e4c8a2fe58f6a11c4c74e5bb44a23))
+
 ## 0.1.0 (2026-11-13)
 
 
