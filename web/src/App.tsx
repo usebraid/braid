@@ -7,6 +7,7 @@ import { LiveProvider } from './api/live'
 import { MeProvider, useMe } from './api/session'
 import { Shell } from './components/Shell'
 import { ROUTES, type RouteDef } from './routes'
+import { LiveView } from './views/LiveView'
 import { NotFound } from './views/NotFound'
 import { Overview } from './views/Overview'
 import { Placeholder } from './views/Placeholder'
@@ -18,7 +19,7 @@ function AdminOnly({ children }: { children: React.ReactNode }) {
 }
 
 // Views that have landed; every other route still shows its placeholder.
-const VIEWS: Record<string, ReactNode> = { '/timeline': <Timeline /> }
+const VIEWS: Record<string, ReactNode> = { '/timeline': <Timeline />, '/live': <LiveView /> }
 const view = (r: RouteDef) => VIEWS[r.path] ?? <Placeholder title={r.label} />
 
 export function App() {
