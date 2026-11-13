@@ -3,6 +3,7 @@
 
 import { useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { LiveBanner } from '../api/live'
 import { useMe } from '../api/session'
 import { ROUTES, titleFor } from '../routes'
 import { Footer } from './Footer'
@@ -52,6 +53,7 @@ export function Shell() {
         </div>
       </aside>
       <div>
+        <LiveBanner />
         <main id="main" tabIndex={-1} ref={main}>
           <Outlet />
         </main>

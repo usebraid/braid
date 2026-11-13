@@ -2,6 +2,7 @@
 // Copyright (C) 2026 The Braid Authors
 
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { LiveProvider } from './api/live'
 import { MeProvider, useMe } from './api/session'
 import { Shell } from './components/Shell'
 import { ROUTES } from './routes'
@@ -16,31 +17,33 @@ export function App() {
   return (
     <BrowserRouter>
       <MeProvider>
-        <Routes>
-          <Route element={<Shell />}>
-            {ROUTES.map((r) =>
-              r.path === '/' ? (
-                <Route key={r.path} index element={<Placeholder title={r.label} />} />
-              ) : (
-                <Route
-                  key={r.path}
-                  path={r.path}
-                  element={
-                    r.adminOnly ? (
-                      <AdminOnly>
+        <LiveProvider>
+          <Routes>
+            <Route element={<Shell />}>
+              {ROUTES.map((r) =>
+                r.path === '/' ? (
+                  <Route key={r.path} index element={<Placeholder title={r.label} />} />
+                ) : (
+                  <Route
+                    key={r.path}
+                    path={r.path}
+                    element={
+                      r.adminOnly ? (
+                        <AdminOnly>
+                          <Placeholder title={r.label} />
+                        </AdminOnly>
+                      ) : (
                         <Placeholder title={r.label} />
-                      </AdminOnly>
-                    ) : (
-                      <Placeholder title={r.label} />
-                    )
-                  }
-                />
-              ),
-            )}
-            <Route path="/sessions/:id" element={<Placeholder title="Session" />} />
-            <Route path="*" element={<NotFound />} />
-          </Route>
-        </Routes>
+                      )
+                    }
+                  />
+                ),
+              )}
+              <Route path="/sessions/:id" element={<Placeholder title="Session" />} />
+              <Route path="*" element={<NotFound />} />
+            </Route>
+          </Routes>
+        </LiveProvider>
       </MeProvider>
     </BrowserRouter>
   )

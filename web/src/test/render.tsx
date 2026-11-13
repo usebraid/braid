@@ -4,6 +4,7 @@
 import { type RenderResult, render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
+import { LiveProvider, type LiveSource } from '../api/live'
 import { MeProvider } from '../api/session'
 import type { Me } from '../api/types'
 
@@ -16,11 +17,18 @@ const ME: Me = {
   time_zone_set: true,
 }
 
-// The live-events provider joins here in Task 12.
-export function renderApp(ui: ReactNode, o: { route?: string; me?: Partial<Me> } = {}): RenderResult {
+// An inert live client, so tests never open a socket; pass `live` to drive events.
+const IDLE: LiveSource = { status: 'open', start() {}, stop() {}, subscribe: () => () => {}, onStatus: () => () => {} }
+
+export function renderApp(
+  ui: ReactNode,
+  o: { route?: string; me?: Partial<Me>; live?: LiveSource } = {},
+): RenderResult {
   return render(
     <MemoryRouter initialEntries={[o.route ?? '/']}>
-      <MeProvider initial={{ ...ME, ...o.me }}>{ui}</MeProvider>
+      <MeProvider initial={{ ...ME, ...o.me }}>
+        <LiveProvider client={o.live ?? IDLE}>{ui}</LiveProvider>
+      </MeProvider>
     </MemoryRouter>,
   )
 }

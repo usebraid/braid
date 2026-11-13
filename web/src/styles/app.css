@@ -676,3 +676,10 @@ main:focus {
 .foot a {
   color: var(--muted);
 }
+.live-banner {
+  background: var(--warnbg);
+  color: var(--warn);
+  padding: 8px 16px;
+  font-size: 13px;
+  text-align: center;
+}
