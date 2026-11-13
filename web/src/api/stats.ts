@@ -31,5 +31,4 @@ export const statsFailures = (q: Query, signal?: AbortSignal) => get<FailurePage
 export const statsSearch = (q: Query, signal?: AbortSignal) => get<SearchResult>('/api/v1/stats/search', q, signal)
 export const statsSessionChat = (id: string, q: Query, signal?: AbortSignal) =>
   get<ChatPage>(`/api/v1/stats/sessions/${enc(id)}/chat`, q, signal)
-/** @public used by the timeline graph, which lands in the next change */
 export const statsTimeline = (q: Query, signal?: AbortSignal) => get<TimelinePage>('/api/v1/stats/timeline', q, signal)

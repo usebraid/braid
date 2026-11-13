@@ -1617,3 +1617,70 @@ td.empty {
     overflow: hidden;
   }
 }
+
+/* Timeline graph: one line, a dot per start (filled) or resume (ring) */
+.tl-graph {
+  list-style: none;
+  margin: 0;
+  padding: 8px 16px;
+}
+.tl-day {
+  color: var(--faint);
+  font-size: var(--t-xs);
+  padding: 14px 0 4px 0;
+}
+.tl-row {
+  display: grid;
+  grid-template-columns: 48px 28px minmax(0, 1fr);
+  color: inherit;
+  text-decoration: none;
+  border-radius: 6px;
+}
+.tl-row:hover {
+  background: var(--track);
+}
+.tl-row time {
+  color: var(--faint);
+  font: var(--t-xs) var(--font-mono);
+  padding-top: 10px;
+}
+.tl-dot {
+  position: relative;
+}
+.tl-dot::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--line2);
+}
+.tl-dot::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 11px;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: currentcolor;
+  border: 2px solid currentcolor;
+}
+.tl-dot.ring::after {
+  background: var(--card-solid);
+}
+.tl-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 7px 0;
+  min-width: 0;
+}
+.tl-sub {
+  flex-basis: 100%;
+  color: var(--faint);
+  font-size: var(--t-xs);
+}

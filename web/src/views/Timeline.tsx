@@ -1,17 +1,52 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
 
+import { useSearchParams } from 'react-router-dom'
 import { useApi } from '../api/hooks'
 import { useMe } from '../api/session'
 import { listDevices, statsSessions } from '../api/stats'
 import type { SessionItem } from '../api/types'
 import { useFilters } from '../api/useFilters'
 import { FilterBar, PageHead } from '../components/FilterBar'
-import { Card, Empty, ErrorNote, TableWrap } from '../components/ui'
+import { TimelineGraph } from '../components/graph/TimelineGraph'
+import { Card, Empty, ErrorNote, Segmented, TableWrap } from '../components/ui'
 import { useInfinite } from '../lib/useInfinite'
 import { SessionRow } from './SessionRow'
 
 export function Timeline() {
+  const [sp, setSp] = useSearchParams()
+  const view = sp.get('view') === 'list' ? 'list' : 'graph'
+  const setView = (next: 'graph' | 'list') =>
+    setSp(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        if (next === 'graph') n.delete('view')
+        else n.set('view', next)
+        return n
+      },
+      { replace: true },
+    )
+  return (
+    <>
+      <PageHead title="Timeline" range />
+      <FilterBar />
+      <div className="sess-tools">
+        <Segmented
+          label="Timeline view"
+          value={view}
+          options={[
+            { value: 'graph', label: 'Graph' },
+            { value: 'list', label: 'List' },
+          ]}
+          onChange={setView}
+        />
+      </div>
+      {view === 'list' ? <TimelineList /> : <TimelineGraph />}
+    </>
+  )
+}
+
+function TimelineList() {
   const me = useMe()
   const { query } = useFilters()
   const devs = useApi('devices', listDevices)
@@ -24,8 +59,6 @@ export function Timeline() {
   })
   return (
     <>
-      <PageHead title="Timeline" range />
-      <FilterBar />
       {list.error ? <ErrorNote error={list.error} retry={list.more} /> : null}
       {list.items.length === 0 && !list.loading && !list.error ? (
         <Empty>No sessions in this period. Pick a longer range or reset the filters.</Empty>
