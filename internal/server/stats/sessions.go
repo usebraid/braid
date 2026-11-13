@@ -308,6 +308,11 @@ func (h *Handler) sessionLines(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, page)
 }
 
+// linesQuery selects one page of raw lines plus one row; the LIMIT keeps a long transcript from being read whole.
+func linesQuery(cond, files, order string) string {
+	return `SELECT r.id, r."offset", r.line FROM raw_lines r WHERE ` + cond + ` AND ` + files + ` ORDER BY ` + order + ` LIMIT $4`
+}
+
 // readLines pages the lines of one agent: ascending after `after`, or with before > 0 the newest lines below `before`, ascending.
 func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent string, after, before int64, limit int, page *LinePage) error {
 	var ok bool
@@ -326,7 +331,7 @@ func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent strin
 	if before > 0 {
 		order, cond, arg = "r.id DESC", "r.id < $3", before
 	}
-	rows, err := tx.Query(ctx, `SELECT r.id, r."offset", r.line FROM raw_lines r WHERE `+cond+` AND `+files+` ORDER BY `+order, session, agent, arg)
+	rows, err := tx.Query(ctx, linesQuery(cond, files, order), session, agent, arg, limit+1) // one more row tells whether a next page exists
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -160,6 +161,14 @@ func TestSessionLines(t *testing.T) {
 	for _, path := range []string{"/api/v1/stats/sessions/s1/lines?agent=ghost", "/api/v1/stats/sessions/ghost/lines?agent=main"} {
 		if st := x.get(t, path, nil); st != 404 {
 			t.Errorf("%s: %d", path, st)
+		}
+	}
+}
+
+func TestLinePageQueryIsLimited(t *testing.T) {
+	for _, order := range []string{"r.id", "r.id DESC"} {
+		if q := stats.LinesQuery("r.id > $3", "true", order); !strings.HasSuffix(q, " LIMIT $4") {
+			t.Errorf("unbounded line query for order %s: %s", order, q)
 		}
 	}
 }
