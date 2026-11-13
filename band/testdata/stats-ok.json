@@ -1,1 +1,7 @@
-{"version":1,"sync":{"state":"ok","backlog_bytes":0},"today":{"cost_usd":4.25,"tokens":123456,"sessions":3,"agent_time_s":125,"failures":2},"session":{"cost_usd":0.5,"tokens":900,"failures":1},"limit":{"type":"five_hour","resets_at":"2026-11-13T15:00:00Z"}}
+{
+  "version": 1,
+  "sync": { "state": "ok", "backlog_bytes": 0 },
+  "today": { "cost_usd": 4.25, "tokens": 123456, "sessions": 3, "agent_time_s": 125, "failures": 2 },
+  "session": { "cost_usd": 0.5, "tokens": 900, "failures": 1 },
+  "limit": { "type": "five_hour", "resets_at": "2026-11-13T15:00:00Z" }
+}

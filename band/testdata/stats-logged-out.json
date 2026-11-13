@@ -1,1 +1,5 @@
-{"version":1,"sync":{"state":"logged_out","backlog_bytes":0},"today":{"cost_usd":0,"tokens":0,"sessions":0,"agent_time_s":0,"failures":0}}
+{
+  "version": 1,
+  "sync": { "state": "logged_out", "backlog_bytes": 0 },
+  "today": { "cost_usd": 0, "tokens": 0, "sessions": 0, "agent_time_s": 0, "failures": 0 }
+}

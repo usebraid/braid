@@ -1,6 +1,6 @@
 # Third-party notices
 
-Braid is licensed under AGPL-3.0-or-later. Code from ponytail is included (the price table and cost formula, the dashboard look and its UI and chart code; see "Included files" below); only ideas, no code, were taken from agents-observe. This file holds the license texts (copied code keeps its original copyright header).
+Braid is licensed under AGPL-3.0-or-later. Code from ponytail is included (the price table and cost formula, the dashboard look and its UI and chart code, the band module and the plugin manifests; see "Included files" below); only ideas, no code, were taken from agents-observe. This file holds the license texts (copied code keeps its original copyright header).
 
 ## agents-observe (https://github.com/simple10/agents-observe)
 
@@ -59,6 +59,8 @@ Included files (each adapted from `hooks/band/board.ts` @96608e0):
 - `web/src/theme/theme.ts`: `THEMES` and `applyTheme`.
 - `web/src/components/ui.tsx`: the KPI, segmented control, chip and theme button markup.
 - `web/src/components/charts/Sparkline.tsx`, `StreamChart.tsx`, `smooth.ts`, `Honeycomb.tsx`, `BarList.tsx`: the sparkline, stream chart, smoothing, heatmap and bar drawing code (added with the dashboard charts).
+- `band/hooks/band/*.ts(x)`: adapted from `hooks/band/register.tsx` and `hooks/band/types.d.ts` (module structure, palette names, slot stacking).
+- `band/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`: structural templates from ponytail's `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
 
 ## coder/websocket (https://github.com/coder/websocket)
 

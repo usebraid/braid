@@ -1,0 +1,13 @@
+{
+  "name": "braid",
+  "description": "Braid: Claude Code usage across your devices.",
+  "owner": { "name": "Braid Authors" },
+  "plugins": [
+    {
+      "name": "braid",
+      "description": "Shows session cost, today's usage and Braid sync state above the prompt. Costs no tokens.",
+      "source": "./band",
+      "category": "monitoring"
+    }
+  ]
+}

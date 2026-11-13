@@ -1,1 +1,6 @@
-{"version":1,"sync":{"state":"backlog","backlog_bytes":60,"last_ack":"2026-11-13T11:00:00Z"},"today":{"cost_usd":4.25,"tokens":123456,"sessions":3,"agent_time_s":125,"failures":2},"session":{"cost_usd":0.5,"tokens":900,"failures":1}}
+{
+  "version": 1,
+  "sync": { "state": "backlog", "backlog_bytes": 60, "last_ack": "2026-11-13T11:00:00Z" },
+  "today": { "cost_usd": 4.25, "tokens": 123456, "sessions": 3, "agent_time_s": 125, "failures": 2 },
+  "session": { "cost_usd": 0.5, "tokens": 900, "failures": 1 }
+}

@@ -1,0 +1,4 @@
+{
+  "entry": ["hooks/band/register.tsx", "tests/**/*.test.{ts,tsx}"],
+  "project": ["hooks/**", "tests/**"]
+}

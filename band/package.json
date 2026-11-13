@@ -1,0 +1,21 @@
+{
+  "name": "braid-band",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=26.13"
+  },
+  "scripts": {
+    "check": "biome ci . && tsc --noEmit && knip && vitest run",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.7",
+    "@types/node": "26.6.6",
+    "knip": "6.45.1",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}
