@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -72,9 +73,17 @@ type partKey struct {
 	sum       string
 }
 
+func partKeyOf(m sent) partKey {
+	if m.part == nil {
+		return partKey{}
+	}
+	return m.part.key
+}
+
 type partState struct {
-	next   int // index of the next chunk to send; chunks before it are stored on the server
-	chunks []protocol.Line
+	restarted bool // the series was already restarted from chunk 0 after a rejection
+	next      int  // index of the next chunk to send; chunks before it are stored on the server
+	chunks    []protocol.Line
 }
 
 type partRef struct {
@@ -147,6 +156,9 @@ func (e *Engine) Pass(ctx context.Context) (res Result, err error) {
 			break
 		}
 		resp, err := e.Up.Ingest(ctx, req)
+		if e.pauseOnQuota(metas, err) {
+			continue
+		}
 		var perm *client.PermanentError
 		if errors.As(err, &perm) {
 			// The server rejects the whole request; find the file(s) that cause it, block those, keep the rest.
@@ -172,6 +184,18 @@ func (e *Engine) Pass(ctx context.Context) (res Result, err error) {
 	return res, errors.Join(e.fileErrs...)
 }
 
+// pauseOnQuota handles the server's pending-parts quota (413 with Retry-After on a part): only that
+// chunked upload waits for a later pass, everything else keeps syncing.
+func (e *Engine) pauseOnQuota(metas []sent, err error) bool {
+	var re *client.RetryableError
+	if len(metas) != 1 || metas[0].part == nil || !errors.As(err, &re) || re.Status != http.StatusRequestEntityTooLarge {
+		return false
+	}
+	metas[0].it.done = true
+	e.fileErrs = append(e.fileErrs, fmt.Errorf("syncer: server quota for unfinished chunked uploads reached, %s waits: %w", metas[0].it.row.RelPath, err))
+	return true
+}
+
 // isolate re-sends a rejected request one file at a time. Files the server still rejects permanently
 // are blocked for this pass (recorded in fileErrs); the others are returned with their responses.
 func (e *Engine) isolate(ctx context.Context, req protocol.IngestRequest, metas []sent) (protocol.IngestResponse, []sent, error) {
@@ -179,8 +203,16 @@ func (e *Engine) isolate(ctx context.Context, req protocol.IngestRequest, metas 
 	var okMetas []sent
 	for i, m := range metas {
 		resp, err := e.Up.Ingest(ctx, protocol.IngestRequest{Files: req.Files[i : i+1]})
+		if e.pauseOnQuota([]sent{m}, err) {
+			continue
+		}
 		var perm *client.PermanentError
 		if errors.As(err, &perm) {
+			if ps := e.parts[partKeyOf(m)]; m.part != nil && ps != nil && !ps.restarted {
+				// A rejected chunk may be a poisoned leftover on the server: resend the series from chunk 0 once.
+				ps.restarted, ps.next = true, 0
+				continue
+			}
 			m.it.done = true
 			e.fileErrs = append(e.fileErrs, fmt.Errorf("syncer: server rejects %s: %w", m.it.row.RelPath, err))
 			continue
