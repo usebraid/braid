@@ -155,6 +155,16 @@ func (e *Env) Reset(t testing.TB, userID string) {
 	}
 }
 
+// Exec runs a statement as the database owner.
+func (e *Env) Exec(t testing.TB, q string, args ...any) {
+	t.Helper()
+	e.owner(t, func(ctx context.Context, c *pgx.Conn) {
+		if _, err := c.Exec(ctx, q, args...); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
 // N runs an owner query returning one integer.
 func (e *Env) N(t testing.TB, q string, args ...any) int {
 	t.Helper()

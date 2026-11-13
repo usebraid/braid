@@ -214,7 +214,10 @@ func firstPromptText(s string) string {
 
 func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 	u := b.userID
-	exec := func(q string, args ...any) error { _, err := tx.Exec(ctx, q, append([]any{u}, args...)...); return err }
+	exec := func(q string, args ...any) error {
+		_, err := tx.Exec(ctx, q, append([]any{u}, stripNULArgs(args)...)...)
+		return err
+	}
 
 	if len(b.projects) > 0 {
 		var paths, names []string
@@ -433,4 +436,33 @@ func (b *batch) fixups(ctx context.Context, tx pgx.Tx) error {
 		}
 	}
 	return nil
+}
+
+// stripNUL removes U+0000, which Postgres text cannot hold; used for every text value derive writes.
+func stripNUL(s string) string { return strings.ReplaceAll(s, "\x00", "") }
+
+func stripNULArgs(args []any) []any {
+	out := make([]any, len(args))
+	for i, a := range args {
+		switch v := a.(type) {
+		case string:
+			out[i] = stripNUL(v)
+		case *string:
+			if v != nil {
+				c := stripNUL(*v)
+				out[i] = &c
+			} else {
+				out[i] = v
+			}
+		case []string:
+			c := make([]string, len(v))
+			for j, x := range v {
+				c[j] = stripNUL(x)
+			}
+			out[i] = c
+		default:
+			out[i] = a
+		}
+	}
+	return out
 }
