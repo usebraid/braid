@@ -36,11 +36,13 @@ export function LiveView() {
         <span className="sub">{status === 'paused' ? 'Live paused' : 'Receiving live updates'}</span>
       </div>
       {error && !data ? <ErrorNote error={error} retry={reload} /> : null}
-      {data && items.length === 0 ? <Empty>No session is running right now</Empty> : null}
+      {data && items.length === 0 ? (
+        <Empty>No session is running right now. Sessions appear here while Claude Code works on a synced device.</Empty>
+      ) : null}
       {items.map(({ session: s, agents }) => {
         const dev = s.device_id ?? ''
         return (
-          <Card key={s.session_id}>
+          <Card key={s.session_id} className="live-card">
             <Link className="tl-title" to={`/sessions/${s.session_id}`}>
               {s.title}
             </Link>
@@ -53,10 +55,11 @@ export function LiveView() {
             <ul className="live-agents">
               {agents.map((a) => (
                 <li key={a.agent_id}>
-                  <span className="pill">{a.agent_type}</span> {a.description}{' '}
+                  <span className="pill">{a.agent_type}</span>
+                  <span>{a.description}</span>
                   {a.current_tool ? (
-                    <span title={a.current_tool.summary}>
-                      {a.current_tool.name} {a.current_tool.summary.slice(0, 80)} · started{' '}
+                    <span className="live-tool" title={a.current_tool.summary}>
+                      {a.current_tool.name} {a.current_tool.summary.slice(0, 80)}, started{' '}
                       {ago(a.current_tool.started_at, now)}
                     </span>
                   ) : (

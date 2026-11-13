@@ -44,31 +44,39 @@ export function Search() {
         <h1>Search</h1>
       </div>
       <FilterBar />
-      <label className="field">
-        <span className="sub">Search prompts and replies</span>
-        <input type="search" value={text} onChange={(e) => setText(e.target.value)} />
-      </label>
+      <div className="search-box">
+        <input
+          type="search"
+          aria-label="Search prompts and replies"
+          placeholder="Search prompts and replies"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+      </div>
       {!ok ? <Empty>Type at least 2 characters to search</Empty> : null}
       {ok && error ? <ErrorNote error={error} retry={reload} /> : null}
       {ok && loading && !data ? <Empty>Loading…</Empty> : null}
-      {ok && data && data.hits.length === 0 ? <Empty>No results</Empty> : null}
+      {ok && data && data.hits.length === 0 ? <Empty>No results. Try other words or a longer range.</Empty> : null}
       {ok && data && data.hits.length > 0 ? (
         <Card>
-          <ul className="search-hits">
+          <ul className="rows">
             {data.hits.map((h) => (
               <li key={`${h.session_id}:${h.agent_id}:${h.line_id}`}>
-                <Link to={`/sessions/${h.session_id}?agent=${h.agent_id}&line=${h.line_id}`}>{h.title}</Link>{' '}
-                <span className="sub">
-                  {h.role === 'user' ? 'You' : 'Claude'}
-                  {h.at ? ` · ${fmtDateTime(h.at, me.time_zone)}` : ''}
-                </span>
-                <p>
+                <div className="row-head">
+                  <Link className="tl-title" to={`/sessions/${h.session_id}?agent=${h.agent_id}&line=${h.line_id}`}>
+                    {h.title}
+                  </Link>
+                  <span className="sub">
+                    {h.role === 'user' ? 'You' : 'Claude'}
+                    {h.at ? `, ${fmtDateTime(h.at, me.time_zone)}` : ''}
+                  </span>
+                </div>
+                <p className="row-body">
                   {highlight(h.snippet, q).map((p, i) =>
                     // biome-ignore lint/suspicious/noArrayIndexKey: parts have no identity, order is stable
                     p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>,
                   )}
                 </p>
-                <span className="sub">{h.session_id}</span>
               </li>
             ))}
           </ul>
