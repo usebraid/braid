@@ -15,5 +15,15 @@ func (h *Handler) HoldSlots(n int) func() {
 	}
 }
 
+// TakeGlobal exposes takeGlobal (test hook).
+func (h *Handler) TakeGlobal(user string) (func(), bool) { return h.takeGlobal(user) }
+
 // AssemblySQL lists the statements that touch the chunks of a line (test hook for the query-shape check).
 var AssemblySQL = []string{sqlPartsCheck, sqlPartsLine, sqlPartsSnapshot}
+
+// SetMaxPendingParts overrides the per-user pending-parts quota and returns a restore func (test hook).
+func SetMaxPendingParts(n int64) func() {
+	old := maxPendingParts
+	maxPendingParts = n
+	return func() { maxPendingParts = old }
+}

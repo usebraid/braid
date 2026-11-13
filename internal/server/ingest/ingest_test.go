@@ -604,7 +604,7 @@ type readFlag struct{ read bool }
 
 func (r *readFlag) Read([]byte) (int, error) { r.read = true; return 0, io.EOF }
 
-func TestGlobalSlotsAreTakenBeforeTheBodyIsRead(t *testing.T) {
+func TestGlobalSlotIsTakenAfterTheBodyIsRead(t *testing.T) {
 	e := newEnv(t)
 	release := e.h.HoldSlots(ingest.MaxConcurrentIngest)
 	defer release()
@@ -617,7 +617,7 @@ func TestGlobalSlotsAreTakenBeforeTheBodyIsRead(t *testing.T) {
 	req.Header.Set("Content-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	if rec.Code != 429 || body.read {
+	if rec.Code != 429 || !body.read { // I2: the body is read under the device slot only
 		t.Fatalf("status %d, body read %v", rec.Code, body.read)
 	}
 }
@@ -784,4 +784,116 @@ func TestChunksAreAssembledInSQLAndNeverReadIntoGo(t *testing.T) {
 	if len(ingest.AssemblySQL) != 3 {
 		t.Fatal("verify, line and snapshot assembly statements expected")
 	}
+}
+
+func partReq(path string, from int64, l protocol.Line) protocol.IngestRequest {
+	return protocol.IngestRequest{Files: []protocol.FileBatch{{Kind: protocol.KindAppend, Path: path, HeadHash: head, FromOffset: from, Lines: []protocol.Line{l}}}}
+}
+
+// A leftover part with another count must neither be assembled nor change the stored line (I1).
+func TestLeftoverPartOfOtherCountIsNeverAssembled(t *testing.T) {
+	e := newEnv(t)
+	big := bigLine()[:protocol.ChunkSize+1000]
+	parts := protocol.SplitLine(big, protocol.ChunkSize)
+	junk := "GARBAGE"
+	stale := protocol.Line{Text: &junk, Part: &protocol.Part{Index: 2, Count: 3, TotalLen: parts[0].Part.TotalLen, SHA256: parts[0].Part.SHA256}}
+	if resp, _ := e.post(t, e.tokA, partReq("p/s.jsonl", 0, stale), nil); resp.StatusCode != 200 {
+		t.Fatalf("stale: %d %s", resp.StatusCode, resp.body)
+	}
+	e.postParts(t, e.tokA, "p/s.jsonl", 0, parts, seq(len(parts)))
+	var got []byte
+	c, _ := pgx.Connect(context.Background(), e.owner)
+	defer func() { _ = c.Close(context.Background()) }()
+	if err := c.QueryRow(context.Background(), `SELECT line FROM raw_lines`).Scan(&got); err != nil || !bytes.Equal(got, big) {
+		t.Fatalf("stored line differs from its hash (err %v, len %d want %d)", err, len(got), len(big))
+	}
+}
+
+// One device's new series must not wipe another device's pending parts (M4).
+func TestDeviceDoesNotWipeOtherDevicesParts(t *testing.T) {
+	e := newEnv(t)
+	a := protocol.SplitLine(bigLine()[:3<<20], protocol.ChunkSize)
+	other := protocol.SplitLine(bytes.Repeat([]byte("x"), 3<<20), protocol.ChunkSize)
+	e.postParts(t, e.tokA, "p/s.jsonl", 0, a, seq(len(a)-1))
+	if resp, _ := e.post(t, e.tokA2, partReq("p/s.jsonl", 0, other[0]), nil); resp.StatusCode != 200 {
+		t.Fatal(resp.StatusCode)
+	}
+	out := e.postParts(t, e.tokA, "p/s.jsonl", 0, a, []int{len(a) - 1})
+	if out.Files[0].Status != protocol.StatusOK || e.countLines(t) != 1 {
+		t.Fatalf("A's progress was wiped: %+v", out.Files[0])
+	}
+}
+
+// Pending parts are capped per user: over the quota the answer is 413 with Retry-After (M5).
+func TestPendingPartsQuota(t *testing.T) {
+	defer ingest.SetMaxPendingParts(2 << 20)()
+	e := newEnv(t)
+	parts := protocol.SplitLine(bigLine()[:5<<20], protocol.ChunkSize)
+	var last reply
+	for i := 0; i < 3; i++ {
+		last, _ = e.post(t, e.tokA, partReq("p/s.jsonl", 0, parts[i]), nil)
+	}
+	if last.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status %d", last.StatusCode)
+	}
+	if n := e.ownerInt(t, `SELECT count(*) FROM raw_line_parts`); n != 2 {
+		t.Fatalf("parts %d", n)
+	}
+}
+
+// Stalled bodies of two devices of one user hold no global slot, so another user still gets in (I2).
+func TestStalledBodiesOfTwoDevicesDoNotBlockOtherUsers(t *testing.T) {
+	e := newEnv(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var pipes []*io.PipeWriter
+	for _, tok := range []string{e.tokA, e.tokA, e.tokA2, e.tokA2} {
+		pr, pw := io.Pipe()
+		pipes = append(pipes, pw)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, e.srv.URL+"/v1/ingest", pr)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set(protocol.HeaderVersion, "1")
+		req.Header.Set("Content-Encoding", "gzip")
+		go func() {
+			if resp, err := http.DefaultClient.Do(req); err == nil {
+				_ = resp.Body.Close()
+			}
+		}()
+	}
+	defer func() {
+		for _, p := range pipes {
+			_ = p.Close()
+		}
+	}()
+	time.Sleep(300 * time.Millisecond)
+	if resp, _ := e.post(t, e.tokB, appendReq(0, `{"a":0}`), nil); resp.StatusCode != 200 {
+		t.Fatalf("other user blocked: %d", resp.StatusCode)
+	}
+}
+
+func TestOneUserHoldsAtMostTwoGlobalSlots(t *testing.T) {
+	e := newEnv(t)
+	var rel []func()
+	for i := 0; i < ingest.MaxGlobalPerUser; i++ {
+		r, ok := e.h.TakeGlobal("u1")
+		if !ok {
+			t.Fatal("slot refused")
+		}
+		rel = append(rel, r)
+	}
+	if _, ok := e.h.TakeGlobal("u1"); ok {
+		t.Fatal("third slot of one user granted")
+	}
+	if r, ok := e.h.TakeGlobal("u2"); !ok {
+		t.Fatal("other user refused")
+	} else {
+		r()
+	}
+	rel[0]()
+	if r, ok := e.h.TakeGlobal("u1"); !ok {
+		t.Fatal("slot not freed")
+	} else {
+		r()
+	}
+	rel[1]()
 }

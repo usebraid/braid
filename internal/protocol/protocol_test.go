@@ -251,3 +251,24 @@ func TestSplitLineKeepsRunesWholeAndRoundTrips(t *testing.T) {
 		t.Fatal("two lines with a part accepted")
 	}
 }
+
+func TestPartsOfAppendLinesMustNotContainNewlines(t *testing.T) {
+	parts := SplitLine([]byte(strings.Repeat("a", ChunkSize+10)), ChunkSize)
+	nl := "ab\ncd"
+	parts[0].Text = &nl
+	req := IngestRequest{Files: []FileBatch{{Kind: KindAppend, Path: "p/a.jsonl", HeadHash: HashHex(nil), Lines: parts[:1]}}}
+	if req.Validate() == nil {
+		t.Fatal("newline inside a chunk accepted")
+	}
+	// snapshots may contain newlines
+	snap := SplitLine([]byte(strings.Repeat("a\n", ChunkSize)), ChunkSize)
+	if err := (IngestRequest{Files: []FileBatch{{Kind: KindSnapshot, Path: "p/s/x.meta.json", Content: &snap[0]}}}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMaxLineBytesIsBelowPostgresLimit(t *testing.T) {
+	if MaxLineBytes != 256<<20 {
+		t.Fatalf("MaxLineBytes %d", MaxLineBytes)
+	}
+}

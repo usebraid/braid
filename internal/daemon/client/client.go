@@ -217,7 +217,8 @@ func classify(resp *http.Response, data []byte) error {
 		return ErrUnauthorized
 	case s == http.StatusUpgradeRequired:
 		return &ProtocolMismatchError{Server: er.Server, Min: er.Min}
-	case s == http.StatusTooManyRequests, s == http.StatusRequestTimeout, s >= 500:
+	case s == http.StatusTooManyRequests, s == http.StatusRequestTimeout, s >= 500,
+		s == http.StatusRequestEntityTooLarge && resp.Header.Get("Retry-After") != "": // pending-parts quota: retry later
 		var ra time.Duration
 		if n, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil && n > 0 {
 			ra = time.Duration(n) * time.Second

@@ -4,6 +4,7 @@
 package ingest
 
 import (
+	"bytes"
 	"cmp"
 	"compress/gzip"
 	"context"
@@ -31,9 +32,38 @@ type Handler struct {
 	db  *db.DB
 	sem chan struct{} // bounds concurrent ingest requests (memory)
 	// Per-device in-flight limit, taken before the body is read: a device that stalls its
-	// bodies can only block itself, not the global slots.
+	// bodies can only block itself, not the global slots, which are taken after the body is in.
 	mu       sync.Mutex
 	inflight map[string]int
+	perUser  map[string]int // global slots held per user
+}
+
+// MaxGlobalPerUser bounds the global slots one user may hold at once.
+const MaxGlobalPerUser = 2
+
+// takeGlobal takes a global slot for user (nil, false when the user's share or all slots are in use).
+func (h *Handler) takeGlobal(user string) (release func(), ok bool) {
+	h.mu.Lock()
+	if h.perUser[user] >= MaxGlobalPerUser {
+		h.mu.Unlock()
+		return nil, false
+	}
+	select {
+	case h.sem <- struct{}{}:
+	default:
+		h.mu.Unlock()
+		return nil, false
+	}
+	h.perUser[user]++
+	h.mu.Unlock()
+	return func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if h.perUser[user]--; h.perUser[user] <= 0 {
+			delete(h.perUser, user)
+		}
+		<-h.sem
+	}, true
 }
 
 // MaxIngestPerDevice bounds in-flight ingest requests per device (one is the daemon's normal case).
@@ -62,7 +92,7 @@ const MaxConcurrentIngest = 4
 
 // New returns a Handler on d.
 func New(d *db.DB) *Handler {
-	return &Handler{db: d, sem: make(chan struct{}, MaxConcurrentIngest), inflight: map[string]int{}}
+	return &Handler{db: d, sem: make(chan struct{}, MaxConcurrentIngest), inflight: map[string]int{}, perUser: map[string]int{}}
 }
 
 // Register mounts the endpoints; both need scope ingest:write.
@@ -76,49 +106,65 @@ var (
 	errBadParts     = errors.New("assembled line does not match its length or hash")
 )
 
+// maxPendingParts caps the bytes of unfinished chunks per user.
+var maxPendingParts int64 = 1 << 30
+
+var errPartsQuota = errors.New("pending parts quota exceeded")
+
 // SQL of the chunk assembly. The chunks are concatenated, checked and stored inside Postgres only:
-// they never pass through Go, so memory stays flat however long the line is.
+// they never pass through Go, so memory stays flat however long the line is. All three statements
+// select the same rows: one series of one device, identified by sha256, count and total_len ($3..$5
+// of the check; the other two read them from the same filter, with $6 the device).
 const (
-	sqlPartsCheck = `SELECT count(*) = $4 AND sum(length(chunk)) = $5 AND
+	partsSeries   = `source_file_id = $1 AND "offset" = $2 AND device_id = $6::uuid AND sha256 = $3 AND count = $4 AND total_len = $5`
+	sqlPartsCheck = `SELECT count(*) = $4 AND min(idx) = 0 AND max(idx) = $4 - 1 AND sum(length(chunk)) = $5 AND
 	  sha256(string_agg(chunk, ''::bytea ORDER BY idx)) = $3 AND length(string_agg(chunk, ''::bytea ORDER BY idx)) = $5
-	  FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND sha256 = $3 AND count = $4`
+	  FROM raw_line_parts WHERE ` + partsSeries
 	sqlPartsLine = `INSERT INTO raw_lines(user_id, source_file_id, "offset", line_hash, line, device_id)
-	  SELECT $1, $2, $3, $4, string_agg(chunk, ''::bytea ORDER BY idx), $5::uuid
-	    FROM raw_line_parts WHERE source_file_id = $2 AND "offset" = $3 AND sha256 = $4
+	  SELECT app_user(), $1, $2, $3, string_agg(chunk, ''::bytea ORDER BY idx), $6::uuid
+	    FROM raw_line_parts WHERE ` + partsSeries + `
 	  ON CONFLICT (user_id, source_file_id, "offset", line_hash) DO NOTHING`
 	sqlPartsSnapshot = `INSERT INTO raw_snapshots(user_id, source_file_id, content_hash, content, received_at, device_id)
-	  SELECT $1, $2, $3, string_agg(chunk, ''::bytea ORDER BY idx), clock_timestamp(), $4::uuid
-	    FROM raw_line_parts WHERE source_file_id = $2 AND "offset" = 0 AND sha256 = $3
-	   AND NOT EXISTS (SELECT 1 FROM (SELECT content_hash FROM raw_snapshots WHERE source_file_id = $2
+	  SELECT app_user(), $1, $3, string_agg(chunk, ''::bytea ORDER BY idx), clock_timestamp(), $6::uuid
+	    FROM raw_line_parts WHERE ` + partsSeries + `
+	   AND NOT EXISTS (SELECT 1 FROM (SELECT content_hash FROM raw_snapshots WHERE source_file_id = $1
 	                    ORDER BY received_at DESC, id DESC LIMIT 1) n WHERE n.content_hash = $3)`
 )
 
-// storePart upserts one chunk of the line at offset and reports whether all chunks are now present
-// and match the announced length and hash (checked in SQL; a mismatch is errBadParts).
-func storePart(ctx context.Context, tx pgx.Tx, id, offset int64, p *protocol.Part, chunk []byte) (done bool, err error) {
+// storePart upserts one chunk of the line at offset and reports whether all chunks of its series are
+// now present and match the announced length and hash (checked in SQL; a mismatch is errBadParts).
+func storePart(ctx context.Context, tx pgx.Tx, dev Device, id, offset int64, p *protocol.Part, chunk []byte) (done bool, err error) {
 	sum, err := hex.DecodeString(p.SHA256)
 	if err != nil {
 		return false, err
 	}
-	// Chunks of a different line at this offset (changed content) can never complete this one.
-	if _, err = tx.Exec(ctx, `DELETE FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND sha256 <> $3`, id, offset, sum); err != nil {
+	// Parts of this device at this offset with other metadata belong to another series: drop them.
+	if _, err = tx.Exec(ctx, `DELETE FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND device_id = $3::uuid
+		AND NOT (sha256 = $4 AND count = $5 AND total_len = $6)`, id, offset, dev.DeviceID, sum, p.Count, p.TotalLen); err != nil {
 		return false, err
 	}
+	var used int64 // the part being replaced does not count twice
+	if err = tx.QueryRow(ctx, `SELECT coalesce(sum(octet_length(chunk)), 0)::bigint FROM raw_line_parts
+		WHERE NOT (source_file_id = $1 AND "offset" = $2 AND device_id = $3::uuid AND idx = $4)`, id, offset, dev.DeviceID, p.Index).Scan(&used); err != nil {
+		return false, err
+	}
+	if used+int64(len(chunk)) > maxPendingParts {
+		return false, errPartsQuota
+	}
 	if _, err = tx.Exec(ctx, `
-		INSERT INTO raw_line_parts(user_id, source_file_id, "offset", idx, count, total_len, sha256, chunk)
-		VALUES (app_user(), $1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (user_id, source_file_id, "offset", idx)
-		DO UPDATE SET count = excluded.count, total_len = excluded.total_len, sha256 = excluded.sha256, chunk = excluded.chunk, received_at = now()`,
-		id, offset, p.Index, p.Count, p.TotalLen, sum, chunk); err != nil {
+		INSERT INTO raw_line_parts(user_id, source_file_id, "offset", device_id, idx, count, total_len, sha256, chunk)
+		VALUES (app_user(), $1, $2, $3::uuid, $4, $5, $6, $7, $8)
+		ON CONFLICT (user_id, source_file_id, "offset", device_id, idx)
+		DO UPDATE SET chunk = excluded.chunk`,
+		id, offset, dev.DeviceID, p.Index, p.Count, p.TotalLen, sum, chunk); err != nil {
 		return false, err
 	}
 	var have int
-	if err = tx.QueryRow(ctx, `SELECT count(*) FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND sha256 = $3 AND count = $4`,
-		id, offset, sum, p.Count).Scan(&have); err != nil || have < p.Count {
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM raw_line_parts WHERE `+partsSeries, id, offset, sum, p.Count, p.TotalLen, dev.DeviceID).Scan(&have); err != nil || have < p.Count {
 		return false, err
 	}
 	var ok bool
-	if err = tx.QueryRow(ctx, sqlPartsCheck, id, offset, sum, p.Count, p.TotalLen).Scan(&ok); err != nil {
+	if err = tx.QueryRow(ctx, sqlPartsCheck, id, offset, sum, p.Count, p.TotalLen, dev.DeviceID).Scan(&ok); err != nil {
 		return false, err
 	}
 	if !ok {
@@ -148,7 +194,7 @@ func storePartLine(ctx context.Context, tx pgx.Tx, dev Device, id, end int64, sc
 	if stored {
 		return res, nil
 	}
-	done, err := storePart(ctx, tx, id, off, l.Part, b)
+	done, err := storePart(ctx, tx, dev, id, off, l.Part, b)
 	if err != nil {
 		return res, err
 	}
@@ -168,7 +214,7 @@ func storePartLine(ctx context.Context, tx pgx.Tx, dev Device, id, end int64, sc
 			return res, nil
 		}
 	}
-	if _, err := tx.Exec(ctx, sqlPartsLine, dev.UserID, id, off, sum, dev.DeviceID); err != nil {
+	if _, err := tx.Exec(ctx, sqlPartsLine, id, off, sum, l.Part.Count, l.Part.TotalLen, dev.DeviceID); err != nil {
 		return res, err
 	}
 	if err := deleteParts(ctx, tx, id, off); err != nil {
@@ -194,16 +240,22 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer h.leave(dev.DeviceID)
-	// Global slot before decoding: the decoded body is what the slots bound.
-	select {
-	case h.sem <- struct{}{}:
-		defer func() { <-h.sem }()
-	default:
+	// Read the compressed body (at most MaxCompressedBody, bounded in time by the server's read
+	// timeout) holding only the device slot; the global slot bounds the decompressed work.
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, protocol.MaxCompressedBody))
+	if err != nil {
+		status, code := failStatus(err)
+		errJSON(w, status, code)
+		return
+	}
+	release, ok := h.takeGlobal(dev.UserID)
+	if !ok {
 		httpx.TooMany(w, time.Second)
 		return
 	}
+	defer release()
 	var req protocol.IngestRequest
-	if status, code := readRequest(w, r, &req); code != "" {
+	if status, code := readRequest(body, &req); code != "" {
 		errJSON(w, status, code)
 		return
 	}
@@ -217,7 +269,7 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.Path, b.Path), cmp.Compare(a.HeadHash, b.HeadHash), cmp.Compare(a.Scope, b.Scope)) < 0
 	})
 	resp := protocol.IngestResponse{Files: make([]protocol.FileResult, len(req.Files))}
-	err := h.db.WithUser(r.Context(), dev.UserID, func(tx pgx.Tx) error {
+	err = h.db.WithUser(r.Context(), dev.UserID, func(tx pgx.Tx) error {
 		for _, i := range order {
 			res, err := storeFile(r, tx, dev, req.Files[i])
 			if err != nil {
@@ -236,6 +288,9 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	switch {
+	case errors.Is(err, errPartsQuota):
+		w.Header().Set("Retry-After", "3600")
+		errJSON(w, http.StatusRequestEntityTooLarge, "parts_quota")
 	case errors.Is(err, errKindMismatch), errors.Is(err, errBadParts):
 		errJSON(w, http.StatusBadRequest, "bad_request")
 	case err != nil:
@@ -269,16 +324,18 @@ func (c *capReader) Read(p []byte) (int, error) {
 	return k, err
 }
 
-// readRequest streams gzip -> JSON into req and validates it; code is "" on success.
-func readRequest(w http.ResponseWriter, r *http.Request, req *protocol.IngestRequest) (status int, code string) {
-	fail := func(err error) (int, string) {
-		var mb *http.MaxBytesError
-		if errors.Is(err, errTooLarge) || errors.As(err, &mb) || errors.Is(err, protocol.ErrTooManyLines) || errors.Is(err, protocol.ErrTooManyFiles) {
-			return http.StatusRequestEntityTooLarge, "too_large"
-		}
-		return http.StatusBadRequest, "bad_request"
+func failStatus(err error) (int, string) {
+	var mb *http.MaxBytesError
+	if errors.Is(err, errTooLarge) || errors.As(err, &mb) || errors.Is(err, protocol.ErrTooManyLines) || errors.Is(err, protocol.ErrTooManyFiles) {
+		return http.StatusRequestEntityTooLarge, "too_large"
 	}
-	zr, err := gzip.NewReader(http.MaxBytesReader(w, r.Body, protocol.MaxCompressedBody))
+	return http.StatusBadRequest, "bad_request"
+}
+
+// readRequest streams gzip -> JSON from the compressed body into req and validates it; code is "" on success.
+func readRequest(body []byte, req *protocol.IngestRequest) (status int, code string) {
+	fail := func(err error) (int, string) { return failStatus(err) }
+	zr, err := gzip.NewReader(bytes.NewReader(body))
 	if err != nil {
 		return fail(err)
 	}
@@ -328,7 +385,7 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 			return res, err
 		}
 		if p := f.Content.Part; p != nil {
-			done, err := storePart(ctx, tx, id, 0, p, c)
+			done, err := storePart(ctx, tx, dev, id, 0, p, c)
 			if err != nil {
 				return res, err
 			}
@@ -337,7 +394,7 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 				return res, nil
 			}
 			sum, _ := hex.DecodeString(p.SHA256)
-			if _, err = tx.Exec(ctx, sqlPartsSnapshot, dev.UserID, id, sum, dev.DeviceID); err != nil {
+			if _, err = tx.Exec(ctx, sqlPartsSnapshot, id, 0, sum, p.Count, p.TotalLen, dev.DeviceID); err != nil {
 				return res, err
 			}
 			return res, deleteParts(ctx, tx, id, 0)

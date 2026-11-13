@@ -56,12 +56,13 @@ func TestErrorClassification(t *testing.T) {
 			var r *client.RetryableError
 			return errors.As(e, &r) && r.RetryAfter == 7*time.Second
 		}},
+		{413, `{"error":"parts_quota"}`, func(e error) bool { var r *client.RetryableError; return errors.As(e, &r) }}, // 413 with Retry-After: try later
 		{503, ``, func(e error) bool { var r *client.RetryableError; return errors.As(e, &r) }},
 		{400, `{"error":"bad_request"}`, func(e error) bool { var p *client.PermanentError; return errors.As(e, &p) && p.Status == 400 }},
 	}
 	for _, c := range cases {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			if c.status == 429 {
+			if c.status == 429 || c.status == 413 {
 				w.Header().Set("Retry-After", "7")
 			}
 			w.WriteHeader(c.status)

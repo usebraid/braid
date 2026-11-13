@@ -34,8 +34,10 @@ const (
 // six times as many JSON bytes, so a request holding one chunk stays below MaxCompressedBody
 // (and MaxDecompressedBody) even uncompressed and at worst-case escaping.
 const (
-	ChunkSize    = MaxCompressedBody / 8
-	MaxLineBytes = 1<<30 - 1 // Postgres caps bytea at 1 GB; larger lines are never uploaded
+	ChunkSize = MaxCompressedBody / 8
+	// MaxLineBytes caps one line or snapshot: derive, the viewer and Postgres assemble it in memory.
+	// Larger ones are never uploaded (the daemon records them as skipped).
+	MaxLineBytes = 256 << 20
 	maxParts     = MaxLineBytes/ChunkSize + 1
 )
 
@@ -293,7 +295,7 @@ func (r IngestRequest) Validate() error {
 					return fmt.Errorf("files[%d].lines[%d]: %w", i, j, err)
 				}
 				if l.Part != nil {
-					if len(f.Lines) != 1 || !l.Part.valid() || len(b) > ChunkSize {
+					if len(f.Lines) != 1 || !l.Part.valid() || len(b) > ChunkSize || bytes.IndexByte(b, '\n') >= 0 {
 						return fmt.Errorf("files[%d].lines[%d]: bad part", i, j)
 					}
 					continue

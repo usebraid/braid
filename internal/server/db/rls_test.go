@@ -194,7 +194,7 @@ func ownerRead(t *testing.T, ownerURL, q string, dest ...any) {
 
 func TestPartsAreInvisibleAndImmutableToOtherUsers(t *testing.T) {
 	f := setup(t)
-	testdb.Exec(t, f.owner, `INSERT INTO raw_line_parts(user_id,source_file_id,"offset",idx,count,total_len,sha256,chunk) SELECT $1,id,0,0,2,9,'\x01','\x7b' FROM source_files`, f.userA)
+	testdb.Exec(t, f.owner, `INSERT INTO raw_line_parts(user_id,source_file_id,"offset",device_id,idx,count,total_len,sha256,chunk) SELECT $1,id,0,gen_random_uuid(),0,2,9,'\x01','\x7b' FROM source_files`, f.userA)
 	var n int
 	err := f.d.WithUser(context.Background(), f.userB, func(tx pgx.Tx) error {
 		if err := tx.QueryRow(context.Background(), `SELECT count(*) FROM raw_line_parts`).Scan(&n); err != nil {
@@ -214,8 +214,8 @@ func TestPartsAreInvisibleAndImmutableToOtherUsers(t *testing.T) {
 
 func TestStalePartsAreCollected(t *testing.T) {
 	f := setup(t)
-	testdb.Exec(t, f.owner, `INSERT INTO raw_line_parts(user_id,source_file_id,"offset",idx,count,total_len,sha256,chunk,received_at)
-		SELECT $1,id,0,i,3,9,'\x01','\x7b',now() - (i * interval '5 days') FROM source_files, generate_series(0,2) i`, f.userA)
+	testdb.Exec(t, f.owner, `INSERT INTO raw_line_parts(user_id,source_file_id,"offset",device_id,idx,count,total_len,sha256,chunk,received_at)
+		SELECT $1,id,0,gen_random_uuid(),i,3,9,'\x01','\x7b',now() - (i * interval '5 days') FROM source_files, generate_series(0,2) i`, f.userA)
 	err := f.d.WithSystem(context.Background(), func(tx pgx.Tx) error {
 		_, err := tx.Exec(context.Background(), `SELECT gc_line_parts()`)
 		return err
