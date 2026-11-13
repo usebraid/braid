@@ -70,7 +70,7 @@ func TestRecheckKeepsTheSocketOnDatabaseErrors(t *testing.T) {
 		switch n := calls.Add(1); {
 		case n == 1:
 			return webauth.Principal{UserID: "u1"}, true, nil
-		case n <= 4:
+		case n <= 3: // two errors in a row are tolerated
 			return webauth.Principal{}, false, errors.New("db down")
 		default:
 			return webauth.Principal{}, false, nil // really expired
@@ -93,7 +93,44 @@ func TestRecheckKeepsTheSocketOnDatabaseErrors(t *testing.T) {
 		if err == nil {
 			continue // hello, ping
 		}
-		if calls.Load() < 5 || websocket.CloseStatus(err) != 4401 {
+		if calls.Load() < 4 || websocket.CloseStatus(err) != 4401 {
+			t.Fatalf("closed after %d checks with %v", calls.Load(), err)
+		}
+		return
+	}
+}
+
+func TestRecheckClosesWith1011AfterThreeConsecutiveDatabaseErrors(t *testing.T) {
+	h := NewHub(fakeListen, Options{RecheckEvery: 30 * time.Millisecond})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = h.Run(ctx) }()
+	<-h.Ready()
+	var calls atomic.Int32
+	check := func(*http.Request) (webauth.Principal, bool, error) {
+		if calls.Add(1) == 1 {
+			return webauth.Principal{UserID: "u1"}, true, nil
+		}
+		return webauth.Principal{}, false, errors.New("db down")
+	}
+	srv := httptest.NewUnstartedServer(nil)
+	pub, _ := url.Parse("http://" + srv.Listener.Addr().String())
+	srv.Config.Handler = h.Handler(pub, check)
+	srv.Start()
+	defer srv.Close()
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {pub.String()}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	rctx, rc := context.WithTimeout(ctx, 3*time.Second)
+	defer rc()
+	for {
+		_, _, err := c.Read(rctx)
+		if err == nil {
+			continue
+		}
+		if calls.Load() != 4 || websocket.CloseStatus(err) != websocket.StatusInternalError {
 			t.Fatalf("closed after %d checks with %v", calls.Load(), err)
 		}
 		return

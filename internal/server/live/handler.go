@@ -22,6 +22,7 @@ const (
 	frameWindow     = 10 * time.Second
 	writeTimeout    = 10 * time.Second
 
+	maxRecheckErrors                       = 3 // consecutive database errors before the socket is closed
 	closeSessionEnded websocket.StatusCode = 4401
 	closeTooManyFrame websocket.StatusCode = 4429
 )
@@ -108,6 +109,7 @@ func (h *Hub) serve(r *http.Request, c *websocket.Conn, p webauth.Principal, ob 
 	ping, recheck := time.NewTicker(h.o.PingEvery), time.NewTicker(h.o.RecheckEvery)
 	defer ping.Stop()
 	defer recheck.Stop()
+	dbErrs := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -127,9 +129,14 @@ func (h *Hub) serve(r *http.Request, c *websocket.Conn, p webauth.Principal, ob 
 			}
 		case <-recheck.C:
 			np, ok, err := check(r.Clone(ctx))
-			if err != nil { // a database hiccup is not an expired session: keep the socket, look again next time
+			if err != nil { // a database hiccup is not an expired session: keep the socket, but not forever
+				if dbErrs++; dbErrs >= maxRecheckErrors {
+					_ = c.Close(websocket.StatusInternalError, "session check failing") // the client reconnects
+					return
+				}
 				continue
 			}
+			dbErrs = 0
 			if !ok || np.UserID != p.UserID {
 				_ = c.Close(closeSessionEnded, "session ended")
 				return
