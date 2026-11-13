@@ -63,6 +63,10 @@ describe('landing page', () => {
     main.read('.nojekyll')
     accessSync(path.join(main.outDir, 'install.sh'), constants.X_OK)
   })
+
+  test('does not publish the get worker', () => {
+    assert.throws(() => accessSync(path.join(main.outDir, 'get-worker')))
+  })
 })
 
 describe('docs', () => {

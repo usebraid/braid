@@ -1,5 +1,6 @@
 {
-  "entry": ["scripts/*.mjs", "test/*.test.mjs"],
-  "project": ["*.mjs", "scripts/**", "test/**"],
-  "ignoreBinaries": ["go"]
+  "entry": ["scripts/*.mjs", "test/*.test.mjs", "get-worker/worker.js", "get-worker/*.test.mjs"],
+  "project": ["*.mjs", "scripts/**", "test/**", "get-worker/**"],
+  "ignoreBinaries": ["go"],
+  "ignore": ["get-worker/cloudflare.config.ts"]
 }
