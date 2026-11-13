@@ -7,6 +7,7 @@ import { LiveProvider } from './api/live'
 import { MeProvider, useMe } from './api/session'
 import { Shell } from './components/Shell'
 import { ROUTES, type RouteDef } from './routes'
+import { Devices } from './views/Devices'
 import { Failures } from './views/Failures'
 import { LiveView } from './views/LiveView'
 import { NotFound } from './views/NotFound'
@@ -14,6 +15,7 @@ import { Overview } from './views/Overview'
 import { Placeholder } from './views/Placeholder'
 import { Search } from './views/Search'
 import { Session } from './views/Session'
+import { Settings } from './views/Settings'
 import { Timeline } from './views/Timeline'
 
 function AdminOnly({ children }: { children: React.ReactNode }) {
@@ -26,6 +28,8 @@ const VIEWS: Record<string, ReactNode> = {
   '/live': <LiveView />,
   '/failures': <Failures />,
   '/search': <Search />,
+  '/devices': <Devices />,
+  '/settings': <Settings />,
 }
 const view = (r: RouteDef) => VIEWS[r.path] ?? <Placeholder title={r.label} />
 

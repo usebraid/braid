@@ -11,6 +11,9 @@ const body = (path: string): unknown => {
   if (path === '/api/v1/me') return ME
   if (path === '/api/v1/about') return { version: '0.2.0', commit: 'abc', source_url: 'https://example.com/src' }
   if (path === '/api/v1/devices') return []
+  if (path === '/api/v1/stats/live') return { items: [] }
+  if (path === '/api/v1/stats/failures')
+    return { by_category: [], by_limit_type: [], by_day: [], time_lost_s: 0, items: [], next: null }
   if (path === '/api/v1/stats/filters') return { projects: [], models: [], skills: [] }
   if (path === '/api/v1/stats/sessions') return { items: [], next: null }
   if (path === '/api/v1/stats/overview')
@@ -44,4 +47,17 @@ it('renders NotFound for /admin to a non-admin', async () => {
   window.history.pushState({}, '', '/admin')
   render(<App />)
   expect(await screen.findByRole('heading', { name: 'Not found' })).toBeInTheDocument()
+})
+
+const routed: [string, string][] = [
+  ['/live', 'Live'],
+  ['/failures', 'Failures'],
+  ['/search', 'Search'],
+  ['/devices', 'Devices'],
+  ['/settings', 'Settings'],
+]
+it.each(routed)('routes %s to its view', async (path, title) => {
+  window.history.pushState({}, '', path)
+  render(<App />)
+  expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
 })

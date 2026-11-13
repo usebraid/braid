@@ -946,3 +946,23 @@ main:focus {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.confirm {
+  color: var(--text);
+  max-width: 420px;
+}
+.confirm::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+.confirm .row,
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.confirm .row {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.faded {
+  opacity: 0.55;
+}

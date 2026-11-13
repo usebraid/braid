@@ -5,7 +5,7 @@
 // kpis, the segmented control, chips and the theme button), Copyright (c) 2026 DietrichGebert, MIT License;
 // the license text is in THIRD_PARTY_NOTICES.md.
 
-import { type CSSProperties, type ReactNode, useId, useState } from 'react'
+import { type CSSProperties, type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { getTheme, nextTheme, setTheme, type ThemeChoice } from '../theme/theme'
 import { Sparkline } from './charts/Sparkline'
 
@@ -137,5 +137,35 @@ export function ErrorNote({ error, retry }: { error: unknown; retry?: () => void
         </button>
       ) : null}
     </div>
+  )
+}
+
+// Modal confirm built on <dialog>; render it only while open. Esc and the Cancel button call onCancel.
+export function ConfirmDialog(p: {
+  title: string
+  confirmLabel: string
+  onConfirm: () => void
+  onCancel: () => void
+  disabled?: boolean
+  children?: ReactNode
+}) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (el && !el.open) typeof el.showModal === 'function' ? el.showModal() : el.setAttribute('open', '')
+  }, [])
+  return (
+    <dialog ref={ref} className="card confirm" aria-label={p.title} onCancel={p.onCancel}>
+      <p>{p.title}</p>
+      {p.children}
+      <div className="row">
+        <button type="button" className="btn" onClick={p.onCancel}>
+          Cancel
+        </button>
+        <button type="button" className="btn" disabled={p.disabled} onClick={p.onConfirm}>
+          {p.confirmLabel}
+        </button>
+      </div>
+    </dialog>
   )
 }

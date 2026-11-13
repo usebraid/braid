@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
 
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { ErrorNote } from '../components/ui'
 import { get } from './client'
 import type { Me } from './types'
 
-const MeContext = createContext<Me | null>(null)
+type MeValue = Me & { refresh: () => void }
+const MeContext = createContext<MeValue | null>(null)
 
 // Fetches the signed-in user once; `initial` skips the request (tests).
 export function MeProvider({ children, initial }: { children: ReactNode; initial?: Me }) {
@@ -26,12 +27,16 @@ export function MeProvider({ children, initial }: { children: ReactNode; initial
     setError(null)
     setAttempt((n) => n + 1)
   }, [])
+  const refresh = useCallback(() => {
+    get<Me>('/api/v1/me').then(setMe, () => {}) // keep the current user if the refetch fails
+  }, [])
+  const value = useMemo(() => (me ? { ...me, refresh } : null), [me, refresh])
   if (error) return <ErrorNote error={error} retry={retry} />
-  if (!me) return <p className="empty-note">Loading…</p>
-  return <MeContext.Provider value={me}>{children}</MeContext.Provider>
+  if (!value) return <p className="empty-note">Loading…</p>
+  return <MeContext.Provider value={value}>{children}</MeContext.Provider>
 }
 
-export function useMe(): Me {
+export function useMe(): MeValue {
   const me = useContext(MeContext)
   if (!me) throw new Error('useMe outside MeProvider')
   return me
