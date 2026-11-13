@@ -18,8 +18,10 @@ import (
 	"github.com/usebraid/braid/internal/server/httpx"
 	"github.com/usebraid/braid/internal/server/ingest"
 	"github.com/usebraid/braid/internal/server/live"
+	"github.com/usebraid/braid/internal/server/spa"
 	"github.com/usebraid/braid/internal/server/stats"
 	"github.com/usebraid/braid/internal/server/webauth"
+	"github.com/usebraid/braid/web"
 )
 
 // Server owns the DB pool and the route table.
@@ -73,6 +75,7 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (*Server, error
 		}
 		_, _ = w.Write([]byte("ok"))
 	})
+	mux.Handle("GET /{path...}", auth.Require(spa.Handler(web.Dist()))) // last: explicit routes win by specificity
 	return &Server{db: d, mux: mux, stopLive: stop, liveExited: exited}, nil
 }
 

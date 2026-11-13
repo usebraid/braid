@@ -4,3 +4,6 @@
 docs
 deploy
 **/*_test.go
+web/node_modules
+web/dist/*
+!web/dist/.gitkeep

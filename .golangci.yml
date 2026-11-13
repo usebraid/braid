@@ -1,6 +1,6 @@
 version: "2"
 run:
-  build-tags: [e2e] # lint the chaos test too
+  build-tags: [e2e, webe2e] # lint the chaos and web e2e tests too
 linters:
   default: none
   enable:
