@@ -699,3 +699,58 @@ main:focus {
   height: 8px;
   border-radius: 50%;
 }
+.heat {
+  display: block;
+}
+.heat svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.cell-empty {
+  fill: var(--empty);
+}
+.glow-cell {
+  opacity: calc(var(--glow) * 0.45);
+}
+.cell-on {
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+.day {
+  fill: var(--faint);
+  font:
+    12px "JetBrains Mono",
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+.heat-live {
+  min-height: 1.5em;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.barlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.bar-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.bar-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar-text {
+  color: var(--muted);
+}
