@@ -44,7 +44,10 @@ describe('api client', () => {
     vi.stubGlobal('fetch', reply(401, { error: 'unauthenticated' }))
     const assign = vi.fn()
     vi.stubGlobal('location', { pathname: '/timeline', search: '?range=7d', assign })
-    await expect(get('/api/v1/me')).rejects.toBeInstanceOf(ApiError)
+    const settled = vi.fn()
+    get('/api/v1/me').then(settled, settled) // never settles: no error flashes before the redirect
+    await new Promise((r) => setTimeout(r, 10))
     expect(assign).toHaveBeenCalledWith('/auth/login?next=%2Ftimeline%3Frange%3D7d')
+    expect(settled).not.toHaveBeenCalled()
   })
 })

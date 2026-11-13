@@ -157,7 +157,11 @@ export function ConfirmDialog(p: {
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     const el = ref.current
+    const opener = document.activeElement
     if (el && !el.open) typeof el.showModal === 'function' ? el.showModal() : el.setAttribute('open', '')
+    return () => {
+      if (opener instanceof HTMLElement) opener.focus() // unmounting drops focus to <body> otherwise
+    }
   }, [])
   return (
     <dialog ref={ref} className="card confirm" aria-label={p.title} onCancel={p.onCancel}>

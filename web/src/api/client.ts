@@ -11,6 +11,9 @@ export class ApiError extends Error {
   }
 }
 
+export const goLogin = () =>
+  window.location.assign(`/auth/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+
 export type Query = Record<string, string | number | boolean | undefined | null>
 
 export async function api<T>(
@@ -30,7 +33,8 @@ export async function api<T>(
   }
   const res = await fetch(qs ? `${path}?${qs}` : path, init)
   if (res.status === 401) {
-    window.location.assign(`/auth/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+    goLogin()
+    return new Promise<T>(() => {}) // the page is leaving: no error flash
   }
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null

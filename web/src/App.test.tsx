@@ -28,7 +28,7 @@ const body = (path: string): unknown => {
     }
   throw new Error(`unmocked ${path}`)
 }
-vi.mock('./api/client', () => ({ get: vi.fn((path: string) => Promise.resolve(body(path))) }))
+vi.mock('./api/client', () => ({ goLogin: vi.fn(), get: vi.fn((path: string) => Promise.resolve(body(path))) }))
 
 it('loads the user and shows the overview with its navigation', async () => {
   render(<App />)

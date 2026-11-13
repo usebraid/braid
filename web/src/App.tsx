@@ -4,9 +4,9 @@
 import type { ReactNode } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { LiveProvider } from './api/live'
-import { MeProvider, useMe } from './api/session'
+import { MeProvider } from './api/session'
 import { Shell } from './components/Shell'
-import { ROUTES, type RouteDef } from './routes'
+import { ROUTES } from './routes'
 import { Admin } from './views/Admin'
 import { Audit } from './views/Audit'
 import { Devices } from './views/Devices'
@@ -14,17 +14,12 @@ import { Failures } from './views/Failures'
 import { LiveView } from './views/LiveView'
 import { NotFound } from './views/NotFound'
 import { Overview } from './views/Overview'
-import { Placeholder } from './views/Placeholder'
 import { Search } from './views/Search'
 import { Session } from './views/Session'
 import { Settings } from './views/Settings'
 import { Timeline } from './views/Timeline'
 
-function AdminOnly({ children }: { children: React.ReactNode }) {
-  return useMe().is_admin ? children : <NotFound />
-}
-
-// Views that have landed; every other route still shows its placeholder.
+// The admin view checks is_admin itself.
 const VIEWS: Record<string, ReactNode> = {
   '/timeline': <Timeline />,
   '/live': <LiveView />,
@@ -35,7 +30,6 @@ const VIEWS: Record<string, ReactNode> = {
   '/admin': <Admin />,
   '/settings': <Settings />,
 }
-const view = (r: RouteDef) => VIEWS[r.path] ?? <Placeholder title={r.label} />
 
 export function App() {
   return (
@@ -48,11 +42,7 @@ export function App() {
                 r.path === '/' ? (
                   <Route key={r.path} index element={<Overview />} />
                 ) : (
-                  <Route
-                    key={r.path}
-                    path={r.path}
-                    element={r.adminOnly ? <AdminOnly>{view(r)}</AdminOnly> : view(r)}
-                  />
+                  <Route key={r.path} path={r.path} element={VIEWS[r.path]} />
                 ),
               )}
               <Route path="/sessions/:id" element={<Session />} />

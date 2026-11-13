@@ -3,14 +3,12 @@
 
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { LiveClient, type LiveEvent, type LiveStatus } from '../lib/live'
+import { goLogin } from './client'
 
 export type LiveValue = { status: LiveStatus; subscribe: (fn: (e: LiveEvent) => void) => () => void }
 export const LiveContext = createContext<LiveValue>({ status: 'open', subscribe: () => () => {} })
 
 export type LiveSource = Pick<LiveClient, 'start' | 'stop' | 'subscribe' | 'onStatus' | 'status'>
-
-const goLogin = () =>
-  window.location.assign(`/auth/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
 
 // `client` is injectable for tests; by default one connects to /api/v1/live.
 export function LiveProvider({ children, client }: { children: ReactNode; client?: LiveSource }) {
