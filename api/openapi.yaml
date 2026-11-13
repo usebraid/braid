@@ -477,7 +477,7 @@ components:
         stored_bytes: { type: integer, format: int64 }
     Overview:
       type: object
-      required: [from, to, time_zone, reindexing, kpi, per_day, per_model, per_project, heatmap, per_day_by_project]
+      required: [from, to, time_zone, reindexing, kpi, per_day, per_model, per_project, heatmap, per_day_by_project, previous, activity]
       properties:
         from: { type: string, format: date-time }
         to: { type: string, format: date-time }
@@ -489,9 +489,30 @@ components:
         per_project: { type: array, items: { $ref: "#/components/schemas/ProjectPoint" } }
         heatmap: { type: array, items: { $ref: "#/components/schemas/HeatCell" } }
         per_day_by_project: { $ref: "#/components/schemas/ProjectSplit" }
+        previous:
+          $ref: "#/components/schemas/Totals"
+          description: The same sums for the period of the same length that ends at `from`.
+        activity:
+          type: array
+          description: Main-agent time per local day of session start over the 84 days ending at `to`; the other filters apply, days without sessions are left out.
+          items: { $ref: "#/components/schemas/ActivityDay" }
+    Totals:
+      type: object
+      required: [sessions, agent_ms, cost_usd, tokens]
+      properties:
+        sessions: { type: integer, format: int64 }
+        agent_ms: { type: integer, format: int64 }
+        cost_usd: { type: number }
+        tokens: { type: integer, format: int64 }
+    ActivityDay:
+      type: object
+      required: [day, agent_ms]
+      properties:
+        day: { type: string, format: date }
+        agent_ms: { type: integer, format: int64 }
     ProjectSplit:
       type: object
-      description: Daily cost and tokens by project; the top 8 projects by cost plus a trailing "_other" entry when more exist. days[].values[i] belongs to projects[i].
+      description: Daily cost, tokens, sessions and main-agent time by project (sessions and agent time on the day the session started); the top 8 projects by cost plus a trailing "_other" entry when more exist. days[].values[i] belongs to projects[i].
       required: [projects, days]
       properties:
         projects:
@@ -511,11 +532,15 @@ components:
                 type: array
                 items:
                   type: object
-                  required: [cost_usd, tokens]
-                  properties: { cost_usd: { type: number }, tokens: { type: integer, format: int64 } }
+                  required: [cost_usd, tokens, sessions, agent_ms]
+                  properties:
+                    cost_usd: { type: number }
+                    tokens: { type: integer, format: int64 }
+                    sessions: { type: integer, format: int64 }
+                    agent_ms: { type: integer, format: int64 }
     KPI:
       type: object
-      required: [sessions, agent_ms, total_agent_ms, agent_ms_estimated, cost_usd, cost_unknown_models, tokens, streak_days, failures, time_lost_s]
+      required: [sessions, agent_ms, total_agent_ms, agent_ms_estimated, cost_usd, cost_unknown_models, tokens, streak_days, longest_agent_ms, failures, time_lost_s]
       properties:
         sessions: { type: integer, format: int64 }
         agent_ms: { type: integer, format: int64 }
@@ -525,16 +550,18 @@ components:
         cost_unknown_models: { type: array, items: { type: string } }
         tokens: { type: integer, format: int64 }
         streak_days: { type: integer }
+        longest_agent_ms: { type: integer, format: int64, description: Main-agent time of the longest session. }
         failures: { type: integer, format: int64 }
         time_lost_s: { type: integer, format: int64 }
     DayPoint:
       type: object
-      required: [day, cost_usd, tokens, sessions]
+      required: [day, cost_usd, tokens, sessions, agent_ms]
       properties:
         day: { type: string, format: date }
         cost_usd: { type: number }
         tokens: { type: integer, format: int64 }
         sessions: { type: integer, format: int64 }
+        agent_ms: { type: integer, format: int64, description: Main-agent time of the sessions started that day. }
     ModelPoint:
       type: object
       required: [model, cost_usd, tokens, messages, price_unknown]
@@ -616,10 +643,11 @@ components:
         items: { type: array, items: { $ref: "#/components/schemas/LiveSession" } }
     ProjectOption:
       type: object
-      required: [path, name]
+      required: [path, name, sessions]
       properties:
         path: { type: string }
         name: { type: string }
+        sessions: { type: integer, format: int64, description: Sessions of the project in range. }
     FilterOptions:
       type: object
       required: [projects, models, skills]

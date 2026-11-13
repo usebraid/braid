@@ -516,8 +516,27 @@ export interface components {
             per_project: components["schemas"]["ProjectPoint"][];
             heatmap: components["schemas"]["HeatCell"][];
             per_day_by_project: components["schemas"]["ProjectSplit"];
+            /** @description The same sums for the period of the same length that ends at `from`. */
+            previous: components["schemas"]["Totals"];
+            /** @description Main-agent time per local day of session start over the 84 days ending at `to`; the other filters apply, days without sessions are left out. */
+            activity: components["schemas"]["ActivityDay"][];
         };
-        /** @description Daily cost and tokens by project; the top 8 projects by cost plus a trailing "_other" entry when more exist. days[].values[i] belongs to projects[i]. */
+        Totals: {
+            /** Format: int64 */
+            sessions: number;
+            /** Format: int64 */
+            agent_ms: number;
+            cost_usd: number;
+            /** Format: int64 */
+            tokens: number;
+        };
+        ActivityDay: {
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            agent_ms: number;
+        };
+        /** @description Daily cost, tokens, sessions and main-agent time by project (sessions and agent time on the day the session started); the top 8 projects by cost plus a trailing "_other" entry when more exist. days[].values[i] belongs to projects[i]. */
         ProjectSplit: {
             projects: {
                 key: string;
@@ -530,6 +549,10 @@ export interface components {
                     cost_usd: number;
                     /** Format: int64 */
                     tokens: number;
+                    /** Format: int64 */
+                    sessions: number;
+                    /** Format: int64 */
+                    agent_ms: number;
                 }[];
             }[];
         };
@@ -546,6 +569,11 @@ export interface components {
             /** Format: int64 */
             tokens: number;
             streak_days: number;
+            /**
+             * Format: int64
+             * @description Main-agent time of the longest session.
+             */
+            longest_agent_ms: number;
             /** Format: int64 */
             failures: number;
             /** Format: int64 */
@@ -559,6 +587,11 @@ export interface components {
             tokens: number;
             /** Format: int64 */
             sessions: number;
+            /**
+             * Format: int64
+             * @description Main-agent time of the sessions started that day.
+             */
+            agent_ms: number;
         };
         ModelPoint: {
             model: string;
@@ -642,6 +675,11 @@ export interface components {
         ProjectOption: {
             path: string;
             name: string;
+            /**
+             * Format: int64
+             * @description Sessions of the project in range.
+             */
+            sessions: number;
         };
         FilterOptions: {
             projects: components["schemas"]["ProjectOption"][];

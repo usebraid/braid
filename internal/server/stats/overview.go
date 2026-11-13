@@ -25,6 +25,7 @@ type KPI struct {
 	CostUnknownModels []string `json:"cost_unknown_models"`
 	Tokens            int64    `json:"tokens"`
 	StreakDays        int      `json:"streak_days"`
+	LongestAgentMs    int64    `json:"longest_agent_ms"`
 	Failures          int64    `json:"failures"`
 	TimeLostS         int64    `json:"time_lost_s"`
 }
@@ -35,7 +36,25 @@ type DayPoint struct {
 	CostUSD  float64 `json:"cost_usd"`
 	Tokens   int64   `json:"tokens"`
 	Sessions int64   `json:"sessions"`
+	AgentMs  int64   `json:"agent_ms"`
 }
+
+// Totals are the headline sums of a period; Overview.Previous holds them for the period of the same length before From.
+type Totals struct {
+	Sessions int64   `json:"sessions"`
+	AgentMs  int64   `json:"agent_ms"`
+	CostUSD  float64 `json:"cost_usd"`
+	Tokens   int64   `json:"tokens"`
+}
+
+// ActivityDay is the main-agent time of the sessions started on one local day.
+type ActivityDay struct {
+	Day     string `json:"day"`
+	AgentMs int64  `json:"agent_ms"`
+}
+
+// activityDays is the window of Overview.Activity, ending at To: twelve weeks.
+const activityDays = 84
 
 // ModelPoint is one model.
 type ModelPoint struct {
@@ -69,10 +88,12 @@ type ProjectKey struct {
 	Name string `json:"name"`
 }
 
-// ProjectValue is one project's share of a day.
+// ProjectValue is one project's share of a day: usage by its time, sessions and agent time by the session's start.
 type ProjectValue struct {
-	CostUSD float64 `json:"cost_usd"`
-	Tokens  int64   `json:"tokens"`
+	CostUSD  float64 `json:"cost_usd"`
+	Tokens   int64   `json:"tokens"`
+	Sessions int64   `json:"sessions"`
+	AgentMs  int64   `json:"agent_ms"`
 }
 
 // ProjectDay is one local day; Values[i] belongs to ProjectSplit.Projects[i].
@@ -81,7 +102,7 @@ type ProjectDay struct {
 	Values []ProjectValue `json:"values"`
 }
 
-// ProjectSplit is the daily cost and tokens stacked by project.
+// ProjectSplit is the daily cost, tokens, sessions and agent time stacked by project.
 type ProjectSplit struct {
 	Projects []ProjectKey `json:"projects"`
 	Days     []ProjectDay `json:"days"`
@@ -98,11 +119,15 @@ type Overview struct {
 	PerModel   []ModelPoint   `json:"per_model"`
 	PerProject []ProjectPoint `json:"per_project"`
 	Heatmap    []HeatCell     `json:"heatmap"`
+	Previous   Totals         `json:"previous"`
+	Activity   []ActivityDay  `json:"activity"`
 
 	PerDayByProject ProjectSplit `json:"per_day_by_project"`
 }
 
 const (
+	// mainMs joins the main agent's time of session s as am.ms.
+	mainMs  = `LEFT JOIN LATERAL (SELECT a.duration_ms ms FROM agents a WHERE a.session_id = s.session_id AND a.agent_id = 'main') am ON true`
 	tokExpr = `(u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens)`
 	// usageSet: usage rows of S within the range ($1, $2 and the rest as in setPred).
 	usageSet = `FROM usage u WHERE u.at >= $1 AND u.at < $2 AND u.session_id IN (SELECT s.session_id FROM sessions s WHERE ` + setPred + `)`
@@ -115,7 +140,7 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	ov := Overview{From: f.From, To: f.To, PerDay: []DayPoint{}, PerModel: []ModelPoint{}, PerProject: []ProjectPoint{}, Heatmap: []HeatCell{}, PerDayByProject: ProjectSplit{Projects: []ProjectKey{}, Days: []ProjectDay{}}}
+	ov := Overview{From: f.From, To: f.To, PerDay: []DayPoint{}, PerModel: []ModelPoint{}, PerProject: []ProjectPoint{}, Heatmap: []HeatCell{}, Activity: []ActivityDay{}, PerDayByProject: ProjectSplit{Projects: []ProjectKey{}, Days: []ProjectDay{}}}
 	ov.KPI.CostUnknownModels = []string{}
 	err = h.db.WithUser(r.Context(), p.UserID, func(tx pgx.Tx) error { return h.fillOverview(r.Context(), tx, f, &ov) })
 	if err != nil {
@@ -138,8 +163,9 @@ func (h *Handler) fillOverview(ctx context.Context, tx pgx.Tx, f Filter, ov *Ove
 	    coalesce((SELECT sum(a.duration_ms) FROM agents a WHERE a.agent_id = 'main' AND a.session_id IN (SELECT session_id FROM ss)), 0)::bigint,
 	    coalesce((SELECT sum(a.duration_ms) FROM agents a WHERE a.session_id IN (SELECT session_id FROM ss)), 0)::bigint,
 	    coalesce((SELECT bool_or(a.duration_estimated) FROM agents a WHERE a.session_id IN (SELECT session_id FROM ss)), false),
-	    (SELECT count(*) FROM failures f WHERE f.occurred_at >= $1 AND f.occurred_at < $2 AND f.session_id IN (SELECT session_id FROM ss))`, a...).
-		Scan(&k.Sessions, &k.AgentMs, &k.TotalAgentMs, &k.AgentMsEstimated, &k.Failures); err != nil {
+	    (SELECT count(*) FROM failures f WHERE f.occurred_at >= $1 AND f.occurred_at < $2 AND f.session_id IN (SELECT session_id FROM ss)),
+	    coalesce((SELECT max(a.duration_ms) FROM agents a WHERE a.agent_id = 'main' AND a.session_id IN (SELECT session_id FROM ss)), 0)::bigint`, a...).
+		Scan(&k.Sessions, &k.AgentMs, &k.TotalAgentMs, &k.AgentMsEstimated, &k.Failures, &k.LongestAgentMs); err != nil {
 		return err
 	}
 	var unknown []string
@@ -158,13 +184,29 @@ func (h *Handler) fillOverview(ctx context.Context, tx pgx.Tx, f Filter, ov *Ove
 	if k.StreakDays, err = h.streak(ctx, tx, ov.TimeZone); err != nil {
 		return err
 	}
+	prev := f
+	prev.From, prev.To = f.From.Add(-f.To.Sub(f.From)), f.From
+	if ov.Previous, err = periodTotals(ctx, tx, prev); err != nil {
+		return err
+	}
+	act := f
+	act.From = f.To.AddDate(0, 0, -activityDays)
+	if err := collect(ctx, tx, `SELECT to_char(date(timezone($7, s.started_at)), 'YYYY-MM-DD'), coalesce(sum(am.ms), 0)::bigint
+	  FROM sessions s `+mainMs+` WHERE `+setPred+` GROUP BY 1 ORDER BY 1`, append(act.args(), ov.TimeZone), func(rows pgx.Rows) error {
+		var d ActivityDay
+		err := rows.Scan(&d.Day, &d.AgentMs)
+		ov.Activity = append(ov.Activity, d)
+		return err
+	}); err != nil {
+		return err
+	}
 
 	if err := collect(ctx, tx, `WITH d1 AS (SELECT date(timezone($7, u.at)) AS day, sum(u.cost_usd)::float8 cost, sum(`+tokExpr+`)::bigint tok `+usageSet+` GROUP BY 1),
-	  d2 AS (SELECT date(timezone($7, s.started_at)) AS day, count(*) n FROM sessions s WHERE `+setPred+` GROUP BY 1)
-	  SELECT to_char(coalesce(d1.day, d2.day), 'YYYY-MM-DD'), coalesce(cost, 0), coalesce(tok, 0), coalesce(n, 0)
+	  d2 AS (SELECT date(timezone($7, s.started_at)) AS day, count(*) n, coalesce(sum(am.ms), 0) ms FROM sessions s `+mainMs+` WHERE `+setPred+` GROUP BY 1)
+	  SELECT to_char(coalesce(d1.day, d2.day), 'YYYY-MM-DD'), coalesce(cost, 0), coalesce(tok, 0), coalesce(n, 0), coalesce(ms, 0)::bigint
 	    FROM d1 FULL JOIN d2 ON d1.day = d2.day ORDER BY 1`, tz, func(rows pgx.Rows) error {
 		var d DayPoint
-		err := rows.Scan(&d.Day, &d.CostUSD, &d.Tokens, &d.Sessions)
+		err := rows.Scan(&d.Day, &d.CostUSD, &d.Tokens, &d.Sessions, &d.AgentMs)
 		ov.PerDay = append(ov.PerDay, d)
 		return err
 	}); err != nil {
@@ -187,7 +229,7 @@ func (h *Handler) fillOverview(ctx context.Context, tx pgx.Tx, f Filter, ov *Ove
 	  FROM sessions s LEFT JOIN projects p ON p.path = s.project_path
 	  LEFT JOIN LATERAL (SELECT sum(u.cost_usd) cost, sum(`+tokExpr+`) tok FROM usage u
 	                      WHERE u.session_id = s.session_id AND u.at >= $1 AND u.at < $2) c ON true
-	  LEFT JOIN LATERAL (SELECT a.duration_ms ms FROM agents a WHERE a.session_id = s.session_id AND a.agent_id = 'main') am ON true
+	  `+mainMs+`
 	  WHERE `+setPred+` GROUP BY 1 ORDER BY 3 DESC, 1`, a, func(rows pgx.Rows) error {
 		var pp ProjectPoint
 		err := rows.Scan(&pp.Path, &pp.Name, &pp.CostUSD, &pp.Tokens, &pp.Sessions, &pp.AgentMs)
@@ -226,6 +268,20 @@ func fillProjectSplit(ctx context.Context, tx pgx.Tx, tz []any, ov *Overview) er
 		err := rows.Scan(&c.day, &c.key, &c.name, &c.v.CostUSD, &c.v.Tokens)
 		cells = append(cells, c)
 		total[c.key] += c.v.CostUSD
+		names[c.key] = c.name
+		return err
+	}); err != nil {
+		return err
+	}
+	// sessions and agent time count on the day the session started; a project may have them without usage in range
+	if err := collect(ctx, tx, `SELECT to_char(date(timezone($7, s.started_at)), 'YYYY-MM-DD'), coalesce(s.project_path, ''), coalesce(max(p.name), ''),
+	    count(*), coalesce(sum(am.ms), 0)::bigint
+	  FROM sessions s LEFT JOIN projects p ON p.path = s.project_path `+mainMs+`
+	  WHERE `+setPred+` GROUP BY 1, 2`, tz, func(rows pgx.Rows) error {
+		var c cell
+		err := rows.Scan(&c.day, &c.key, &c.name, &c.v.Sessions, &c.v.AgentMs)
+		cells = append(cells, c)
+		total[c.key] += 0 // ranks the project even without usage
 		names[c.key] = c.name
 		return err
 	}); err != nil {
@@ -271,11 +327,25 @@ func fillProjectSplit(ctx context.Context, tx pgx.Tx, tz []any, ov *Overview) er
 		v := &byDay[c.day][i]
 		v.CostUSD += c.v.CostUSD
 		v.Tokens += c.v.Tokens
+		v.Sessions += c.v.Sessions
+		v.AgentMs += c.v.AgentMs
 	}
 	for _, d := range ov.PerDay {
 		sp.Days = append(sp.Days, ProjectDay{Day: d.Day, Values: byDay[d.Day]})
 	}
 	return nil
+}
+
+// periodTotals sums the sessions of f: count and main-agent time by session, cost and tokens by usage time (as KPI).
+func periodTotals(ctx context.Context, tx pgx.Tx, f Filter) (Totals, error) {
+	var t Totals
+	a := f.args()
+	if err := tx.QueryRow(ctx, `SELECT count(*), coalesce(sum(am.ms), 0)::bigint FROM sessions s `+mainMs+` WHERE `+setPred, a...).
+		Scan(&t.Sessions, &t.AgentMs); err != nil {
+		return t, err
+	}
+	err := tx.QueryRow(ctx, `SELECT coalesce(sum(u.cost_usd), 0)::float8, coalesce(sum(`+tokExpr+`), 0)::bigint `+usageSet, a...).Scan(&t.CostUSD, &t.Tokens)
+	return t, err
 }
 
 // streak ignores the filter: distinct local days with usage over all time.

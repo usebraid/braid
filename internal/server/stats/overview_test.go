@@ -101,10 +101,32 @@ func TestOverview(t *testing.T) {
 		t.Fatalf("heatmap %+v", ov.Heatmap)
 	}
 
-	var narrowed, none stats.Overview
+	if ms := ov.PerDay[0].AgentMs + ov.PerDay[1].AgentMs; ms != k.AgentMs || ov.PerDay[0].AgentMs <= 0 || ov.PerDay[1].AgentMs <= 0 {
+		t.Fatalf("per_day agent_ms %+v", ov.PerDay)
+	}
+	if k.LongestAgentMs != max(ov.PerDay[0].AgentMs, ov.PerDay[1].AgentMs) {
+		t.Fatalf("longest %d vs %+v", k.LongestAgentMs, ov.PerDay)
+	}
+	if ov.Previous != (stats.Totals{}) { // 2026-08-01..2026-10-01 is empty
+		t.Fatalf("previous %+v", ov.Previous)
+	}
+	if want := []stats.ActivityDay{{Day: "2026-11-02", AgentMs: ov.PerDay[0].AgentMs}, {Day: "2026-11-03", AgentMs: ov.PerDay[1].AgentMs}}; !reflect.DeepEqual(ov.Activity, want) {
+		t.Fatalf("activity %+v", ov.Activity)
+	}
+
+	var narrowed, none, early stats.Overview
 	x.get(t, "/api/v1/stats/overview?from=2026-11-03T00:00:00Z&to=2026-12-01T00:00:00Z", &narrowed)
 	if narrowed.KPI.Sessions != 1 || !near(narrowed.KPI.CostUSD, 6) || narrowed.KPI.Failures != 0 || narrowed.KPI.TimeLostS != 0 {
 		t.Fatalf("narrowed %+v", narrowed.KPI)
+	}
+	// the previous 28 days (2026-10-06..2026-11-03) hold s1 only
+	if p := narrowed.Previous; p.Sessions != 1 || p.AgentMs != ov.PerDay[0].AgentMs || !near(p.CostUSD, 6) || p.Tokens != 1_100_000 {
+		t.Fatalf("previous %+v", p)
+	}
+	// activity ends at To, whatever From is: 84 days before 2026-11-02T12:00Z reach back past both sessions, s2 is after To
+	x.get(t, "/api/v1/stats/overview?from=2026-11-02T00:00:00Z&to=2026-11-02T12:00:00Z", &early)
+	if len(early.Activity) != 1 || early.Activity[0].Day != "2026-11-02" {
+		t.Fatalf("activity window %+v", early.Activity)
 	}
 	x.get(t, "/api/v1/stats/overview?"+rng+"&model=claude-haiku-4-5", &none)
 	if none.KPI.Sessions != 0 || none.KPI.CostUSD != 0 || none.PerDay == nil || len(none.PerDay) != 0 {
@@ -157,15 +179,17 @@ func checkSplit(t *testing.T, ov stats.Overview) {
 	}
 	for i, d := range sp.Days {
 		var c float64
-		var tok int64
+		var tok, n, ms int64
 		if len(d.Values) != len(sp.Projects) {
 			t.Fatalf("day %s: %d values for %d projects", d.Day, len(d.Values), len(sp.Projects))
 		}
 		for _, v := range d.Values {
 			c += v.CostUSD
 			tok += v.Tokens
+			n += v.Sessions
+			ms += v.AgentMs
 		}
-		if d.Day != ov.PerDay[i].Day || !near(c, ov.PerDay[i].CostUSD) || tok != ov.PerDay[i].Tokens {
+		if d.Day != ov.PerDay[i].Day || !near(c, ov.PerDay[i].CostUSD) || tok != ov.PerDay[i].Tokens || n != ov.PerDay[i].Sessions || ms != ov.PerDay[i].AgentMs {
 			t.Errorf("day %s: split %v/%d vs per_day %+v", d.Day, c, tok, ov.PerDay[i])
 		}
 	}
