@@ -9,16 +9,21 @@ test.describe('views as alice', () => {
     await loginAs(page, request, 'alice')
   })
 
-  test('overview: KPI tiles and filters', async ({ page }) => {
+  test('overview: KPI tiles, stream, sessions, activity and the project list', async ({ page }) => {
     const csp = cspViolations(page)
     await page.goto(`/?${RANGE}&project=%2Fwork%2Falpha`)
-    await expect(page.getByText('Sessions', { exact: true }).first()).toBeVisible() // a chart toggle shares the label
+    await expect(page.getByRole('heading', { level: 1, name: 'alpha' })).toBeVisible()
     await expect(page.getByTestId('kpi-sessions')).toContainText('1')
     await expect(page.getByTestId('kpi-cost')).toContainText('$0.04')
     await expect(page.getByTestId('kpi-tokens')).toContainText('5.5k')
-    await expect(page.getByTestId('kpi-failures')).toContainText('7')
-    await expect(page.getByRole('img', { name: /Cost per day/ })).toBeVisible()
-    await page.goto(`/?${RANGE}`)
+    await expect(page.getByTestId('fact-failures')).toContainText('7')
+    await expect(page.getByRole('img', { name: /Agent time, last \d+ days/ })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Golden custom' })).toBeVisible()
+    await page
+      .getByRole('navigation', { name: 'Projects' })
+      .getByRole('button', { name: /^All projects/ })
+      .click()
+    await expect(page.getByRole('heading', { level: 1, name: 'All projects' })).toBeVisible()
     await expect(page.getByTestId('kpi-sessions')).toContainText('4') // g1, b1, big1 and the live session
     expect(csp).toEqual([])
   })
@@ -28,7 +33,7 @@ test.describe('views as alice', () => {
     await expect(page.getByRole('link', { name: 'Golden custom' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Beta small' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Bob private' })).toHaveCount(0) // user isolation
-    await page.getByLabel('Project').selectOption('/work/beta')
+    await page.getByLabel('Project', { exact: true }).selectOption('/work/beta')
     await expect(page.getByRole('link', { name: 'Golden custom' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Beta small' })).toBeVisible()
     await page.getByRole('link', { name: 'Beta small' }).click()

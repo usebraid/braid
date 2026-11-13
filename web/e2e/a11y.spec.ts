@@ -56,9 +56,9 @@ test('charts are reachable by keyboard and reduced motion removes transitions', 
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await loginAs(page, request, 'alice')
   await page.goto(`/?${RANGE}`)
-  const col = page.getByRole('button', { name: /Nov 1/ }).first()
-  await col.focus()
-  await expect(page.getByRole('status').filter({ hasText: /Nov 1/ })).toBeVisible()
+  await page.getByRole('group', { name: /Agent time, last \d+ days/ }).focus()
+  await page.keyboard.press('Home')
+  await expect(page.getByRole('status').filter({ hasText: /Oct 1/ })).toBeVisible()
   const dur = await page
     .getByRole('main')
     .evaluate((el) => getComputedStyle(el.querySelector('.card') ?? el).transitionDuration)

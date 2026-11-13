@@ -67,6 +67,18 @@ export function fmtDateTime(iso: string, timeZone: string): string {
   }).format(new Date(iso))
 }
 
+// "Nov 2, 14:05" in the user's zone, for dense rows.
+export function fmtShortDateTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(iso))
+}
+
 export const dayLabel = (day: string) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 

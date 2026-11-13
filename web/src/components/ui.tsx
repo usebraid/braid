@@ -13,39 +13,40 @@ export function Card({ className, children }: { className?: string; children: Re
   return <div className={className ? `card ${className}` : 'card'}>{children}</div>
 }
 
-// colors[1] tints the card; both feed the sparkline. `spark` reserves the sparkline row even without values, so a
-// row of tiles lines up; `small` is the compact one-line tile.
+// colors[1] tints the card; both feed the sparkline. `delta` is the change against the previous period in percent.
 export function KpiCard(p: {
   label: string
   value: string
+  delta?: number | null
   note?: string
   estimated?: boolean
   colors: [string, string]
   values?: number[]
-  spark?: boolean
-  small?: boolean
   title?: string
   testId?: string
 }) {
   const id = useId().replace(/:/g, '')
+  const d = p.delta
   return (
     <div
-      className={p.small ? 'card kpi small' : 'card kpi'}
+      className="card kpi"
       style={{ '--k': p.colors[1] } as CSSProperties}
       title={p.title}
       data-testid={p.testId && `kpi-${p.testId}`}
     >
       <div className="kpi-label">{p.label}</div>
-      <div className="kpi-row">
-        <span className="kpi-value num">{p.value}</span>
+      <div className="kpi-value num">
+        <span>{p.value}</span>
+        {d != null ? (
+          <span className={d >= 0 ? 'delta up' : 'delta down'}>
+            {d >= 0 ? '↑' : '↓'}
+            {Math.abs(d)}%
+          </span>
+        ) : null}
         {p.estimated ? <span className="kpi-est">estimated</span> : null}
       </div>
-      {p.small ? null : <div className="kpi-note">{p.note}</div>}
-      {p.values ? (
-        <Sparkline values={p.values} colors={p.colors} id={`kpi${id}`} />
-      ) : p.spark ? (
-        <div className="spark-slot" />
-      ) : null}
+      {p.note ? <div className="kpi-note">{p.note}</div> : null}
+      {p.values ? <Sparkline values={p.values} colors={p.colors} id={`kpi${id}`} /> : null}
     </div>
   )
 }

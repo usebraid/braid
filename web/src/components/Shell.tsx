@@ -2,14 +2,66 @@
 // Copyright (C) 2026 The Braid Authors
 
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { LiveBanner } from '../api/live'
+import { ProjectsProvider, projectColor, useProjects } from '../api/projects'
 import { useMe } from '../api/session'
+import { withFilter } from '../lib/filters'
 import { ROUTES, titleFor } from '../routes'
 import { Footer } from './Footer'
 import { Avatar, ThemeButton } from './ui'
 
+const FILTERED = ['/', '/timeline', '/failures', '/search'] // views that read the project filter
+
+// The projects as on ponytail's board: All projects, then each with its colour and session count; a click filters.
+function ProjectNav() {
+  const projects = useProjects()
+  const list = Array.isArray(projects) ? projects : []
+  const [sp] = useSearchParams()
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const current = sp.get('project') ?? ''
+  const pick = (path: string) =>
+    navigate({
+      pathname: FILTERED.includes(pathname) ? pathname : '/',
+      search: withFilter(sp, 'project', path).toString(),
+    })
+  const total = list.reduce((a, p) => a + p.sessions, 0)
+  return (
+    <>
+      <div className="side-label" id="projects-label">
+        Projects
+      </div>
+      <nav className="proj-list" aria-labelledby="projects-label">
+        {[{ path: '', name: 'All projects', sessions: total }, ...list].map((p) => (
+          <button
+            key={p.path}
+            type="button"
+            className={current === p.path ? 'nav-item on' : 'nav-item'}
+            aria-pressed={current === p.path}
+            aria-label={`${p.name || p.path}, ${p.sessions} ${p.sessions === 1 ? 'session' : 'sessions'}`}
+            title={p.path || undefined}
+            onClick={() => pick(p.path)}
+          >
+            {p.path ? <span className="dot" style={{ '--c': projectColor(list, p.path) } as CSSProperties} /> : null}
+            <span className="name">{p.name || p.path}</span>
+            <span className="n">{p.sessions}</span>
+          </button>
+        ))}
+      </nav>
+    </>
+  )
+}
+
 export function Shell() {
+  return (
+    <ProjectsProvider>
+      <Frame />
+    </ProjectsProvider>
+  )
+}
+
+function Frame() {
   const me = useMe()
   const { pathname } = useLocation()
   const main = useRef<HTMLElement>(null)
@@ -66,19 +118,21 @@ export function Shell() {
             </svg>
           </button>
         </div>
-        <nav className="nav-list" id="nav" aria-label="Main">
-          {ROUTES.filter((r) => !r.adminOnly || me.is_admin).map((r, i) => (
-            <NavLink
-              key={r.path}
-              to={r.path}
-              end
-              style={{ '--c': `var(--p${(i % 8) + 1})` } as CSSProperties}
-              className={({ isActive }) => (isActive ? 'nav-item on' : 'nav-item')}
-            >
-              {r.label}
-            </NavLink>
-          ))}
-        </nav>
+        <div className="side-scroll" id="nav">
+          <nav className="nav-list" aria-label="Main">
+            {ROUTES.filter((r) => !r.adminOnly || me.is_admin).map((r) => (
+              <NavLink
+                key={r.path}
+                to={r.path}
+                end
+                className={({ isActive }) => (isActive ? 'nav-item on' : 'nav-item')}
+              >
+                {r.label}
+              </NavLink>
+            ))}
+          </nav>
+          <ProjectNav />
+        </div>
         <div className="side-foot">
           <Avatar name={me.name || me.email} />
           <span className="foot-text">{me.name || me.email}</span>

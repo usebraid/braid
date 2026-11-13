@@ -34,35 +34,63 @@ describe('smooth', () => {
 })
 
 describe('StreamChart', () => {
-  it('has a text alternative: label, hidden table, focusable columns', () => {
-    render(<StreamChart points={pts} format={(v) => `$${v}`} title="Cost per day" />)
-    expect(screen.getByRole('img', { name: /Cost per day: total \$6, 3 days/ })).toBeInTheDocument()
-    const rows = screen.getAllByRole('row')
-    expect(rows).toHaveLength(4) // header + 3
-    expect(screen.getByRole('button', { name: 'Nov 2: $3' })).toHaveAttribute('tabindex', '0')
+  it('is one tab stop with a text alternative: label and a hidden table of the days with data', () => {
+    render(
+      <StreamChart
+        points={[...pts, { key: '2026-11-04', label: 'Nov 4', value: 0 }]}
+        format={(v) => `$${v}`}
+        title="Cost per day"
+      />,
+    )
+    expect(screen.getByRole('img', { name: /Cost per day: total \$6, 4 days/ })).toBeInTheDocument()
+    expect(screen.getAllByRole('row')).toHaveLength(4) // header + 3, the zero day is left out
+    expect(screen.getByRole('group', { name: /Cost per day/ })).toHaveAttribute('tabindex', '0')
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
-  it('shows the tooltip on keyboard focus and hides it on Escape', async () => {
+  it('reads the latest day on focus, moves with the arrows and hides on Escape', async () => {
     render(<StreamChart points={pts} format={(v) => `$${v}`} title="Cost per day" />)
     await userEvent.tab()
-    expect(screen.getByRole('status')).toHaveTextContent('Nov 1')
-    await userEvent.keyboard('{ArrowRight}')
+    expect(screen.getByRole('status')).toHaveTextContent('Nov 3')
+    await userEvent.keyboard('{ArrowLeft}')
     expect(screen.getByRole('status')).toHaveTextContent('Nov 2')
     expect(screen.getByRole('status')).toHaveTextContent('$3')
+    await userEvent.keyboard('{Home}')
+    expect(screen.getByRole('status')).toHaveTextContent('Nov 1')
     await userEvent.keyboard('{Escape}')
     expect(screen.getByRole('status')).toBeEmptyDOMElement()
   })
-  it('renders the empty message instead of an empty chart', () => {
-    render(<StreamChart points={[]} format={String} title="Tokens per day" empty="Nothing yet" />)
-    expect(screen.getByText('Nothing yet')).toBeInTheDocument()
+  it('draws the axis and an empty note when the range has no value, a single day still as a peak', () => {
+    const zero = pts.map((q) => ({ ...q, value: 0 }))
+    const { container, rerender } = render(<StreamChart points={zero} format={String} title="Tokens per day" />)
+    expect(screen.getByText('No sessions in this period')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: /Tokens per day/ })).not.toHaveAttribute('tabindex')
+    rerender(
+      <StreamChart
+        points={zero.map((q, i) => (i === 1 ? { ...q, value: 5 } : q))}
+        format={String}
+        title="Tokens per day"
+      />,
+    )
+    expect(screen.queryByText('No sessions in this period')).toBeNull()
+    expect(screen.queryByText(/Not enough days/)).toBeNull()
+    expect(container.querySelectorAll('path').length).toBeGreaterThan(1)
   })
-  it('stacks layers and breaks the tooltip down by project', async () => {
+  it('stacks layers, breaks the tooltip down by project and puts one dot per session under the axis', async () => {
     const layers = [
       { key: 'a', label: 'alpha', color: '#5fe08a', values: [1, 1, 1] },
       { key: 'b', label: 'beta', color: '#7c8cff', values: [0, 2, 1] },
     ]
-    render(<StreamChart points={pts} layers={layers} format={(v) => `$${v}`} title="Cost per day" />)
+    const dots = [
+      { i: 0, color: '#5fe08a' },
+      { i: 1, color: '#5fe08a' },
+      { i: 1, color: '#7c8cff' },
+    ]
+    const { container } = render(
+      <StreamChart points={pts} layers={layers} dots={dots} format={(v) => `$${v}`} title="Cost per day" />,
+    )
+    expect(container.querySelectorAll('circle')).toHaveLength(3)
     await userEvent.tab()
-    await userEvent.keyboard('{ArrowRight}')
+    await userEvent.keyboard('{ArrowLeft}')
     expect(screen.getByRole('status')).toHaveTextContent('alpha $1')
     expect(screen.getByRole('status')).toHaveTextContent('beta $2')
   })

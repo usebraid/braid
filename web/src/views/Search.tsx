@@ -7,7 +7,7 @@ import { useApi } from '../api/hooks'
 import { useMe } from '../api/session'
 import { statsSearch } from '../api/stats'
 import { useFilters } from '../api/useFilters'
-import { FilterBar } from '../components/FilterBar'
+import { FilterBar, PageHead } from '../components/FilterBar'
 import { Card, Empty, ErrorNote } from '../components/ui'
 import { fmtDateTime } from '../lib/format'
 import { highlight } from '../lib/highlight'
@@ -40,9 +40,7 @@ export function Search() {
   )
   return (
     <>
-      <div className="top">
-        <h1>Search</h1>
-      </div>
+      <PageHead title="Search" range />
       <FilterBar />
       <div className="search-box">
         <input

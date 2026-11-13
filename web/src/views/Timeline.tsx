@@ -6,7 +6,7 @@ import { useMe } from '../api/session'
 import { listDevices, statsSessions } from '../api/stats'
 import type { SessionItem } from '../api/types'
 import { useFilters } from '../api/useFilters'
-import { FilterBar } from '../components/FilterBar'
+import { FilterBar, PageHead } from '../components/FilterBar'
 import { Card, Empty, ErrorNote, TableWrap } from '../components/ui'
 import { useInfinite } from '../lib/useInfinite'
 import { SessionRow } from './SessionRow'
@@ -24,9 +24,7 @@ export function Timeline() {
   })
   return (
     <>
-      <div className="top">
-        <h1>Timeline</h1>
-      </div>
+      <PageHead title="Timeline" range />
       <FilterBar />
       {list.error ? <ErrorNote error={list.error} retry={list.more} /> : null}
       {list.items.length === 0 && !list.loading && !list.error ? (

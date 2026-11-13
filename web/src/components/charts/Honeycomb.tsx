@@ -8,52 +8,57 @@ import { type KeyboardEvent, useId, useState } from 'react'
 import { heatColor, hexPath } from './heat'
 import { Blur } from './Sparkline'
 
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const R = 17
 const CW = Math.sqrt(3) * R
 const LEFT = 44
 const TOP = R + 2
-const COLS = 24
-const GRID_W = LEFT + COLS * CW + CW / 2
-const GRID_BOTTOM = TOP + 7 * R * 1.5
-const LEGEND_Y = GRID_BOTTOM + R + 16
-
-type Cell = { weekday: number; hour: number; count: number }
 const LEGEND_STEP = 15
+const MOVES: Record<string, number> = { ArrowUp: -1, ArrowDown: 1, ArrowLeft: -7, ArrowRight: 7 }
 
-export function Honeycomb(p: { cells: Cell[]; title: string; unit?: string }) {
+// The days as a honeycomb: a column per week, a row per weekday (Sunday on top), the colour is the day's value.
+export function Honeycomb(p: {
+  keys: string[] // consecutive "YYYY-MM-DD" days
+  values: number[]
+  title: string
+  label: (key: string) => string
+  format: (v: number) => string
+}) {
   const uid = useId().replace(/:/g, '')
-  const unit = p.unit ?? 'events'
-  const counts = new Map<number, number>()
-  for (const c of p.cells) counts.set(c.weekday * COLS + c.hour, c.count)
-  const max = Math.max(0, ...counts.values())
-  const busiest = [...p.cells].sort((a, b) => b.count - a.count)[0]
-  const [active, setActive] = useState<[number, number] | null>(null)
-  const focus = () => setActive((a) => a ?? [busiest?.weekday ?? 0, busiest?.hour ?? 0])
-  const say = (row: number, col: number) => {
-    const n = counts.get(row * COLS + col) ?? 0
-    return `${DAYS[row]} ${col}:00, ${n ? `${n} ${unit}` : 'no activity'}`
-  }
-  const onKey = (e: KeyboardEvent) => {
-    const d: Record<string, [number, number]> = {
-      ArrowUp: [-1, 0],
-      ArrowDown: [1, 0],
-      ArrowLeft: [0, -1],
-      ArrowRight: [0, 1],
+  const [active, setActive] = useState<number | null>(null)
+  const n = p.keys.length
+  const max = Math.max(0, ...p.values)
+  const firstDow = p.keys[0] ? new Date(`${p.keys[0]}T00:00:00Z`).getUTCDay() : 0
+  const cols = Math.ceil((n + firstDow) / 7)
+  const cells = p.keys.map((k, i) => {
+    const pos = i + firstDow
+    const row = pos % 7
+    const v = p.values[i] ?? 0
+    return {
+      k,
+      v,
+      a: max ? v / max : 0,
+      cx: LEFT + Math.floor(pos / 7) * CW + (row % 2 ? CW / 2 : 0),
+      cy: TOP + row * R * 1.5,
     }
-    const m = d[e.key]
+  })
+  const right = LEFT + cols * CW + CW / 2
+  const ly = TOP + 6 * R * 1.5 + R + 20
+  const end = right - 40
+  const say = (i: number) => {
+    const c = cells[i]
+    return c ? `${p.label(c.k)}: ${c.v ? p.format(c.v) : 'no session'}` : ''
+  }
+  const busiest = p.values.reduce((b, v, i) => (v > (p.values[b] ?? 0) ? i : b), n - 1)
+  const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') setActive(null)
+    const m = MOVES[e.key]
     if (!m) return
     e.preventDefault()
     setActive((a) => {
-      const [r, c] = a ?? [0, 0]
-      return [Math.max(0, Math.min(6, r + m[0])), Math.max(0, Math.min(COLS - 1, c + m[1]))]
+      const to = (a ?? busiest) + m
+      return to >= 0 && to < n ? to : a
     })
   }
-  const pos = (row: number, col: number) => ({ cx: LEFT + col * CW + (row % 2 ? CW / 2 : 0), cy: TOP + row * R * 1.5 })
-  const rows = Array.from({ length: 7 }, (_, r) => r)
-  const cols = Array.from({ length: COLS }, (_, c) => c)
-  const end = GRID_W - 42
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: a keyboard-navigable chart, role=group with a label is the contract
@@ -64,69 +69,58 @@ export function Honeycomb(p: { cells: Cell[]; title: string; unit?: string }) {
       aria-label={p.title}
       // biome-ignore lint/a11y/noNoninteractiveTabindex: one tab stop for the whole chart, arrows move inside
       tabIndex={0}
-      onFocus={focus}
+      onFocus={() => setActive((a) => a ?? busiest)}
       onBlur={() => setActive(null)}
       onKeyDown={onKey}
       onMouseLeave={() => setActive(null)}
     >
-      <svg viewBox={`0 0 ${Math.ceil(GRID_W + 2)} ${Math.ceil(LEGEND_Y + 10)}`} aria-hidden="true">
+      <svg viewBox={`0 0 ${Math.ceil(right + 2)} ${Math.ceil(ly + 10)}`} aria-hidden="true">
         <defs>
           <Blur id={`${uid}-g`} sd={6} />
         </defs>
-        {rows.flatMap((r) =>
-          cols.map((c) => {
-            const n = counts.get(r * COLS + c) ?? 0
-            return n / max > 0.6 ? (
-              <path
-                key={`g${r}-${c}`}
-                d={hexPath(pos(r, c).cx, pos(r, c).cy, R)}
-                fill={heatColor(n / max)}
-                filter={`url(#${uid}-g)`}
-                className="glow-cell"
-              />
-            ) : null
-          }),
+        {cells.map((c) =>
+          c.a > 0.6 ? (
+            <path
+              key={`g${c.k}`}
+              d={hexPath(c.cx, c.cy, R)}
+              fill={heatColor(c.a)}
+              filter={`url(#${uid}-g)`}
+              className="glow-cell"
+            />
+          ) : null,
         )}
-        {rows.flatMap((r) =>
-          cols.map((c) => {
-            const n = counts.get(r * COLS + c) ?? 0
-            const on = active?.[0] === r && active[1] === c
-            return (
-              // biome-ignore lint/a11y/noStaticElementInteractions: mouse-only hover, the keyboard path is the group's arrow keys
-              <path
-                key={`${r}-${c}`}
-                d={hexPath(pos(r, c).cx, pos(r, c).cy, R - 2)}
-                fill={n ? heatColor(n / max) : undefined}
-                className={n ? (on ? 'cell-on' : undefined) : on ? 'cell-empty cell-on' : 'cell-empty'}
-                onMouseEnter={() => setActive([r, c])}
-              >
-                <title>{say(r, c)}</title>
-              </path>
-            )
-          }),
-        )}
-        {rows.map((r) => (
-          <text key={r} x={0} y={pos(r, 0).cy + 4} className="day">
-            {(DAYS[r] as string).slice(0, 3)}
+        {cells.map((c, i) => {
+          const on = active === i
+          return (
+            // biome-ignore lint/a11y/noStaticElementInteractions: mouse-only hover, the keyboard path is the group's arrow keys
+            <path
+              key={c.k}
+              d={hexPath(c.cx, c.cy, R - 2)}
+              fill={c.v ? heatColor(c.a) : undefined}
+              className={[c.v ? '' : 'cell-empty', on ? 'cell-on' : ''].join(' ').trim() || undefined}
+              onMouseEnter={() => setActive(i)}
+            >
+              <title>{say(i)}</title>
+            </path>
+          )
+        })}
+        {['Mon', 'Wed', 'Fri'].map((d, i) => (
+          <text key={d} x={0} y={TOP + (1 + 2 * i) * R * 1.5 + 4} className="day">
+            {d}
           </text>
         ))}
-        {[0, 6, 12, 18].map((h) => (
-          <text key={h} x={pos(0, h).cx} y={GRID_BOTTOM + 6} className="day" textAnchor="middle">
-            {h}
-          </text>
-        ))}
-        <text x={end - 4 * LEGEND_STEP - 14} y={LEGEND_Y + 4} textAnchor="end" className="day">
+        <text x={end - 4 * LEGEND_STEP - 14} y={ly + 4} textAnchor="end" className="day">
           Less
         </text>
         {[0.1, 0.3, 0.55, 0.8, 1].map((a, i) => (
-          <path key={a} d={hexPath(end - (4 - i) * LEGEND_STEP, LEGEND_Y, 6.5)} fill={heatColor(a)} />
+          <path key={a} d={hexPath(end - (4 - i) * LEGEND_STEP, ly, 6.5)} fill={heatColor(a)} />
         ))}
-        <text x={GRID_W} y={LEGEND_Y + 4} textAnchor="end" className="day">
+        <text x={right} y={ly + 4} textAnchor="end" className="day">
           More
         </text>
       </svg>
       <div className="heat-live" aria-live="polite">
-        {active ? say(active[0], active[1]) : ''}
+        {active !== null ? say(active) : ''}
       </div>
       {/* a div, not the table, is the 1px box: a table ignores width and height and stretched the page */}
       <div className="sr-only">
@@ -135,17 +129,14 @@ export function Honeycomb(p: { cells: Cell[]; title: string; unit?: string }) {
           <tbody>
             <tr>
               <th scope="col">Day</th>
-              <th scope="col">Hour</th>
-              <th scope="col">Count</th>
+              <th scope="col">Value</th>
             </tr>
-            {[...p.cells]
-              .filter((c) => c.count > 0)
-              .sort((a, b) => a.weekday - b.weekday || a.hour - b.hour)
+            {cells
+              .filter((c) => c.v > 0)
               .map((c) => (
-                <tr key={`${c.weekday}-${c.hour}`}>
-                  <th scope="row">{DAYS[c.weekday]}</th>
-                  <td>{c.hour}:00</td>
-                  <td>{c.count}</td>
+                <tr key={c.k}>
+                  <th scope="row">{p.label(c.k)}</th>
+                  <td>{p.format(c.v)}</td>
                 </tr>
               ))}
           </tbody>

@@ -14,7 +14,7 @@ const outDir = path.join(root, 'site/assets/shots')
 const { chromium } = createRequire(path.join(root, 'web/package.json'))('@playwright/test')
 const base = 'http://localhost:4173'
 const control = 'http://localhost:4174'
-const range = 'from=2026-10-01T00:00:00Z&to=2030-01-01T00:00:00Z' // the fixtures date from 2026-11-01
+const range = 'from=2026-10-17T00:00:00Z&to=2026-11-16T00:00:00Z' // 30 days around the fixtures of 2026-11-01 and today
 const pages = [
   ['board', `/?${range}`],
   ['session', `/sessions/g1?${range}`],

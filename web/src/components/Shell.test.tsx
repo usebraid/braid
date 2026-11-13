@@ -1,18 +1,26 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
 
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { renderApp } from '../test/render'
 import { Shell } from './Shell'
 
 vi.mock('../api/client', async (orig) => ({
   ...(await orig<typeof import('../api/client')>()),
-  get: vi.fn().mockResolvedValue({
-    version: '0.2.0',
-    commit: 'abc123',
-    source_url: 'https://github.com/usebraid/braid/tree/abc123',
-  }),
+  get: vi.fn(async (path: string) =>
+    path === '/api/v1/stats/filters'
+      ? {
+          projects: [
+            { path: '/work/alpha', name: 'alpha', sessions: 3 },
+            { path: '/work/beta', name: 'beta', sessions: 2 },
+          ],
+          models: [],
+          skills: [],
+        }
+      : { version: '0.2.0', commit: 'abc123', source_url: 'https://github.com/usebraid/braid/tree/abc123' },
+  ),
 }))
 beforeEach(() => vi.clearAllMocks())
 
@@ -55,4 +63,21 @@ it('shows the proxied avatar and falls back to initials when it does not load', 
   fireEvent.error(img as Element)
   expect(container.querySelector('.avatar')).toHaveTextContent('AL')
   expect(container.querySelector('.avatar img')).toBeNull()
+})
+
+it('lists the projects with their session counts and filters by one on click', async () => {
+  renderApp(<Shell />, { route: '/devices' })
+  const nav = screen.getByRole('navigation', { name: 'Projects' })
+  const alpha = await within(nav).findByRole('button', { name: 'alpha, 3 sessions' })
+  expect(within(nav).getByRole('button', { name: 'All projects, 5 sessions' })).toHaveAttribute('aria-pressed', 'true')
+  await userEvent.click(alpha)
+  expect(alpha).toHaveAttribute('aria-pressed', 'true') // and the view moved to the overview, filtered
+  expect(within(nav).getByRole('button', { name: 'All projects, 5 sessions' })).toHaveAttribute('aria-pressed', 'false')
+})
+
+it('says how the numbers are measured in the footer', () => {
+  renderApp(<Shell />)
+  expect(
+    screen.getByText(/Measured from Claude Code transcripts. Cost is priced at API rates, not a bill./),
+  ).toBeInTheDocument()
 })

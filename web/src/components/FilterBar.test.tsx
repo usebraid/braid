@@ -5,7 +5,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { renderApp } from '../test/render'
-import { FilterBar } from './FilterBar'
+import { FilterBar, RangeSeg } from './FilterBar'
 
 vi.mock('../api/client', async (orig) => ({
   ...(await orig<typeof import('../api/client')>()),
@@ -24,7 +24,13 @@ vi.mock('../api/client', async (orig) => ({
 }))
 
 it('writes selections to the URL and reads them back', async () => {
-  renderApp(<FilterBar />, { route: '/timeline?range=7d' })
+  renderApp(
+    <>
+      <RangeSeg />
+      <FilterBar />
+    </>,
+    { route: '/timeline?range=7d' },
+  )
   expect(screen.getByRole('button', { name: '7d' })).toHaveAttribute('aria-pressed', 'true')
   const model = await screen.findByLabelText('Model')
   await waitFor(() => expect(screen.getByRole('option', { name: 'Opus 5.5' })).toBeInTheDocument())

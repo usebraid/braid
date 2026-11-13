@@ -19,6 +19,8 @@ const body = (path: string): unknown => {
   if (path === '/api/v1/stats/sessions') return { items: [], next: null }
   if (path === '/api/v1/stats/overview')
     return {
+      from: '2026-10-01T00:00:00Z',
+      to: '2026-11-01T00:00:00Z',
       kpi: { sessions: 0, cost_unknown_models: [] },
       per_day: [day],
       per_model: [],
@@ -32,7 +34,8 @@ vi.mock('./api/client', () => ({ goLogin: vi.fn(), get: vi.fn((path: string) => 
 
 it('loads the user and shows the overview with its navigation', async () => {
   render(<App />)
-  expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 1, name: 'All projects' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
   expect(screen.getByRole('link', { name: 'Timeline' })).toBeInTheDocument()
   expect(screen.queryByRole('link', { name: 'Admin' })).toBeNull()
 })

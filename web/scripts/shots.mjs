@@ -14,7 +14,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const outDir = path.resolve(process.argv[2] ?? 'shots')
 const { chromium } = createRequire(path.join(root, 'web/package.json'))('@playwright/test')
 const base = 'http://localhost:4173'
-const range = 'from=2026-10-01T00:00:00Z&to=2030-01-01T00:00:00Z'
+const range = 'from=2026-10-17T00:00:00Z&to=2026-11-16T00:00:00Z' // 30 days around the fixtures of 2026-11-01 and today
 const views = [
   ['overview', `/?${range}`],
   ['overview-1day', `/?${range}&project=%2Fwork%2Falpha`],

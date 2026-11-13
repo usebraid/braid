@@ -14,6 +14,15 @@ it('KpiCard shows label, value and note', () => {
   expect(screen.getByText('last 30 days')).toBeInTheDocument()
 })
 
+it('KpiCard shows the change against the previous period, up green and down red', () => {
+  const { rerender } = render(<KpiCard label="Cost" value="$2" delta={25} colors={['#ffd166', '#ff8a3d']} />)
+  expect(screen.getByText('↑25%')).toHaveClass('delta', 'up')
+  rerender(<KpiCard label="Cost" value="$2" delta={-40} colors={['#ffd166', '#ff8a3d']} />)
+  expect(screen.getByText('↓40%')).toHaveClass('delta', 'down')
+  rerender(<KpiCard label="Cost" value="$2" delta={null} colors={['#ffd166', '#ff8a3d']} />)
+  expect(screen.queryByText(/%$/)).toBeNull()
+})
+
 it('Segmented marks the active option and reports changes by keyboard', async () => {
   const onChange = vi.fn()
   render(

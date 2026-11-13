@@ -14,6 +14,7 @@ export function Footer() {
   }, [])
   return (
     <footer className="foot">
+      <p>Measured from Claude Code transcripts. Cost is priced at API rates, not a bill.</p>
       {about ? (
         <>
           Braid {about.version} ·{' '}

@@ -9,8 +9,9 @@ import type { FailureItem } from '../api/types'
 import { useFilters } from '../api/useFilters'
 import { BarList } from '../components/charts/BarList'
 import { StreamChart } from '../components/charts/StreamChart'
-import { FilterBar } from '../components/FilterBar'
+import { FilterBar, PageHead } from '../components/FilterBar'
 import { Card, Empty, ErrorNote, KpiCard, Pill } from '../components/ui'
+import { dayRange, fillDays, fromFirst } from '../lib/days'
 import { categoryLabel, categoryTone, limitLabel } from '../lib/failures'
 import { dayLabel, fmtDateTime, fmtLost } from '../lib/format'
 import { useInfinite } from '../lib/useInfinite'
@@ -20,9 +21,21 @@ const on = (e: { type: string }) => e.type === 'session_updated' || e.type === '
 const aggText = (a: { count: number; time_lost_s: number }) =>
   a.time_lost_s > 0 ? `${a.count} · ${fmtLost(a.time_lost_s)}` : String(a.count)
 
+// every day of the range, zero days included, as the overview's charts
+function failureDays(rows: { key: string; count: number }[], q: Record<string, string>, all: boolean, tz: string) {
+  const range = dayRange(q.from ?? '', q.to ?? '', tz)
+  const keys = all ? fromFirst(range, rows[0]?.key) : range
+  const counts = fillDays(
+    keys,
+    rows.map((r) => ({ day: r.key, n: r.count })),
+    (r) => r.n,
+  )
+  return keys.map((k, i) => ({ key: k, label: dayLabel(k), value: counts[i] ?? 0 }))
+}
+
 export function Failures() {
   const me = useMe()
-  const { query } = useFilters()
+  const { filters, query } = useFilters()
   const key = JSON.stringify(query)
   // the aggregates ride on every page; one tiny page is enough for them
   const sum = useApi(`failures:${key}`, (s) => statsFailures({ ...query, limit: 1 }, s), { on })
@@ -37,18 +50,15 @@ export function Failures() {
   const top = d?.by_category.reduce((a, c) => (c.count > a.count ? c : a), { key: '', count: 0, time_lost_s: 0 })
   return (
     <>
-      <div className="top">
-        <h1>Failures</h1>
-      </div>
+      <PageHead title="Failures" range />
       <FilterBar />
       {sum.error && !d ? <ErrorNote error={sum.error} retry={sum.reload} /> : null}
       {d ? (
         <>
-          <div className="kpis kpis-minor">
-            <KpiCard small label="Failures" value={String(total)} colors={['var(--p1)', 'var(--p2)']} />
-            <KpiCard small label="Time lost" value={fmtLost(d.time_lost_s)} colors={['var(--p3)', 'var(--p4)']} />
+          <div className="grid-kpi">
+            <KpiCard label="Failures" value={String(total)} colors={['var(--p1)', 'var(--p2)']} />
+            <KpiCard label="Time lost" value={fmtLost(d.time_lost_s)} colors={['var(--p3)', 'var(--p4)']} />
             <KpiCard
-              small
               label="Most frequent"
               value={top?.count ? `${categoryLabel(top.key)} ×${top.count}` : '–'}
               colors={['var(--p5)', 'var(--p6)']}
@@ -58,7 +68,7 @@ export function Failures() {
             <h2>Failures per day</h2>
             <StreamChart
               title="Failures per day"
-              points={d.by_day.map((x) => ({ key: x.key, label: dayLabel(x.key), value: x.count }))}
+              points={failureDays(d.by_day, query, filters.range === 'all' && !filters.from, me.time_zone)}
               format={String}
               colors={['var(--p5)', 'var(--p6)']}
               empty="No failures in this period"
