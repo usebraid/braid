@@ -46,7 +46,8 @@ it('shows the KPI tiles with formatted values and the data-quality notes', async
   renderApp(<Overview />, { me: { time_zone: 'UTC', time_zone_set: false } })
   expect(await screen.findByText('$12.50')).toBeInTheDocument()
   expect(screen.getByText('1.5M')).toBeInTheDocument()
-  expect(screen.getByText(/≈\s*2h 5m/)).toBeInTheDocument()
+  expect(screen.getByText('2h 5m')).toBeInTheDocument()
+  expect(screen.getByTestId('kpi-time')).toHaveTextContent('estimated')
   expect(screen.getByText('1h 30m')).toBeInTheDocument() // time lost
   expect(screen.getByText(/excludes 1 unpriced model/)).toBeInTheDocument()
   expect(screen.getByText('Opus 5.5')).toBeInTheDocument()

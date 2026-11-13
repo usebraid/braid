@@ -44,10 +44,11 @@ export function Failures() {
       {sum.error && !d ? <ErrorNote error={sum.error} retry={sum.reload} /> : null}
       {d ? (
         <>
-          <div className="grid-kpi">
-            <KpiCard label="Failures" value={String(total)} colors={['var(--p1)', 'var(--p2)']} />
-            <KpiCard label="Time lost" value={fmtLost(d.time_lost_s)} colors={['var(--p3)', 'var(--p4)']} />
+          <div className="kpis kpis-minor">
+            <KpiCard small label="Failures" value={String(total)} colors={['var(--p1)', 'var(--p2)']} />
+            <KpiCard small label="Time lost" value={fmtLost(d.time_lost_s)} colors={['var(--p3)', 'var(--p4)']} />
             <KpiCard
+              small
               label="Most frequent"
               value={top?.count ? `${categoryLabel(top.key)} ×${top.count}` : '–'}
               colors={['var(--p5)', 'var(--p6)']}
@@ -98,20 +99,24 @@ export function Failures() {
         <Empty>No failures in this period</Empty>
       ) : (
         <Card>
-          <ul className="fail-list">
+          <ul className="rows">
             {list.items.map((f) => (
               <li key={`${f.session_id}:${f.agent_id}:${f.line_id}:${f.occurred_at}`}>
-                <span className="sub">{fmtDateTime(f.occurred_at, me.time_zone)}</span>{' '}
-                {/* one text per pill so the category label stays unique on the page */}
-                <Pill kind={categoryTone(f.category)}>
-                  {f.limit_type
-                    ? `${categoryLabel(f.category)} · ${limitLabel(f.limit_type)}`
-                    : categoryLabel(f.category)}
-                </Pill>
-                {f.resets_at ? <span className="sub"> resets {fmtDateTime(f.resets_at, me.time_zone)}</span> : null}
-                {f.time_lost_s ? <span className="sub"> lost {fmtLost(f.time_lost_s)}</span> : null}
-                <div>{f.detail}</div>
-                <Link to={`/sessions/${f.session_id}?agent=${f.agent_id}&line=${f.line_id}`}>Jump to position</Link>
+                <div className="row-head">
+                  {/* one text per pill so the category label stays unique on the page */}
+                  <Pill kind={categoryTone(f.category)}>
+                    {f.limit_type
+                      ? `${categoryLabel(f.category)} · ${limitLabel(f.limit_type)}`
+                      : categoryLabel(f.category)}
+                  </Pill>
+                  <span className="sub num">{fmtDateTime(f.occurred_at, me.time_zone)}</span>
+                  {f.resets_at ? <span className="sub">resets {fmtDateTime(f.resets_at, me.time_zone)}</span> : null}
+                  {f.time_lost_s ? <span className="sub">lost {fmtLost(f.time_lost_s)}</span> : null}
+                  <Link className="sub" to={`/sessions/${f.session_id}?agent=${f.agent_id}&line=${f.line_id}`}>
+                    Jump to position
+                  </Link>
+                </div>
+                {f.detail ? <p className="row-body">{f.detail}</p> : null}
               </li>
             ))}
           </ul>

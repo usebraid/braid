@@ -33,6 +33,13 @@ export function StreamChart(p: {
   const sum = totals.reduce((a, v) => a + v, 0)
   const max = Math.max(0, ...totals)
   if (n === 0 || max <= 0) return <div className="empty-note">{p.empty ?? 'No data in this period'}</div>
+  // one point is no trend: an area from it would fill the chart with a single slope
+  if (n < 2)
+    return (
+      <div className="empty-note" role="img" aria-label={`${p.title}: total ${p.format(sum)}, 1 day`}>
+        Not enough days for a trend yet
+      </div>
+    )
 
   const layers: Layer[] = p.layers ?? [
     { key: 'all', label: p.title, color: (p.colors ?? ['var(--p1)', 'var(--p2)'])[0], values: totals },
@@ -152,21 +159,24 @@ export function StreamChart(p: {
           </>
         ) : null}
       </div>
-      <table className="sr-only">
-        <caption>{p.title}</caption>
-        <tbody>
-          <tr>
-            <th scope="col">Day</th>
-            <th scope="col">Value</th>
-          </tr>
-          {p.points.map((q) => (
-            <tr key={q.key}>
-              <th scope="row">{q.label}</th>
-              <td>{p.format(q.value)}</td>
+      {/* a div, not the table, is the 1px box: a table ignores width and height and stretched the page */}
+      <div className="sr-only">
+        <table>
+          <caption>{p.title}</caption>
+          <tbody>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col">Value</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+            {p.points.map((q) => (
+              <tr key={q.key}>
+                <th scope="row">{q.label}</th>
+                <td>{p.format(q.value)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   )
 }

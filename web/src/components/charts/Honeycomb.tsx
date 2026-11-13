@@ -128,26 +128,29 @@ export function Honeycomb(p: { cells: Cell[]; title: string; unit?: string }) {
       <div className="heat-live" aria-live="polite">
         {active ? say(active[0], active[1]) : ''}
       </div>
-      <table className="sr-only">
-        <caption>{p.title}</caption>
-        <tbody>
-          <tr>
-            <th scope="col">Day</th>
-            <th scope="col">Hour</th>
-            <th scope="col">Count</th>
-          </tr>
-          {[...p.cells]
-            .filter((c) => c.count > 0)
-            .sort((a, b) => a.weekday - b.weekday || a.hour - b.hour)
-            .map((c) => (
-              <tr key={`${c.weekday}-${c.hour}`}>
-                <th scope="row">{DAYS[c.weekday]}</th>
-                <td>{c.hour}:00</td>
-                <td>{c.count}</td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
+      {/* a div, not the table, is the 1px box: a table ignores width and height and stretched the page */}
+      <div className="sr-only">
+        <table>
+          <caption>{p.title}</caption>
+          <tbody>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col">Hour</th>
+              <th scope="col">Count</th>
+            </tr>
+            {[...p.cells]
+              .filter((c) => c.count > 0)
+              .sort((a, b) => a.weekday - b.weekday || a.hour - b.hour)
+              .map((c) => (
+                <tr key={`${c.weekday}-${c.hour}`}>
+                  <th scope="row">{DAYS[c.weekday]}</th>
+                  <td>{c.hour}:00</td>
+                  <td>{c.count}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

@@ -34,7 +34,7 @@ export function Sparkline(p: { values: number[]; colors: [string, string]; id: s
   const svgProps = { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', className: 'spark', 'aria-hidden': true }
   const vals = p.values.length > 14 ? avg(p.values, 2) : p.values
   const max = Math.max(0, ...vals)
-  if (max <= 0) return <svg {...svgProps} />
+  if (max <= 0 || vals.length < 2) return <svg {...svgProps} />
   const line = smooth(vals.map((v, j) => [(j * W) / Math.max(1, vals.length - 1), H - 6 - (v / max) * (H - 16)]))
   const [c1, c2] = p.colors
   const stroke = `url(#${p.id}-l)`

@@ -79,15 +79,15 @@ export function Overview() {
         </div>
       ) : null}
       {me.time_zone_set === false ? (
-        <div className="card banner">
+        <p className="hint">
           Times use {ov.time_zone}. Set your time zone in <Link to="/settings">Settings</Link>.
-        </div>
+        </p>
       ) : null}
       {k.sessions === 0 ? (
-        <Empty>No sessions in this period</Empty>
+        <Empty>No sessions in this period. Pick a longer range or reset the filters.</Empty>
       ) : (
         <>
-          <div className="grid-kpi">
+          <div className="kpis">
             <KpiCard
               label="Sessions"
               testId="sessions"
@@ -98,9 +98,10 @@ export function Overview() {
             <KpiCard
               label="Agent time"
               testId="time"
-              value={`${k.agent_ms_estimated ? '≈ ' : ''}${fmtDuration(k.agent_ms)}`}
-              note={k.agent_ms_estimated ? 'estimated' : undefined}
+              value={fmtDuration(k.agent_ms)}
+              estimated={k.agent_ms_estimated}
               colors={['#2fd4c0', '#5fe08a']}
+              spark
             />
             <KpiCard
               label="Cost"
@@ -120,13 +121,33 @@ export function Overview() {
               colors={['#ff6fb5', '#b26bff']}
               values={spark((d) => d.tokens)}
             />
-            <KpiCard label="Streak" testId="streak" value={`${k.streak_days} d`} colors={['#5fe08a', '#2fd4c0']} />
-            <KpiCard label="Failures" testId="failures" value={String(k.failures)} colors={['#ff6b5b', '#ff8a3d']} />
-            <KpiCard label="Time lost" testId="lost" value={fmtLost(k.time_lost_s)} colors={['#f1c96b', '#ffd166']} />
+          </div>
+          <div className="kpis kpis-minor">
+            <KpiCard
+              small
+              label="Streak"
+              testId="streak"
+              value={`${k.streak_days} ${k.streak_days === 1 ? 'day' : 'days'}`}
+              colors={['#5fe08a', '#2fd4c0']}
+            />
+            <KpiCard
+              small
+              label="Failures"
+              testId="failures"
+              value={String(k.failures)}
+              colors={['#ff6b5b', '#ff8a3d']}
+            />
+            <KpiCard
+              small
+              label="Time lost"
+              testId="lost"
+              value={fmtLost(k.time_lost_s)}
+              colors={['#f1c96b', '#ffd166']}
+            />
           </div>
           <Card>
             <div className="list-head">
-              <h3>{title}</h3>
+              <h2>{title}</h2>
               <Segmented<Metric>
                 label="Metric"
                 value={metric}
@@ -147,7 +168,7 @@ export function Overview() {
           </Card>
           <div className="grid2">
             <Card>
-              <h3>Models</h3>
+              <h2>Models</h2>
               <BarList
                 title="Cost by model"
                 rows={ov.per_model.map((m, i) => ({
@@ -161,7 +182,7 @@ export function Overview() {
               />
             </Card>
             <Card>
-              <h3>Projects</h3>
+              <h2>Projects</h2>
               <BarList
                 title="Cost by project"
                 rows={ov.per_project.map((p, i) => ({
