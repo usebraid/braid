@@ -33,9 +33,7 @@ export function LiveView() {
     <>
       <div className="top">
         <h1>Live</h1>
-        <span className="sub" role="status">
-          {status === 'paused' ? 'Live paused' : 'Receiving live updates'}
-        </span>
+        <span className="sub">{status === 'paused' ? 'Live paused' : 'Receiving live updates'}</span>
       </div>
       {error && !data ? <ErrorNote error={error} retry={reload} /> : null}
       {data && items.length === 0 ? <Empty>No session is running right now</Empty> : null}
