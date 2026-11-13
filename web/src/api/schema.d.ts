@@ -647,6 +647,11 @@ export interface components {
             /** Format: int64 */
             line_count: number;
             git_branch: string;
+            /**
+             * Format: int64
+             * @description Turns of the main agent (Claude Code's turn_duration lines).
+             */
+            turns: number;
         };
         CurrentTool: {
             name: string;

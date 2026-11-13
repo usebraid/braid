@@ -34,7 +34,7 @@ func TestSessionList(t *testing.T) {
 	}
 	s1 := pg.Items[2]
 	if s1.Title != "Alpha work" || s1.Project != "/work/alpha" || s1.ProjectName != "alpha" || s1.AgentMs != 45000 || s1.TotalAgentMs != 50000 || s1.AgentMsEstimated ||
-		s1.Tokens != 3850 || s1.Failures != 2 || s1.LineCount != 11 || s1.IsLive || s1.GitBranch != "main" || !near(s1.CostUSD, 0.0195) ||
+		s1.Tokens != 3850 || s1.Failures != 2 || s1.LineCount != 11 || s1.Turns != 1 || s1.IsLive || s1.GitBranch != "main" || !near(s1.CostUSD, 0.0195) ||
 		!slices.Equal(s1.Models, []string{opus, sonnet}) || !slices.Equal(s1.Skills, []string{"superpowers:writing-plans"}) ||
 		s1.DeviceID == nil || *s1.DeviceID != d1 || !slices.Equal(s1.DeviceIDs, []string{d1}) {
 		t.Fatalf("%+v", s1)

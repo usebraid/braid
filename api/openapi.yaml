@@ -590,7 +590,7 @@ components:
         count: { type: integer, format: int64 }
     SessionItem:
       type: object
-      required: [session_id, title, project, project_name, device_id, device_ids, models, started_at, ended_at, is_live, agent_ms, total_agent_ms, agent_ms_estimated, cost_usd, tokens, failures, skills, line_count, git_branch]
+      required: [session_id, title, project, project_name, device_id, device_ids, models, started_at, ended_at, is_live, agent_ms, total_agent_ms, agent_ms_estimated, cost_usd, tokens, failures, skills, line_count, git_branch, turns]
       properties:
         session_id: { type: string }
         title: { type: string }
@@ -611,6 +611,7 @@ components:
         skills: { type: array, items: { type: string } }
         line_count: { type: integer, format: int64 }
         git_branch: { type: string }
+        turns: { type: integer, format: int64, description: Turns of the main agent (Claude Code's turn_duration lines). }
     CurrentTool:
       type: object
       required: [name, summary, started_at]

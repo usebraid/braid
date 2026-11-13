@@ -41,6 +41,7 @@ type SessionItem struct {
 	Skills           []string  `json:"skills"`
 	LineCount        int64     `json:"line_count"`
 	GitBranch        string    `json:"git_branch"`
+	Turns            int64     `json:"turns"`
 }
 
 // SessionPage is one page of sessions; Next is the opaque cursor of the following page.
@@ -133,10 +134,11 @@ const sessionSelect = `SELECT s.session_id, coalesce(s.title, ''), coalesce(s.pr
   ag.main_ms, ag.total_ms, ag.est, us.cost, us.tok,
   (SELECT count(*) FROM failures f WHERE f.session_id = s.session_id),
   coalesce((SELECT array_agg(DISTINCT k.skill ORDER BY k.skill) FROM skill_phases k WHERE k.session_id = s.session_id), '{}'),
-  s.line_count, coalesce(s.git_branch, '')
+  s.line_count, coalesce(s.git_branch, ''), ag.turns
  FROM sessions s LEFT JOIN projects p ON p.path = s.project_path
  CROSS JOIN LATERAL (SELECT coalesce(sum(a.duration_ms) FILTER (WHERE a.agent_id = 'main'), 0)::bigint main_ms,
-     coalesce(sum(a.duration_ms), 0)::bigint total_ms, coalesce(bool_or(a.duration_estimated), false) est
+     coalesce(sum(a.duration_ms), 0)::bigint total_ms, coalesce(bool_or(a.duration_estimated), false) est,
+     coalesce(sum(a.turn_count) FILTER (WHERE a.agent_id = 'main'), 0)::bigint turns
    FROM agents a WHERE a.session_id = s.session_id) ag
  CROSS JOIN LATERAL (SELECT coalesce(sum(u.cost_usd), 0)::float8 cost, coalesce(sum(` + tokExpr + `), 0)::bigint tok
    FROM usage u WHERE u.session_id = s.session_id) us `
@@ -144,7 +146,7 @@ const sessionSelect = `SELECT s.session_id, coalesce(s.title, ''), coalesce(s.pr
 func (h *Handler) scanSession(row pgx.Row) (SessionItem, error) {
 	var s SessionItem
 	err := row.Scan(&s.SessionID, &s.Title, &s.Project, &s.ProjectName, &s.DeviceID, &s.DeviceIDs, &s.Models, &s.StartedAt, &s.EndedAt,
-		&s.AgentMs, &s.TotalAgentMs, &s.AgentMsEstimated, &s.CostUSD, &s.Tokens, &s.Failures, &s.Skills, &s.LineCount, &s.GitBranch)
+		&s.AgentMs, &s.TotalAgentMs, &s.AgentMsEstimated, &s.CostUSD, &s.Tokens, &s.Failures, &s.Skills, &s.LineCount, &s.GitBranch, &s.Turns)
 	s.IsLive = s.EndedAt.After(h.now().Add(-2 * time.Minute))
 	return s, err
 }
