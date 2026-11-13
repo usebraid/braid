@@ -13,29 +13,77 @@ export function Card({ className, children }: { className?: string; children: Re
   return <div className={className ? `card ${className}` : 'card'}>{children}</div>
 }
 
-// colors[1] tints the card; both feed the sparkline.
+// colors[1] tints the card; both feed the sparkline. `spark` reserves the sparkline row even without values, so a
+// row of tiles lines up; `small` is the compact one-line tile.
 export function KpiCard(p: {
   label: string
   value: string
   note?: string
+  estimated?: boolean
   colors: [string, string]
   values?: number[]
+  spark?: boolean
+  small?: boolean
   title?: string
   testId?: string
 }) {
   const id = useId().replace(/:/g, '')
   return (
     <div
-      className="card kpi"
+      className={p.small ? 'card kpi small' : 'card kpi'}
       style={{ '--k': p.colors[1] } as CSSProperties}
       title={p.title}
       data-testid={p.testId && `kpi-${p.testId}`}
     >
       <div className="kpi-label">{p.label}</div>
-      <div className="kpi-value num">{p.value}</div>
-      {p.note ? <div className="kpi-note">{p.note}</div> : null}
-      {p.values ? <Sparkline values={p.values} colors={p.colors} id={`kpi${id}`} /> : null}
+      <div className="kpi-row">
+        <span className="kpi-value num">{p.value}</span>
+        {p.estimated ? <span className="kpi-est">estimated</span> : null}
+      </div>
+      {p.small ? null : <div className="kpi-note">{p.note}</div>}
+      {p.values ? (
+        <Sparkline values={p.values} colors={p.colors} id={`kpi${id}`} />
+      ) : p.spark ? (
+        <div className="spark-slot" />
+      ) : null}
     </div>
+  )
+}
+
+// A native <select> in the shared control style; the visible first option names the filter, aria-label names it for AT.
+export function Select(p: {
+  label: string
+  value: string
+  options: { value: string; label: string }[]
+  onChange: (v: string) => void
+  id?: string
+}) {
+  return (
+    <span className="select">
+      <select
+        className="ctl"
+        id={p.id}
+        aria-label={p.id ? undefined : p.label}
+        value={p.value}
+        onChange={(e) => p.onChange(e.target.value)}
+      >
+        {p.options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </span>
+  )
+}
+
+// A wide table scrolls sideways inside this; keyboard users reach the scroll through its tab stop.
+export function TableWrap({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be focusable (WCAG 2.1.1, axe scrollable-region-focusable)
+    <section className="table-wrap" aria-label={label} tabIndex={0}>
+      {children}
+    </section>
   )
 }
 

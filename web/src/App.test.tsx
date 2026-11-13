@@ -41,7 +41,7 @@ it('routes /timeline to the timeline view', async () => {
   window.history.pushState({}, '', '/timeline')
   render(<App />)
   expect(await screen.findByRole('heading', { name: 'Timeline' })).toBeInTheDocument()
-  expect(await screen.findByText('No sessions in this period')).toBeInTheDocument()
+  expect(await screen.findByText(/No sessions in this period/)).toBeInTheDocument()
 })
 
 it('renders NotFound for /admin to a non-admin', async () => {

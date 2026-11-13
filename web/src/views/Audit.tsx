@@ -6,7 +6,7 @@ import { listAudit } from '../api/manage'
 import { useMe } from '../api/session'
 import { listDevices } from '../api/stats'
 import type { AuditEntry, AuditPage } from '../api/types'
-import { Card, Empty, ErrorNote } from '../components/ui'
+import { Card, Empty, ErrorNote, TableWrap } from '../components/ui'
 import { fmtDateTime } from '../lib/format'
 import { useInfinite } from '../lib/useInfinite'
 
@@ -39,7 +39,7 @@ export function AuditTable(p: {
   if (list.items.length === 0 && !list.loading) return <Empty>{p.empty ?? 'No audit entries'}</Empty>
   return (
     <Card>
-      <div className="table-wrap">
+      <TableWrap label="Audit log">
         <table>
           <thead>
             <tr>
@@ -56,12 +56,12 @@ export function AuditTable(p: {
           <tbody>
             {list.items.map((e) => (
               <tr key={e.id}>
-                <td>{fmtDateTime(e.at, me.time_zone)}</td>
+                <td className="num">{fmtDateTime(e.at, me.time_zone)}</td>
                 <td title={humanise(e.action)}>{e.action}</td>
                 {p.who ? <td>{p.who(e.actor_user_id)}</td> : null}
                 {p.who ? <td>{p.who(e.subject_user_id)}</td> : null}
                 <td>{e.device_id ? (names.get(e.device_id) ?? e.device_id.slice(0, 8)) : ''}</td>
-                <td>{e.ip}</td>
+                <td className="num">{e.ip}</td>
                 <td title={e.user_agent ?? undefined}>
                   {e.user_agent && e.user_agent.length > UA_MAX ? `${e.user_agent.slice(0, UA_MAX)}…` : e.user_agent}
                 </td>
@@ -70,7 +70,7 @@ export function AuditTable(p: {
             ))}
           </tbody>
         </table>
-      </div>
+      </TableWrap>
       {list.error ? <ErrorNote error={list.error} retry={list.more} /> : null}
       {list.done ? null : (
         <div className="more" ref={list.sentinel}>

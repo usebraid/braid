@@ -6,7 +6,7 @@ import { useApi } from '../api/hooks'
 import { adminListAudit, adminStats, deleteUser, disableUser, enableUser } from '../api/manage'
 import { useMe } from '../api/session'
 import type { AdminUserStats } from '../api/types'
-import { Card, ConfirmDialog, ErrorNote, KpiCard, Pill } from '../components/ui'
+import { Card, ConfirmDialog, ErrorNote, KpiCard, Pill, TableWrap } from '../components/ui'
 import { fmtBytes, fmtCost, fmtDateTime, fmtTokens } from '../lib/format'
 import { AuditTable } from './Audit'
 import { NotFound } from './NotFound'
@@ -57,16 +57,16 @@ function AdminView() {
       ) : null}
       {data ? (
         <Card>
-          <div className="table-wrap">
+          <TableWrap label="Users">
             <table>
               <thead>
                 <tr>
                   <th>User</th>
-                  <th>Sessions</th>
-                  <th>Cost</th>
-                  <th>Tokens</th>
-                  <th>Devices</th>
-                  <th>Stored</th>
+                  <th className="r">Sessions</th>
+                  <th className="r">Cost</th>
+                  <th className="r">Tokens</th>
+                  <th className="r">Devices</th>
+                  <th className="r">Stored</th>
                   <th>Last login</th>
                   <th>Last sync</th>
                   <th>Last activity</th>
@@ -82,18 +82,20 @@ function AdminView() {
                       <div className={u.name !== u.email ? 'sub' : undefined}>{u.email}</div>
                       {u.is_admin ? <Pill>admin</Pill> : null}
                     </td>
-                    <td>{u.sessions}</td>
-                    <td>{fmtCost(u.cost_usd)}</td>
-                    <td>{fmtTokens(u.tokens)}</td>
-                    <td>{u.devices}</td>
-                    <td>{fmtBytes(u.stored_bytes)}</td>
-                    <td>{when(u.last_login_at)}</td>
-                    <td>{when(u.last_sync_at)}</td>
-                    <td>{when(u.last_activity_at)}</td>
+                    <td className="num r">{u.sessions}</td>
+                    <td className="num r">{fmtCost(u.cost_usd)}</td>
+                    <td className="num r">{fmtTokens(u.tokens)}</td>
+                    <td className="num r">{u.devices}</td>
+                    <td className="num r">{fmtBytes(u.stored_bytes)}</td>
+                    <td className="num">{when(u.last_login_at)}</td>
+                    <td className="num">{when(u.last_sync_at)}</td>
+                    <td className="num">{when(u.last_activity_at)}</td>
                     <td>
-                      {u.disabled_at ? <Pill kind="bad">disabled</Pill> : null}
-                      {u.rebuilding ? <Pill kind="warn">rebuilding</Pill> : null}
-                      {u.derive_errors > 0 ? <Pill kind="bad">{`${u.derive_errors} derive errors`}</Pill> : null}
+                      <div className="pills">
+                        {u.disabled_at ? <Pill kind="bad">disabled</Pill> : null}
+                        {u.rebuilding ? <Pill kind="warn">rebuilding</Pill> : null}
+                        {u.derive_errors > 0 ? <Pill kind="bad">{`${u.derive_errors} derive errors`}</Pill> : null}
+                      </div>
                     </td>
                     <td>
                       {u.id === me.id ? null : (
@@ -101,7 +103,7 @@ function AdminView() {
                           {u.disabled_at ? (
                             <button
                               type="button"
-                              className="btn"
+                              className="btn ghost"
                               aria-label={`Enable ${u.email}`}
                               onClick={() => void run(enableUser(u.id))}
                             >
@@ -110,7 +112,7 @@ function AdminView() {
                           ) : (
                             <button
                               type="button"
-                              className="btn"
+                              className="btn ghost"
                               aria-label={`Disable ${u.email}`}
                               onClick={() => setPending({ kind: 'disable', user: u })}
                             >
@@ -119,7 +121,7 @@ function AdminView() {
                           )}
                           <button
                             type="button"
-                            className="btn"
+                            className="btn ghost danger"
                             aria-label={`Delete ${u.email}`}
                             onClick={() => setPending({ kind: 'delete', user: u })}
                           >
@@ -132,7 +134,7 @@ function AdminView() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         </Card>
       ) : null}
       {pending?.kind === 'disable' ? (
@@ -159,11 +161,17 @@ function AdminView() {
         >
           <div className="field">
             <label htmlFor="confirm-email">Type the email to confirm</label>
-            <input id="confirm-email" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+            <input
+              className="ctl"
+              id="confirm-email"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+            />
           </div>
         </ConfirmDialog>
       ) : null}
-      <h2>Instance audit</h2>
+      <h2 className="section-title">Instance audit</h2>
       <AuditTable load={adminListAudit} who={who} />
     </>
   )

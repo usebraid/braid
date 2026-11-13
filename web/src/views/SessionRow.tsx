@@ -34,11 +34,11 @@ export function SessionRow({
           ))}
         </div>
       </td>
-      <td className="num">
-        {s.agent_ms_estimated ? '≈ ' : ''}
+      <td className="num r" title={s.agent_ms_estimated ? 'estimated' : undefined}>
+        {s.agent_ms_estimated ? <span className="kpi-est">est. </span> : null}
         {fmtDuration(s.agent_ms)}
       </td>
-      <td className="num">{fmtCost(s.cost_usd)}</td>
+      <td className="num r">{fmtCost(s.cost_usd)}</td>
       <td>
         <div className="chips">
           {skills.map((k) => (
@@ -48,8 +48,12 @@ export function SessionRow({
         </div>
       </td>
       <td>
-        {s.failures > 0 ? <Pill kind="bad">{`${s.failures} ${s.failures === 1 ? 'failure' : 'failures'}`}</Pill> : null}
-        {s.is_live ? <Pill kind="ok">live</Pill> : null}
+        <div className="pills">
+          {s.failures > 0 ? (
+            <Pill kind="bad">{`${s.failures} ${s.failures === 1 ? 'failure' : 'failures'}`}</Pill>
+          ) : null}
+          {s.is_live ? <Pill kind="ok">live</Pill> : null}
+        </div>
       </td>
     </tr>
   )

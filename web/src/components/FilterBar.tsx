@@ -6,31 +6,9 @@ import { listDevices, statsFilters } from '../api/stats'
 import { useFilters } from '../api/useFilters'
 import { RANGES, type RangeId } from '../lib/filters'
 import { modelName } from '../lib/format'
-import { Segmented } from './ui'
+import { Segmented, Select } from './ui'
 
 type Show = { range?: boolean; device?: boolean; project?: boolean; model?: boolean; skill?: boolean }
-
-function Select(p: {
-  label: string
-  all: string
-  value: string
-  options: { value: string; label: string }[]
-  onChange: (v: string) => void
-}) {
-  return (
-    <label className="field">
-      <span className="sub">{p.label}</span>
-      <select value={p.value} onChange={(e) => p.onChange(e.target.value)}>
-        <option value="">{p.all}</option>
-        {p.options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
 
 export function FilterBar({ show = {} }: { show?: Show }) {
   const { filters, query, set, reset } = useFilters()
@@ -41,6 +19,14 @@ export function FilterBar({ show = {} }: { show?: Show }) {
   const range: RangeId | '' = custom ? '' : (filters.range ?? '30d')
   const list = Array.isArray(devices.data) ? devices.data : []
   const o = opts.data
+  const active = Boolean(
+    custom ||
+      (filters.range && filters.range !== '30d') ||
+      filters.device ||
+      filters.project ||
+      filters.model ||
+      filters.skill,
+  )
   return (
     <div className="filters">
       {on.range ? (
@@ -51,48 +37,52 @@ export function FilterBar({ show = {} }: { show?: Show }) {
             options={RANGES.map((r) => ({ value: r.id, label: r.id === 'all' ? 'All' : r.id }))}
             onChange={(v) => v && set('range', v)}
           />
-          {custom ? <span className="sub">Custom range</span> : null}
+          {custom ? <span className="custom">Custom range</span> : null}
         </>
       ) : null}
       {on.device ? (
         <Select
           label="Device"
-          all="All devices"
           value={filters.device ?? ''}
-          options={list.map((d) => ({ value: d.id, label: d.name }))}
+          options={[{ value: '', label: 'All devices' }, ...list.map((d) => ({ value: d.id, label: d.name }))]}
           onChange={(v) => set('device', v)}
         />
       ) : null}
       {on.project ? (
         <Select
           label="Project"
-          all="All projects"
           value={filters.project ?? ''}
-          options={(o?.projects ?? []).map((p) => ({ value: p.path, label: p.name }))}
+          options={[
+            { value: '', label: 'All projects' },
+            ...(o?.projects ?? []).map((p) => ({ value: p.path, label: p.name })),
+          ]}
           onChange={(v) => set('project', v)}
         />
       ) : null}
       {on.model ? (
         <Select
           label="Model"
-          all="All models"
           value={filters.model ?? ''}
-          options={(o?.models ?? []).map((m) => ({ value: m, label: modelName(m) }))}
+          options={[
+            { value: '', label: 'All models' },
+            ...(o?.models ?? []).map((m) => ({ value: m, label: modelName(m) })),
+          ]}
           onChange={(v) => set('model', v)}
         />
       ) : null}
       {on.skill ? (
         <Select
           label="Skill"
-          all="All skills"
           value={filters.skill ?? ''}
-          options={(o?.skills ?? []).map((s) => ({ value: s, label: s }))}
+          options={[{ value: '', label: 'All skills' }, ...(o?.skills ?? []).map((s) => ({ value: s, label: s }))]}
           onChange={(v) => set('skill', v)}
         />
       ) : null}
-      <button type="button" className="btn" onClick={reset}>
-        Reset
-      </button>
+      {active ? (
+        <button type="button" className="btn ghost" onClick={reset}>
+          Reset
+        </button>
+      ) : null}
     </div>
   )
 }

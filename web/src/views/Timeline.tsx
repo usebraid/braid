@@ -7,7 +7,7 @@ import { listDevices, statsSessions } from '../api/stats'
 import type { SessionItem } from '../api/types'
 import { useFilters } from '../api/useFilters'
 import { FilterBar } from '../components/FilterBar'
-import { Card, Empty, ErrorNote } from '../components/ui'
+import { Card, Empty, ErrorNote, TableWrap } from '../components/ui'
 import { useInfinite } from '../lib/useInfinite'
 import { SessionRow } from './SessionRow'
 
@@ -30,17 +30,17 @@ export function Timeline() {
       <FilterBar />
       {list.error ? <ErrorNote error={list.error} retry={list.more} /> : null}
       {list.items.length === 0 && !list.loading && !list.error ? (
-        <Empty>No sessions in this period</Empty>
+        <Empty>No sessions in this period. Pick a longer range or reset the filters.</Empty>
       ) : (
         <Card>
-          <div className="table-wrap">
+          <TableWrap label="Sessions">
             <table>
               <thead>
                 <tr>
                   <th>Session</th>
                   <th>Models</th>
-                  <th>Agent time</th>
-                  <th>Cost</th>
+                  <th className="r">Agent time</th>
+                  <th className="r">Cost</th>
                   <th>Skills</th>
                   <th>Status</th>
                 </tr>
@@ -51,7 +51,7 @@ export function Timeline() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
           {list.done ? null : (
             <div className="more" ref={list.sentinel}>
               <button type="button" className="btn" disabled={list.loading} onClick={list.more}>

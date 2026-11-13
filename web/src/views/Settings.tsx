@@ -34,20 +34,23 @@ export function Settings() {
         <h2>Time zone</h2>
         <div className="field">
           <label htmlFor="tz">Time zone</label>
-          <select
-            id="tz"
-            value={zone}
-            onChange={(e) => {
-              setZone(e.target.value)
-              setSaved(false)
-            }}
-          >
-            {zones.map((z) => (
-              <option key={z} value={z}>
-                {z}
-              </option>
-            ))}
-          </select>
+          <span className="select">
+            <select
+              className="ctl"
+              id="tz"
+              value={zone}
+              onChange={(e) => {
+                setZone(e.target.value)
+                setSaved(false)
+              }}
+            >
+              {zones.map((z) => (
+                <option key={z} value={z}>
+                  {z}
+                </option>
+              ))}
+            </select>
+          </span>
         </div>
         <div className="actions">
           {browserZone !== zone ? (

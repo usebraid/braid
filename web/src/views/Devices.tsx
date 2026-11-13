@@ -7,7 +7,7 @@ import { renameDevice, revokeDevice } from '../api/manage'
 import { useMe } from '../api/session'
 import { listDevices } from '../api/stats'
 import type { Device } from '../api/types'
-import { Card, ConfirmDialog, Empty, ErrorNote, Pill } from '../components/ui'
+import { Card, ConfirmDialog, Empty, ErrorNote, Pill, TableWrap } from '../components/ui'
 import { fmtDateTime } from '../lib/format'
 
 const ago = (iso: string | null) => {
@@ -44,10 +44,12 @@ export function Devices() {
       </div>
       {error && !data ? <ErrorNote error={error} retry={reload} /> : null}
       {failure ? <ErrorNote error={failure} /> : null}
-      {data?.length === 0 ? <Empty>No devices yet</Empty> : null}
+      {data?.length === 0 ? (
+        <Empty>No devices yet. Run braid login with this server's URL on a machine to add it.</Empty>
+      ) : null}
       {data?.length ? (
         <Card>
-          <div className="table-wrap">
+          <TableWrap label="Devices">
             <table>
               <thead>
                 <tr>
@@ -57,7 +59,7 @@ export function Devices() {
                   <th>User</th>
                   <th>Daemon</th>
                   <th>Last sync</th>
-                  <th>Backlog</th>
+                  <th className="r">Backlog</th>
                   <th>Last seen</th>
                   <th>State</th>
                   <th />
@@ -69,6 +71,7 @@ export function Devices() {
                     <td>
                       {editing?.id === d.id ? (
                         <input
+                          className="ctl"
                           aria-label="Device name"
                           // biome-ignore lint/a11y/noAutofocus: the input appears on an explicit Rename click
                           autoFocus
@@ -84,12 +87,12 @@ export function Devices() {
                       )}
                     </td>
                     <td>{d.hostname}</td>
-                    <td>{`${d.os}/${d.arch}`}</td>
+                    <td>{[d.os, d.arch].filter(Boolean).join('/')}</td>
                     <td>{d.os_user}</td>
-                    <td>{d.daemon_version}</td>
-                    <td>{when(d.last_sync_at)}</td>
-                    <td>{ago(d.last_sync_at)}</td>
-                    <td>{when(d.last_seen_at)}</td>
+                    <td className="num">{d.daemon_version}</td>
+                    <td className="num">{when(d.last_sync_at)}</td>
+                    <td className="num r">{ago(d.last_sync_at)}</td>
+                    <td className="num">{when(d.last_seen_at)}</td>
                     <td>
                       {d.revoked_at ? (
                         <Pill kind="bad">revoked</Pill>
@@ -104,7 +107,7 @@ export function Devices() {
                         <div className="actions">
                           <button
                             type="button"
-                            className="btn"
+                            className="btn ghost"
                             aria-label={`Rename ${d.name}`}
                             onClick={() => setEditing({ id: d.id, name: d.name })}
                           >
@@ -112,7 +115,7 @@ export function Devices() {
                           </button>
                           <button
                             type="button"
-                            className="btn"
+                            className="btn ghost danger"
                             aria-label={`Revoke ${d.name}`}
                             onClick={() => setRevoking(d)}
                           >
@@ -125,8 +128,10 @@ export function Devices() {
                 ))}
               </tbody>
             </table>
-          </div>
-          <p className="sub">The daemon reports its backlog locally (`braid status`).</p>
+          </TableWrap>
+          <p className="sub">
+            Backlog is the time since the last sync; the daemon reports its queue with braid status.
+          </p>
         </Card>
       ) : null}
       {revoking ? (
