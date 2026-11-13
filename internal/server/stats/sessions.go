@@ -359,7 +359,7 @@ func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent strin
 		} else {
 			it.Line, _ = json.Marshal(map[string]string{"invalid_json_b64": base64.StdEncoding.EncodeToString(raw)})
 		}
-		size += len(raw)
+		size += len(it.Line) // what goes out: base64 of invalid JSON is a third larger
 		page.Lines = append(page.Lines, it)
 	}
 	if err := rows.Err(); err != nil {

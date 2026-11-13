@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/usebraid/braid/internal/protocol"
 	"github.com/usebraid/braid/internal/server/derive"
 	"github.com/usebraid/braid/internal/server/httpx"
 	"github.com/usebraid/braid/internal/server/webauth"
@@ -78,11 +79,15 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		}
 		for i, rf := range refs {
 			var raw []byte
-			err := tx.QueryRow(r.Context(), `SELECT id, line FROM raw_lines WHERE source_file_id = $1 AND "offset" = $2 ORDER BY id DESC LIMIT 1`, rf.file, rf.off).Scan(&res.Hits[i].LineID, &raw)
+			// Lines over MaxReadLine are never loaded: the hit keeps its line id and gets no snippet.
+			err := tx.QueryRow(r.Context(), `SELECT id, CASE WHEN octet_length(line) <= $3 THEN line END FROM raw_lines
+			  WHERE source_file_id = $1 AND "offset" = $2 ORDER BY id DESC LIMIT 1`, rf.file, rf.off, protocol.MaxReadLine).Scan(&res.Hits[i].LineID, &raw)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
-			res.Hits[i].Snippet = derive.Snippet(raw, res.Hits[i].Role, q)
+			if raw != nil {
+				res.Hits[i].Snippet = derive.Snippet(raw, res.Hits[i].Role, q)
+			}
 		}
 		return nil
 	})

@@ -191,3 +191,14 @@ func TestOversizedLineIsAPlaceholder(t *testing.T) {
 		t.Fatalf("%s %v", p.Lines[0].Line, err)
 	}
 }
+
+// The page stops by the bytes it sends: invalid JSON is base64 encoded and grows by a third (R2).
+func TestLinePageHasAByteBudget(t *testing.T) {
+	x := newEnv(t)
+	seed(t, x)
+	x.dt.Exec(t, `UPDATE raw_lines SET line = convert_to(repeat('x', 3 * 1024 * 1024), 'UTF8') WHERE source_file_id = (SELECT source_file_id FROM derive_cursor WHERE session_id = 's1' AND agent_id = 'main' LIMIT 1)`)
+	var p stats.LinePage
+	if st := x.get(t, "/api/v1/stats/sessions/s1/lines?agent=main&limit=8", &p); st != 200 || len(p.Lines) != 2 || p.Next == nil {
+		t.Fatalf("%d lines %d", st, len(p.Lines))
+	}
+}

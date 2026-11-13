@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/usebraid/braid/internal/protocol"
 	"github.com/usebraid/braid/internal/server/stats"
 )
 
@@ -58,5 +59,15 @@ func TestSearch(t *testing.T) {
 		if st := x.get(t, "/api/v1/stats/search?q="+url.QueryEscape(q), nil); st != 400 {
 			t.Errorf("%q: status %d", q, st)
 		}
+	}
+}
+
+func TestSearchNeverLoadsOversizedLines(t *testing.T) {
+	x := newEnv(t)
+	seed(t, x)
+	x.dt.Exec(t, `UPDATE raw_lines SET line = convert_to(replace(convert_from(line, 'UTF8'), 'zebra', 'zebra ' || repeat('x', $1)), 'UTF8') WHERE convert_from(line, 'UTF8') LIKE '%zebra%'`, protocol.MaxReadLine)
+	var r stats.SearchResult
+	if st := x.get(t, "/api/v1/stats/search?q=zebra", &r); st != 200 || len(r.Hits) != 1 || r.Hits[0].LineID == 0 || r.Hits[0].Snippet != "" {
+		t.Fatalf("%d %+v", st, r.Hits)
 	}
 }
