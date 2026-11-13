@@ -71,7 +71,7 @@ braid install</code></pre>
     <p>Releases are signed with cosign. Check the checksum file:</p>
     <pre><code>cosign verify-blob \
   --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/usebraid/braid/' \
+  --certificate-identity https://github.com/usebraid/braid/.github/workflows/release.yml@refs/heads/main \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   checksums.txt</code></pre>
   </section>

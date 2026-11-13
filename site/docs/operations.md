@@ -33,6 +33,10 @@ docker compose run --rm braid reindex --user <user uuid>
 
 `reindex` rebuilds sessions, usage, failures and search from the raw lines, for all users or one, and prints one line per user (`<user id> <rows>`). It needs the same `BRAID_*` environment as the server.
 
+## Source offer
+
+The web app footer links to the source code (AGPL). It points to the upstream repository by default. If you run a modified build, set `BRAID_SOURCE_URL` to an `https` URL where your source is available (no credentials, query or fragment).
+
 ## Disk usage
 
 Raw lines and snapshots dominate. Table sizes:
