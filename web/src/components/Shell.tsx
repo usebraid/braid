@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
 
-import { useEffect, useRef } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { LiveBanner } from '../api/live'
 import { useMe } from '../api/session'
@@ -14,7 +14,9 @@ export function Shell() {
   const { pathname } = useLocation()
   const main = useRef<HTMLElement>(null)
   const first = useRef(true)
+  const [open, setOpen] = useState(false) // the mobile menu
   useEffect(() => {
+    setOpen(false)
     document.title = `${titleFor(pathname)} · Braid`
     if (first.current) first.current = false
     else main.current?.focus()
@@ -24,25 +26,55 @@ export function Shell() {
       <a className="skip" href="#main">
         Skip to content
       </a>
-      <aside className="side">
-        <div className="brand">
-          <svg
-            width="22"
-            height="22"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--p1)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden="true"
+      <aside className={open ? 'side open' : 'side'}>
+        <div className="side-top">
+          <div className="brand">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M5 3c0 6 14 6 14 12" stroke="var(--p1)" />
+              <path d="M12 3c0 6 7 6 7 12" stroke="var(--p2)" />
+              <path d="M5 9c0 6 7 6 7 12" stroke="var(--p3)" />
+            </svg>
+            Braid
+          </div>
+          <button
+            type="button"
+            className="menu-btn"
+            aria-label="Menu"
+            aria-expanded={open}
+            aria-controls="nav"
+            onClick={() => setOpen(!open)}
           >
-            <path d="M5 3c0 6 14 6 14 12M12 3c0 6 7 6 7 12M5 9c0 6 7 6 7 12" />
-          </svg>
-          Braid
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d={open ? 'M6 6l12 12M18 6L6 18' : 'M4 7h16M4 12h16M4 17h16'} />
+            </svg>
+          </button>
         </div>
-        <nav className="nav-list" aria-label="Main">
-          {ROUTES.filter((r) => !r.adminOnly || me.is_admin).map((r) => (
-            <NavLink key={r.path} to={r.path} end className={({ isActive }) => (isActive ? 'nav-item on' : 'nav-item')}>
+        <nav className="nav-list" id="nav" aria-label="Main">
+          {ROUTES.filter((r) => !r.adminOnly || me.is_admin).map((r, i) => (
+            <NavLink
+              key={r.path}
+              to={r.path}
+              end
+              style={{ '--c': `var(--p${(i % 8) + 1})` } as CSSProperties}
+              className={({ isActive }) => (isActive ? 'nav-item on' : 'nav-item')}
+            >
               {r.label}
             </NavLink>
           ))}
