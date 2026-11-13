@@ -146,7 +146,7 @@ func (e *env) stats(args []string) int {
 		}
 		ctx, cancel := context.WithTimeout(e.ctx, 5*time.Second)
 		defer cancel()
-		fresh, ferr := client.New(server, token, Version, nil).StatsSelf(ctx, session)
+		fresh, ferr := client.New(server, token, version(), nil).StatsSelf(ctx, session)
 		switch {
 		case ferr == nil:
 			self, haveSelf = fresh, true

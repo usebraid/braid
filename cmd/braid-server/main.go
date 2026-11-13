@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/usebraid/braid/internal/buildinfo"
 	"github.com/usebraid/braid/internal/server"
 	"github.com/usebraid/braid/internal/server/config"
 	"github.com/usebraid/braid/internal/server/db"
@@ -33,6 +34,14 @@ func main() {
 }
 
 func run() error {
+	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version" || os.Args[1] == "-v") {
+		v, c := buildinfo.Info()
+		if c == "" {
+			c = "unknown"
+		}
+		fmt.Printf("braid-server %s (%s)\n", v, c)
+		return nil
+	}
 	cfg, err := config.FromEnv(os.Getenv)
 	if err != nil {
 		return err

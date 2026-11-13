@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/usebraid/braid/internal/buildinfo"
 	"github.com/usebraid/braid/internal/daemon/auth"
 	"github.com/usebraid/braid/internal/daemon/client"
 	"github.com/usebraid/braid/internal/daemon/paths"
@@ -31,11 +32,8 @@ import (
 	"github.com/usebraid/braid/internal/protocol"
 )
 
-// Version and Commit are set with -ldflags -X.
-var (
-	Version = "dev"
-	Commit  = "dev"
-)
+// version is the build version (stamped via internal/buildinfo), used for the user agent.
+func version() string { v, _ := buildinfo.Info(); return v }
 
 const usage = `usage: braid <command>
 
@@ -77,7 +75,11 @@ func RunWithHooks(ctx context.Context, args []string, stdin io.Reader, stdout, s
 		_, _ = fmt.Fprint(stdout, usage)
 		return 0
 	case "version":
-		_, _ = fmt.Fprintf(stdout, "braid %s (%s) protocol %d\n", Version, Commit, protocol.Version)
+		v, c := buildinfo.Info()
+		if c == "" {
+			c = "unknown"
+		}
+		_, _ = fmt.Fprintf(stdout, "braid %s (%s) protocol %d\n", v, c, protocol.Version)
 		return 0
 	case "stats":
 		return e.stats(args[1:])
@@ -173,7 +175,7 @@ func (e *env) login(raw string) error {
 		if u, err := user.Current(); err == nil {
 			osUser = u.Username
 		}
-		info := protocol.DeviceCodeRequest{Hostname: host, OS: runtime.GOOS, Arch: runtime.GOARCH, OSUser: osUser, DaemonVersion: Version}
+		info := protocol.DeviceCodeRequest{Hostname: host, OS: runtime.GOOS, Arch: runtime.GOARCH, OSUser: osUser, DaemonVersion: version()}
 		if err := info.Validate(); err != nil {
 			return err
 		}
@@ -250,7 +252,7 @@ func (e *env) logout() error {
 	defer func() { _ = db.Close() }()
 	ctx, cancel := context.WithTimeout(e.ctx, 15*time.Second)
 	defer cancel()
-	if err := client.New(server, token, Version, nil).Revoke(ctx); err != nil {
+	if err := client.New(server, token, version(), nil).Revoke(ctx); err != nil {
 		_, _ = fmt.Fprintln(e.err, "warning: could not revoke the token on the server:", err)
 	}
 	kind, _, _ := db.Setting(e.ctx, "token_store")
@@ -369,7 +371,7 @@ func (e *env) engine() (*syncer.Engine, *state.DB, error) {
 		return nil, nil, err
 	}
 	return &syncer.Engine{Root: e.dirs.ClaudeProjects, State: db, Spool: spool.New(filepath.Join(e.dirs.Data, "spool")),
-		Up: &trackUp{Uploader: client.New(server, token, Version, nil), db: db, reload: func() (syncer.Uploader, bool) {
+		Up: &trackUp{Uploader: client.New(server, token, version(), nil), db: db, reload: func() (syncer.Uploader, bool) {
 			db2, s2, t2, err := e.creds()
 			if err != nil {
 				return nil, false
@@ -379,7 +381,7 @@ func (e *env) engine() (*syncer.Engine, *state.DB, error) {
 				return nil, false
 			}
 			server, token = s2, t2
-			return client.New(s2, t2, Version, nil), true
+			return client.New(s2, t2, version(), nil), true
 		}}}, db, nil
 }
 
