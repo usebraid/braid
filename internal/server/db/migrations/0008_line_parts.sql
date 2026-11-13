@@ -3,7 +3,7 @@
 
 -- Chunks of lines and snapshots too large for one ingest request. Scratch space: a line is
 -- assembled into raw_lines/raw_snapshots when its last part arrives, then its parts are deleted;
--- parts older than 7 days are removed by the ingest handler.
+-- parts older than 7 days are removed by gc_line_parts() (0009), called from the derive sweep.
 CREATE TABLE raw_line_parts (
   user_id uuid NOT NULL REFERENCES users ON DELETE CASCADE,
   source_file_id bigint NOT NULL,

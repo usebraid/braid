@@ -254,7 +254,7 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 		    first_prompt = CASE WHEN EXCLUDED.first_prompt_at IS NOT NULL AND (sessions.first_prompt_at IS NULL OR EXCLUDED.first_prompt_at < sessions.first_prompt_at) THEN EXCLUDED.first_prompt ELSE sessions.first_prompt END,
 		    first_prompt_at = CASE WHEN EXCLUDED.first_prompt_at IS NOT NULL AND (sessions.first_prompt_at IS NULL OR EXCLUDED.first_prompt_at < sessions.first_prompt_at) THEN EXCLUDED.first_prompt_at ELSE sessions.first_prompt_at END,
 		    ai_title = coalesce(EXCLUDED.ai_title, sessions.ai_title), custom_title = coalesce(EXCLUDED.custom_title, sessions.custom_title),
-		    line_count = sessions.line_count + EXCLUDED.line_count`,
+		    line_count = sessions.line_count + EXCLUDED.line_count`, // shortcut: rows re-sent at an existing offset or a new head generation are counted again (also turn_ms, session_devices.line_count); derive only the newest row per (file, offset) once the spec decides
 			b.session, nullTime(b.started), nullTime(b.ended), b.projPath, nullTime(b.projAt), b.branch, nullTime(b.branchAt),
 			models, b.firstPrompt, nullTime(b.promptAt), b.aiTitle, b.customTitle, sessLines); err != nil {
 			return err

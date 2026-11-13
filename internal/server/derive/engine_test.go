@@ -4,7 +4,9 @@
 package derive_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -231,5 +233,26 @@ func TestDatabaseErrorOnOneFileIsCountedAndSkipped(t *testing.T) {
 	}
 	if n := e.Derive(t, u, 0); n != 0 {
 		t.Fatalf("cursor did not advance: %d rows again", n)
+	}
+}
+
+func TestDeriveLogsCarryNoLineContent(t *testing.T) {
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	e, u, d := setup(t)
+	e.Exec(t, `ALTER TABLE tool_calls ADD CONSTRAINT no_boom CHECK (tool_name <> 'Boom')`)
+	e.Put(t, u, d, dt.File{Rel: "-work-alpha/s1.jsonl", Lines: []string{
+		dt.Prompt(dt.At(0), "TOPSECRET-prompt"),
+		"{TOPSECRET-garbage",
+		dt.Reply(dt.At(5), "m1", opus, dt.Usage(1, 1, 0, 0, 0), dt.Tool("t1", "Boom", map[string]any{"command": "TOPSECRET-cmd"})),
+	}})
+	e.Derive(t, u, 0)
+	if buf.Len() == 0 {
+		t.Fatal("expected the failure and skip to be logged")
+	}
+	if strings.Contains(buf.String(), "TOPSECRET") {
+		t.Fatalf("a log line carries transcript content:\n%s", buf.String())
 	}
 }

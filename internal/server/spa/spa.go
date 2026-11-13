@@ -16,6 +16,8 @@ import (
 )
 
 // CSP is the policy for the web app: same-origin only, no inline script or style, no framing.
+// shortcut: connect-src 'self' relies on browsers matching ws(s) to 'self'; older Safari does not, so add
+// wss://<BRAID_PUBLIC_URL host> (and a securitypolicyviolation check in the web e2e) if live updates fail there.
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 
 // Handler serves files from files, falling back to index.html for client-side routes.
