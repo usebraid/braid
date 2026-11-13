@@ -12,5 +12,5 @@ while IFS= read -r f; do
     echo "missing SPDX header: $f"
     fail=1
   fi
-done < <(git ls-files --cached --others --exclude-standard -- '*.go' '*.sql' '*.sh' '*.ts' '*.tsx')
+done < <(git ls-files --cached --others --exclude-standard -- '*.go' '*.sql' '*.sh' '*.ts' '*.tsx' '*.css' '*.mjs')
 exit "$fail"

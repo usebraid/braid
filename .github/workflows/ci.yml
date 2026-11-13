@@ -23,6 +23,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
       - name: Install tools
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
@@ -50,6 +55,34 @@ jobs:
       - run: go test -tags e2e -timeout 20m ./e2e/ -v
         env:
           BRAID_E2E: "1"
+          BRAID_TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/postgres?sslmode=disable
+  web-e2e:
+    if: hashFiles('web/playwright.config.ts') != ''
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --ignore-scripts && npm run build
+        working-directory: web
+      - run: npx playwright install --with-deps chromium && npx playwright test
+        working-directory: web
+        env:
           BRAID_TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/postgres?sslmode=disable
   image:
     runs-on: ubuntu-latest

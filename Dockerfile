@@ -1,10 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Braid Authors
+FROM node:22.14.0-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY web/ ./
+RUN npm run build
+
 FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+COPY --from=web /web/dist ./web/dist
 ARG VERSION=dev
 ARG COMMIT=
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/usebraid/braid/internal/buildinfo.Version=$VERSION -X github.com/usebraid/braid/internal/buildinfo.Commit=$COMMIT" -o /braid-server ./cmd/braid-server

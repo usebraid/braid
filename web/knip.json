@@ -1,0 +1,5 @@
+{
+  "entry": ["src/**/*.test.{ts,tsx}", "e2e/**/*.spec.ts", "playwright.config.ts", "scripts/*.mjs"],
+  "project": ["src/**", "e2e/**"],
+  "ignoreDependencies": ["@testing-library/user-event"]
+}

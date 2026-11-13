@@ -25,3 +25,8 @@ if [ -z "${BRAID_TEST_DATABASE_URL:-}" ]; then
 fi
 go test -race ./...
 if [ "${BRAID_E2E:-}" = 1 ]; then go test -tags e2e -count=1 -timeout 20m ./e2e/; fi
+
+if [ -f web/package.json ]; then
+  (cd web && npm ci --ignore-scripts && npm run check && npm audit --omit=dev --audit-level=low && npm audit --audit-level=high && npm run build)
+  if [ "${BRAID_WEB_E2E:-}" = 1 ]; then (cd web && npx playwright install chromium && npx playwright test); fi
+fi
