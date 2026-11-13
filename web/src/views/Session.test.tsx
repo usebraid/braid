@@ -70,6 +70,11 @@ it('draws main plus nested subagents, phase bands and failure markers, and selec
   expect(screen.getByTestId('agent-node-a3')).toHaveAttribute('aria-current', 'true')
 })
 
+it('explains in a tooltip that the session cost can be below /cost', async () => {
+  renderApp(<Session />, { route: '/sessions/g1' })
+  expect(await screen.findByTitle(/Priced at API rates from the transcripts/)).toBeInTheDocument()
+})
+
 it('offers an always-readable list of every agent, nested by spawn depth', async () => {
   renderApp(<Session />, { route: '/sessions/g1?view=list' })
   const list = await screen.findByRole('list', { name: 'Agents' })

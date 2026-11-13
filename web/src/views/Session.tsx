@@ -9,7 +9,7 @@ import type { AgentItem } from '../api/types'
 import { SessionCanvas } from '../components/canvas/SessionCanvas'
 import { TranscriptPanel } from '../components/TranscriptPanel'
 import { Card, Empty, ErrorNote, Pill, Segmented } from '../components/ui'
-import { fmtCost, fmtDuration, modelName } from '../lib/format'
+import { COST_NOTE, fmtCost, fmtDuration, modelName } from '../lib/format'
 import { agentTree, skillColor } from '../lib/graph'
 import { useAgentParam } from '../lib/useAgentParam'
 
@@ -94,7 +94,9 @@ export function Session() {
             <span>{s.device_ids.map((d) => names.get(d) ?? d.slice(0, 8)).join(', ')}</span>
             <span>{s.models.map(modelName).join(', ')}</span>
             <span className="num">{fmtDuration(s.agent_ms)}</span>
-            <span className="num">{fmtCost(s.cost_usd)}</span>
+            <span className="num" title={COST_NOTE}>
+              {fmtCost(s.cost_usd)}
+            </span>
             {s.is_live ? <Pill kind="ok">live</Pill> : null}
           </div>
         </div>

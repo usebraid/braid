@@ -50,6 +50,10 @@ it('shows the KPI tiles with formatted values and the data-quality notes', async
   expect(screen.getByTestId('kpi-time')).toHaveTextContent('estimated')
   expect(screen.getByText('1h 30m')).toBeInTheDocument() // time lost
   expect(screen.getByText(/excludes 1 unpriced model/)).toBeInTheDocument()
+  expect(screen.getByTestId('kpi-cost')).toHaveAttribute(
+    'title',
+    expect.stringContaining('Priced at API rates from the transcripts'),
+  )
   expect(screen.getByText('Opus 5.5')).toBeInTheDocument()
   expect(screen.getByText('no price')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument()

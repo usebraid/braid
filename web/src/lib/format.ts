@@ -69,3 +69,7 @@ export function fmtDateTime(iso: string, timeZone: string): string {
 
 export const dayLabel = (day: string) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+
+// Shown next to every cost figure; spec 02 section 4.
+export const COST_NOTE =
+  "Priced at API rates from the transcripts. Calls Claude Code doesn't log (titles, compaction) are missing, so this can be a few percent below /cost."
