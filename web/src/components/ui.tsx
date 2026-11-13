@@ -25,7 +25,12 @@ export function KpiCard(p: {
 }) {
   const id = useId().replace(/:/g, '')
   return (
-    <div className="card kpi" style={{ '--k': p.colors[1] } as CSSProperties} title={p.title} data-testid={p.testId}>
+    <div
+      className="card kpi"
+      style={{ '--k': p.colors[1] } as CSSProperties}
+      title={p.title}
+      data-testid={p.testId && `kpi-${p.testId}`}
+    >
       <div className="kpi-label">{p.label}</div>
       <div className="kpi-value num">{p.value}</div>
       {p.note ? <div className="kpi-note">{p.note}</div> : null}

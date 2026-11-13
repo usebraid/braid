@@ -90,18 +90,21 @@ export function Overview() {
           <div className="grid-kpi">
             <KpiCard
               label="Sessions"
+              testId="sessions"
               value={String(k.sessions)}
               colors={['#4cc3ff', '#7c8cff']}
               values={spark((d) => d.sessions)}
             />
             <KpiCard
               label="Agent time"
+              testId="time"
               value={`${k.agent_ms_estimated ? '≈ ' : ''}${fmtDuration(k.agent_ms)}`}
               note={k.agent_ms_estimated ? 'estimated' : undefined}
               colors={['#2fd4c0', '#5fe08a']}
             />
             <KpiCard
               label="Cost"
+              testId="cost"
               value={fmtCost(k.cost_usd)}
               note={
                 unknown.length ? `excludes ${unknown.length} unpriced model${unknown.length > 1 ? 's' : ''}` : undefined
@@ -112,13 +115,14 @@ export function Overview() {
             />
             <KpiCard
               label="Tokens"
+              testId="tokens"
               value={fmtTokens(k.tokens)}
               colors={['#ff6fb5', '#b26bff']}
               values={spark((d) => d.tokens)}
             />
-            <KpiCard label="Streak" value={`${k.streak_days} d`} colors={['#5fe08a', '#2fd4c0']} />
-            <KpiCard label="Failures" value={String(k.failures)} colors={['#ff6b5b', '#ff8a3d']} />
-            <KpiCard label="Time lost" value={fmtLost(k.time_lost_s)} colors={['#f1c96b', '#ffd166']} />
+            <KpiCard label="Streak" testId="streak" value={`${k.streak_days} d`} colors={['#5fe08a', '#2fd4c0']} />
+            <KpiCard label="Failures" testId="failures" value={String(k.failures)} colors={['#ff6b5b', '#ff8a3d']} />
+            <KpiCard label="Time lost" testId="lost" value={fmtLost(k.time_lost_s)} colors={['#f1c96b', '#ffd166']} />
           </div>
           <Card>
             <div className="list-head">
