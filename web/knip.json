@@ -2,5 +2,5 @@
   "entry": ["src/**/*.test.{ts,tsx}", "e2e/**/*.spec.ts", "playwright.config.ts", "scripts/*.mjs"],
   "project": ["src/**", "e2e/**"],
   "ignore": ["src/api/types.ts"],
-  "ignoreIssues": { "src/components/ui.tsx": ["exports"], "src/api/live.tsx": ["exports"] }
+  "ignoreIssues": { "src/api/live.tsx": ["exports"] }
 }
