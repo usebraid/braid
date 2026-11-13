@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
 
-import { get } from '../api/client'
 import { useApi } from '../api/hooks'
-import type { Device, FilterOptions } from '../api/types'
+import { listDevices, statsFilters } from '../api/stats'
 import { useFilters } from '../api/useFilters'
 import { RANGES, type RangeId } from '../lib/filters'
 import { modelName } from '../lib/format'
@@ -36,10 +35,8 @@ function Select(p: {
 export function FilterBar({ show = {} }: { show?: Show }) {
   const { filters, query, set, reset } = useFilters()
   const on = { range: true, device: true, project: true, model: true, skill: true, ...show }
-  const devices = useApi('devices', (s) => get<Device[]>('/api/v1/devices', undefined, s))
-  const opts = useApi(`filters:${query.from}:${query.to}`, (s) =>
-    get<FilterOptions>('/api/v1/stats/filters', { from: query.from, to: query.to }, s),
-  )
+  const devices = useApi('devices', listDevices)
+  const opts = useApi(`filters:${query.from}:${query.to}`, (s) => statsFilters({ from: query.from, to: query.to }, s))
   const custom = Boolean(filters.from && filters.to)
   const range: RangeId | '' = custom ? '' : (filters.range ?? '30d')
   const list = Array.isArray(devices.data) ? devices.data : []

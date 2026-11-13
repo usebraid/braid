@@ -3,10 +3,9 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { get } from '../api/client'
 import { useApi } from '../api/hooks'
 import { useMe } from '../api/session'
-import type { Overview as OverviewData } from '../api/types'
+import { statsOverview } from '../api/stats'
 import { useFilters } from '../api/useFilters'
 import { BarList } from '../components/charts/BarList'
 import { Honeycomb } from '../components/charts/Honeycomb'
@@ -29,7 +28,7 @@ export function Overview() {
     error,
     loading,
     reload,
-  } = useApi(`overview:${JSON.stringify(query)}`, (s) => get<OverviewData>('/api/v1/stats/overview', query, s), {
+  } = useApi(`overview:${JSON.stringify(query)}`, (s) => statsOverview(query, s), {
     on: (e) => e.type === 'session_updated' || e.type === 'reindex',
   })
   const header = (

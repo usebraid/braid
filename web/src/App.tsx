@@ -1,17 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
 
+import type { ReactNode } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { LiveProvider } from './api/live'
 import { MeProvider, useMe } from './api/session'
 import { Shell } from './components/Shell'
-import { ROUTES } from './routes'
+import { ROUTES, type RouteDef } from './routes'
 import { NotFound } from './views/NotFound'
+import { Overview } from './views/Overview'
 import { Placeholder } from './views/Placeholder'
+import { Timeline } from './views/Timeline'
 
 function AdminOnly({ children }: { children: React.ReactNode }) {
   return useMe().is_admin ? children : <NotFound />
 }
+
+// Views that have landed; every other route still shows its placeholder.
+const VIEWS: Record<string, ReactNode> = { '/timeline': <Timeline /> }
+const view = (r: RouteDef) => VIEWS[r.path] ?? <Placeholder title={r.label} />
 
 export function App() {
   return (
@@ -22,20 +29,12 @@ export function App() {
             <Route element={<Shell />}>
               {ROUTES.map((r) =>
                 r.path === '/' ? (
-                  <Route key={r.path} index element={<Placeholder title={r.label} />} />
+                  <Route key={r.path} index element={<Overview />} />
                 ) : (
                   <Route
                     key={r.path}
                     path={r.path}
-                    element={
-                      r.adminOnly ? (
-                        <AdminOnly>
-                          <Placeholder title={r.label} />
-                        </AdminOnly>
-                      ) : (
-                        <Placeholder title={r.label} />
-                      )
-                    }
+                    element={r.adminOnly ? <AdminOnly>{view(r)}</AdminOnly> : view(r)}
                   />
                 ),
               )}

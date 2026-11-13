@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
 
-import { get } from '../api/client'
 import { useApi } from '../api/hooks'
 import { useMe } from '../api/session'
-import type { Device, SessionItem, SessionPage } from '../api/types'
+import { listDevices, statsSessions } from '../api/stats'
+import type { SessionItem } from '../api/types'
 import { useFilters } from '../api/useFilters'
 import { FilterBar } from '../components/FilterBar'
 import { Card, Empty, ErrorNote } from '../components/ui'
@@ -14,12 +14,12 @@ import { SessionRow } from './SessionRow'
 export function Timeline() {
   const me = useMe()
   const { query } = useFilters()
-  const devs = useApi('devices', (s) => get<Device[]>('/api/v1/devices', undefined, s))
+  const devs = useApi('devices', listDevices)
   const names = new Map((Array.isArray(devs.data) ? devs.data : []).map((d) => [d.id, d.name]))
   const list = useInfinite<SessionItem>({
     key: JSON.stringify(query),
     id: (s) => s.session_id,
-    load: (cursor, signal) => get<SessionPage>('/api/v1/stats/sessions', { ...query, cursor, limit: 50 }, signal),
+    load: (cursor, signal) => statsSessions({ ...query, cursor, limit: 50 }, signal),
     refreshOn: (e) => e.type === 'session_updated',
   })
   return (
