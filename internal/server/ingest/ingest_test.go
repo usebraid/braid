@@ -597,3 +597,25 @@ func TestIngestAnnouncesTheSyncedDevice(t *testing.T) {
 		t.Fatalf("%+v %v", n, err)
 	}
 }
+
+type readFlag struct{ read bool }
+
+func (r *readFlag) Read([]byte) (int, error) { r.read = true; return 0, io.EOF }
+
+func TestGlobalSlotsAreTakenBeforeTheBodyIsRead(t *testing.T) {
+	e := newEnv(t)
+	release := e.h.HoldSlots(ingest.MaxConcurrentIngest)
+	defer release()
+	mux := http.NewServeMux()
+	e.h.Register(mux, httpx.NewLimiter(600, time.Now))
+	body := &readFlag{}
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/ingest", body)
+	req.Header.Set("Authorization", "Bearer "+e.tokA)
+	req.Header.Set(protocol.HeaderVersion, "1")
+	req.Header.Set("Content-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 429 || body.read {
+		t.Fatalf("status %d, body read %v", rec.Code, body.read)
+	}
+}

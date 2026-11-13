@@ -81,16 +81,17 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer h.leave(dev.DeviceID)
-	var req protocol.IngestRequest
-	if status, code := readRequest(w, r, &req); code != "" {
-		errJSON(w, status, code)
-		return
-	}
+	// Global slot before decoding: the decoded body is what the slots bound.
 	select {
 	case h.sem <- struct{}{}:
 		defer func() { <-h.sem }()
 	default:
 		httpx.TooMany(w, time.Second)
+		return
+	}
+	var req protocol.IngestRequest
+	if status, code := readRequest(w, r, &req); code != "" {
+		errJSON(w, status, code)
 		return
 	}
 	// Fixed lock order across concurrent requests avoids deadlocks; results go back in request order.
