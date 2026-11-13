@@ -68,7 +68,6 @@ jobs:
           BRAID_E2E: "1"
           BRAID_TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/postgres?sslmode=disable
   web-e2e:
-    if: hashFiles('web/playwright.config.ts') != ''
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -99,11 +98,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: docker build -t braid-server:ci .
-      - name: Scan image
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build and scan each platform
         run: |
           scripts/install-tool.sh trivy "$RUNNER_TEMP/bin"
-          "$RUNNER_TEMP/bin/trivy" image --exit-code 1 --severity HIGH,CRITICAL braid-server:ci
+          for arch in amd64 arm64; do
+            docker buildx build --platform "linux/$arch" -o "type=oci,dest=$RUNNER_TEMP/$arch.tar" .
+            "$RUNNER_TEMP/bin/trivy" image --input "$RUNNER_TEMP/$arch.tar" --exit-code 1 --severity HIGH,CRITICAL
+          done
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: web/.nvmrc
+      - name: Install tools
+        run: |
+          for t in goreleaser syft; do scripts/install-tool.sh "$t" "$RUNNER_TEMP/bin"; done
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: goreleaser release --snapshot --clean --skip=publish,sign
+        env:
+          HOMEBREW_TAP_TOKEN: unused-in-snapshot
+      - run: scripts/test-snapshot.sh dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: snapshot
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          retention-days: 3
+  install-test:
+    needs: snapshot
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: snapshot
+          path: dist
+      - run: scripts/test-install.sh dist
   commits:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
