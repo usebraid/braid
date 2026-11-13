@@ -4,6 +4,7 @@
 package stats_test
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -127,5 +128,101 @@ func TestOverviewValidationAndAuth(t *testing.T) {
 	}
 	if st := x.getAs(t, x.Client(), "/api/v1/stats/overview", nil); st != 401 {
 		t.Errorf("anonymous: status %d", st)
+	}
+}
+
+func projectSplitSeed(t *testing.T, x *env, n int) {
+	t.Helper()
+	var files []dt.File
+	for i := 1; i <= n; i++ { // project i has i*100k tokens a day; odd ones a second day (so p09 > p07 > p05 = p10 > p08 > p03 = p06 > p04 > p02 = p01 by cost)
+		cwd := func(l string) string { return dt.Cwd(l, fmt.Sprintf("/work/p%02d", i)) }
+		lines := []string{
+			cwd(dt.Prompt(dt.At(i), "p")),
+			cwd(dt.Reply(dt.At(i+10), fmt.Sprintf("a%d", i), opus, dt.Usage(i*100_000, 0, 0, 0, 0), dt.Text("x"))),
+		}
+		if i%2 == 1 {
+			lines = append(lines, cwd(dt.Reply(dt.At(day(1)+i), fmt.Sprintf("b%d", i), opus, dt.Usage(i*100_000, 0, 0, 0, 0), dt.Text("y"))))
+		}
+		files = append(files, dt.File{Rel: fmt.Sprintf("-work-p%02d/s%d.jsonl", i, i), Lines: lines})
+	}
+	x.dt.Put(t, x.uid, x.dev, files...)
+	x.dt.Derive(t, x.uid, 0)
+}
+
+func checkSplit(t *testing.T, ov stats.Overview) {
+	t.Helper()
+	sp := ov.PerDayByProject
+	if len(sp.Days) != len(ov.PerDay) {
+		t.Fatalf("days %d vs per_day %d", len(sp.Days), len(ov.PerDay))
+	}
+	for i, d := range sp.Days {
+		var c float64
+		var tok int64
+		if len(d.Values) != len(sp.Projects) {
+			t.Fatalf("day %s: %d values for %d projects", d.Day, len(d.Values), len(sp.Projects))
+		}
+		for _, v := range d.Values {
+			c += v.CostUSD
+			tok += v.Tokens
+		}
+		if d.Day != ov.PerDay[i].Day || !near(c, ov.PerDay[i].CostUSD) || tok != ov.PerDay[i].Tokens {
+			t.Errorf("day %s: split %v/%d vs per_day %+v", d.Day, c, tok, ov.PerDay[i])
+		}
+	}
+}
+
+func TestOverviewPerDayByProject(t *testing.T) {
+	x := newEnv(t)
+	projectSplitSeed(t, x, 10)
+	var ov stats.Overview
+	if st := x.get(t, "/api/v1/stats/overview?"+rng, &ov); st != 200 {
+		t.Fatalf("status %d", st)
+	}
+	checkSplit(t, ov)
+	sp := ov.PerDayByProject
+	if len(sp.Projects) != 9 || sp.Projects[0].Key != "/work/p09" || sp.Projects[7].Key != "/work/p04" || sp.Projects[8] != (stats.ProjectKey{Key: "_other", Name: "Other"}) {
+		t.Fatalf("projects %+v", sp.Projects)
+	}
+	// p01 (two days of 100k) and p02 (200k, both lowest by cost) fold into Other
+	var other int64
+	for _, d := range sp.Days {
+		other += d.Values[8].Tokens
+	}
+	if other != 400_000 {
+		t.Fatalf("other tokens %d", other)
+	}
+
+	var few, filtered, none stats.Overview
+	x2 := newEnv(t)
+	projectSplitSeed(t, x2, 3)
+	x2.get(t, "/api/v1/stats/overview?"+rng, &few)
+	checkSplit(t, few)
+	if len(few.PerDayByProject.Projects) != 3 || few.PerDayByProject.Projects[0].Key != "/work/p03" {
+		t.Fatalf("<=8 projects: %+v", few.PerDayByProject.Projects)
+	}
+	x.get(t, "/api/v1/stats/overview?"+rng+"&device="+x.dev+"&model="+opus, &filtered)
+	checkSplit(t, filtered)
+	if len(filtered.PerDayByProject.Projects) != 9 {
+		t.Fatalf("device+model filter: %+v", filtered.PerDayByProject.Projects)
+	}
+	x.get(t, "/api/v1/stats/overview?"+rng+"&model=claude-haiku-4-5", &none)
+	checkSplit(t, none)
+	if len(none.PerDayByProject.Projects) != 0 || none.PerDayByProject.Days == nil {
+		t.Fatalf("model filter: %+v", none.PerDayByProject)
+	}
+	x.get(t, "/api/v1/stats/overview?"+rng+"&project=/work/p05", &filtered)
+	checkSplit(t, filtered)
+	if len(filtered.PerDayByProject.Projects) != 1 || filtered.PerDayByProject.Projects[0].Key != "/work/p05" {
+		t.Fatalf("project filter: %+v", filtered.PerDayByProject.Projects)
+	}
+}
+
+func TestOverviewPerDayByProjectIsolation(t *testing.T) {
+	x := newEnv(t)
+	projectSplitSeed(t, x, 3)
+	var ov stats.Overview
+	x.getAs(t, x.Login(t, "u2"), "/api/v1/stats/overview?"+rng, &ov)
+	if len(ov.PerDayByProject.Projects) != 0 || len(ov.PerDayByProject.Days) != 0 {
+		t.Fatalf("leak: %+v", ov.PerDayByProject)
 	}
 }

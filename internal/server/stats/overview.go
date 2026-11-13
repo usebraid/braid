@@ -6,6 +6,7 @@ package stats
 import (
 	"context"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -62,6 +63,30 @@ type HeatCell struct {
 	Count   int64 `json:"count"`
 }
 
+// ProjectKey names one series of ProjectSplit; the trailing "_other" key collects every project beyond the top eight.
+type ProjectKey struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
+}
+
+// ProjectValue is one project's share of a day.
+type ProjectValue struct {
+	CostUSD float64 `json:"cost_usd"`
+	Tokens  int64   `json:"tokens"`
+}
+
+// ProjectDay is one local day; Values[i] belongs to ProjectSplit.Projects[i].
+type ProjectDay struct {
+	Day    string         `json:"day"`
+	Values []ProjectValue `json:"values"`
+}
+
+// ProjectSplit is the daily cost and tokens stacked by project.
+type ProjectSplit struct {
+	Projects []ProjectKey `json:"projects"`
+	Days     []ProjectDay `json:"days"`
+}
+
 // Overview is the response of GET /api/v1/stats/overview.
 type Overview struct {
 	From       time.Time      `json:"from"`
@@ -73,6 +98,8 @@ type Overview struct {
 	PerModel   []ModelPoint   `json:"per_model"`
 	PerProject []ProjectPoint `json:"per_project"`
 	Heatmap    []HeatCell     `json:"heatmap"`
+
+	PerDayByProject ProjectSplit `json:"per_day_by_project"`
 }
 
 const (
@@ -88,7 +115,7 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	ov := Overview{From: f.From, To: f.To, PerDay: []DayPoint{}, PerModel: []ModelPoint{}, PerProject: []ProjectPoint{}, Heatmap: []HeatCell{}}
+	ov := Overview{From: f.From, To: f.To, PerDay: []DayPoint{}, PerModel: []ModelPoint{}, PerProject: []ProjectPoint{}, Heatmap: []HeatCell{}, PerDayByProject: ProjectSplit{Projects: []ProjectKey{}, Days: []ProjectDay{}}}
 	ov.KPI.CostUnknownModels = []string{}
 	err = h.db.WithUser(r.Context(), p.UserID, func(tx pgx.Tx) error { return h.fillOverview(r.Context(), tx, f, &ov) })
 	if err != nil {
@@ -143,6 +170,9 @@ func (h *Handler) fillOverview(ctx context.Context, tx pgx.Tx, f Filter, ov *Ove
 	}); err != nil {
 		return err
 	}
+	if err := fillProjectSplit(ctx, tx, tz, ov); err != nil {
+		return err
+	}
 	if err := collect(ctx, tx, `SELECT u.model, sum(u.cost_usd)::float8, sum(`+tokExpr+`)::bigint, count(*), bool_or(u.price_unknown) `+usageSet+`
 	  GROUP BY u.model ORDER BY 2 DESC, 1`, a, func(rows pgx.Rows) error {
 		var m ModelPoint
@@ -173,6 +203,79 @@ func (h *Handler) fillOverview(ctx context.Context, tx pgx.Tx, f Filter, ov *Ove
 		ov.Heatmap = append(ov.Heatmap, c)
 		return err
 	})
+}
+
+// maxSplitProjects is the number of projects kept before the rest is folded into "_other".
+const maxSplitProjects = 8
+
+// fillProjectSplit fills ov.PerDayByProject over the days of ov.PerDay (so both always align); tz is the argument list with the time zone as $7.
+func fillProjectSplit(ctx context.Context, tx pgx.Tx, tz []any, ov *Overview) error {
+	type cell struct {
+		day, key, name string
+		v              ProjectValue
+	}
+	var cells []cell
+	total := map[string]float64{}
+	names := map[string]string{}
+	if err := collect(ctx, tx, `SELECT to_char(date(timezone($7, u.at)), 'YYYY-MM-DD'), coalesce(s.project_path, ''), coalesce(max(p.name), ''),
+	    sum(u.cost_usd)::float8, sum(`+tokExpr+`)::bigint
+	  FROM usage u JOIN sessions s ON s.session_id = u.session_id LEFT JOIN projects p ON p.path = s.project_path
+	  WHERE u.at >= $1 AND u.at < $2 AND u.session_id IN (SELECT s.session_id FROM sessions s WHERE `+setPred+`)
+	  GROUP BY 1, 2`, tz, func(rows pgx.Rows) error {
+		var c cell
+		err := rows.Scan(&c.day, &c.key, &c.name, &c.v.CostUSD, &c.v.Tokens)
+		cells = append(cells, c)
+		total[c.key] += c.v.CostUSD
+		names[c.key] = c.name
+		return err
+	}); err != nil {
+		return err
+	}
+	keys := make([]string, 0, len(total))
+	for k := range total {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if total[keys[i]] != total[keys[j]] {
+			return total[keys[i]] > total[keys[j]]
+		}
+		return keys[i] < keys[j]
+	})
+	idx := map[string]int{}
+	sp := &ov.PerDayByProject
+	for i, k := range keys {
+		if i == maxSplitProjects {
+			break
+		}
+		idx[k] = i
+		name := names[k]
+		if name == "" {
+			name = k
+		}
+		sp.Projects = append(sp.Projects, ProjectKey{Key: k, Name: name})
+	}
+	other := -1
+	if len(keys) > maxSplitProjects {
+		other = len(sp.Projects)
+		sp.Projects = append(sp.Projects, ProjectKey{Key: "_other", Name: "Other"})
+	}
+	byDay := map[string][]ProjectValue{}
+	for _, d := range ov.PerDay {
+		byDay[d.Day] = make([]ProjectValue, len(sp.Projects))
+	}
+	for _, c := range cells {
+		i, ok := idx[c.key]
+		if !ok {
+			i = other
+		}
+		v := &byDay[c.day][i]
+		v.CostUSD += c.v.CostUSD
+		v.Tokens += c.v.Tokens
+	}
+	for _, d := range ov.PerDay {
+		sp.Days = append(sp.Days, ProjectDay{Day: d.Day, Values: byDay[d.Day]})
+	}
+	return nil
 }
 
 // streak ignores the filter: distinct local days with usage over all time.

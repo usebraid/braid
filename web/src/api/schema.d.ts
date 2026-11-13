@@ -478,6 +478,23 @@ export interface components {
             per_model: components["schemas"]["ModelPoint"][];
             per_project: components["schemas"]["ProjectPoint"][];
             heatmap: components["schemas"]["HeatCell"][];
+            per_day_by_project: components["schemas"]["ProjectSplit"];
+        };
+        /** @description Daily cost and tokens by project; the top 8 projects by cost plus a trailing "_other" entry when more exist. days[].values[i] belongs to projects[i]. */
+        ProjectSplit: {
+            projects: {
+                key: string;
+                name: string;
+            }[];
+            days: {
+                /** Format: date */
+                day: string;
+                values: {
+                    cost_usd: number;
+                    /** Format: int64 */
+                    tokens: number;
+                }[];
+            }[];
         };
         KPI: {
             /** Format: int64 */

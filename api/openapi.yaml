@@ -441,7 +441,7 @@ components:
         stored_bytes: { type: integer, format: int64 }
     Overview:
       type: object
-      required: [from, to, time_zone, reindexing, kpi, per_day, per_model, per_project, heatmap]
+      required: [from, to, time_zone, reindexing, kpi, per_day, per_model, per_project, heatmap, per_day_by_project]
       properties:
         from: { type: string, format: date-time }
         to: { type: string, format: date-time }
@@ -452,6 +452,31 @@ components:
         per_model: { type: array, items: { $ref: "#/components/schemas/ModelPoint" } }
         per_project: { type: array, items: { $ref: "#/components/schemas/ProjectPoint" } }
         heatmap: { type: array, items: { $ref: "#/components/schemas/HeatCell" } }
+        per_day_by_project: { $ref: "#/components/schemas/ProjectSplit" }
+    ProjectSplit:
+      type: object
+      description: Daily cost and tokens by project; the top 8 projects by cost plus a trailing "_other" entry when more exist. days[].values[i] belongs to projects[i].
+      required: [projects, days]
+      properties:
+        projects:
+          type: array
+          items:
+            type: object
+            required: [key, name]
+            properties: { key: { type: string }, name: { type: string } }
+        days:
+          type: array
+          items:
+            type: object
+            required: [day, values]
+            properties:
+              day: { type: string, format: date }
+              values:
+                type: array
+                items:
+                  type: object
+                  required: [cost_usd, tokens]
+                  properties: { cost_usd: { type: number }, tokens: { type: integer, format: int64 } }
     KPI:
       type: object
       required: [sessions, agent_ms, total_agent_ms, agent_ms_estimated, cost_usd, cost_unknown_models, tokens, streak_days, failures, time_lost_s]
