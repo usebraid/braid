@@ -24,14 +24,14 @@ async function refresh($: EngineInterface, force: boolean): Promise<void> {
   if (!claimed) return
   const id = await $.session.id().catch(() => undefined)
   const ran = await $.process.run(['braid', 'stats', '--json', ...(id ? ['--session', id] : [])]).catch(() => undefined)
-  // Missing binary, failure or garbage all end as "not connected": no error text anywhere.
+  // A failed call (missing binary, non-zero exit, garbage) keeps the last good figures, marked stale; no error text anywhere.
   const stats = ran && ran.exitCode === 0 ? parseStats(ran.stdout) : undefined
-  await update($, band, (s) => ({ ...s, stats }))
+  await update($, band, (s) => ({ ...s, stats: stats ?? s.stats, stale: !stats }))
 }
 
 export const register: Register = (on) => {
   on('session.start', async ($: EngineInterface, e: unknown, next: (e: unknown) => unknown) => {
-    await refresh($, true).catch(() => undefined)
+    void refresh($, true).catch(() => undefined) // the CLI may take its full HTTP timeout: never block the session start
     return next(e)
   }).catch((_$: EngineInterface, e: unknown, next: (e: unknown) => unknown) => next(e))
 
@@ -41,13 +41,13 @@ export const register: Register = (on) => {
     // biome-ignore lint/suspicious/noExplicitAny: the render event is typed by Claude Code.
     async ($: EngineInterface, e: any, next: (e: unknown) => Promise<unknown>) => {
       if (e.props.hasSurvey) return next(e)
-      const { stats, lastRun } = await read($, band)
+      const { stats, lastRun, stale } = await read($, band)
       const now = await $.clock.now()
       // Never awaited: rendering does not wait for the CLI.
       if (due(lastRun, now, false)) void refresh($, false).catch(() => undefined)
       // $.session.usage() has no token total (only cost and the context window), so the session shows cost only.
       const usage = await $.session.usage().catch(() => undefined)
-      const v = view(stats, usage?.cost ? { cost: usage.cost.usd } : undefined, now)
+      const v = view(stats, usage?.cost ? { cost: usage.cost.usd } : undefined, now, stale)
       if (v.kind === 'hidden') return next(e)
 
       // Other mods share this slot: draw theirs below ours. next(e) rejects when nothing answers beneath.

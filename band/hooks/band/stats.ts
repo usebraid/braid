@@ -64,9 +64,10 @@ export function due(lastRunMs: number | undefined, nowMs: number, force: boolean
 const bytes = (n: number) =>
   n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`
 
-export function view(stats: Stats | undefined, local: Local, nowMs: number): View {
+export function view(stats: Stats | undefined, local: Local, nowMs: number, stale = false): View {
   if (!stats || stats.sync.state === 'logged_out') return { kind: 'not_connected', text: 'braid: not connected' }
   const { state } = stats.sync
+  const old = stale || state === 'offline'
   const segs: Segment[] = []
   const mine = local ?? (stats.session && { cost: stats.session.cost_usd, tokens: stats.session.tokens })
   if (mine) {
@@ -77,12 +78,12 @@ export function view(stats: Stats | undefined, local: Local, nowMs: number): Vie
   const n = today.sessions
   segs.push({
     text: `today ${fmtMoney(today.cost_usd)} · ${fmtTokens(today.tokens)} · ${n} ${n === 1 ? 'session' : 'sessions'}`,
-    ...(state === 'offline' && { dim: true }),
+    ...(old && { dim: true }),
   })
   segs.push({ text: '●', color: dotColor(state) })
   const reset = stats.limit && countdown(stats.limit.resets_at, nowMs)
   if (reset) segs.push({ text: reset, color: 'warning' })
-  if (state === 'offline') segs.push({ text: 'stale', dim: true })
+  if (old) segs.push({ text: 'stale', dim: true })
   if (state === 'backlog') segs.push({ text: `${bytes(stats.sync.backlog_bytes)} behind`, dim: true })
   if (state === 'blocked') segs.push({ text: 'blocked', color: 'error' })
   return { kind: 'line', segments: segs }

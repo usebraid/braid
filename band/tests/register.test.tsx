@@ -45,7 +45,10 @@ function rig(run: (argv: string[]) => Promise<{ exitCode: number; stdout: string
   }
   register(on, {})
   const render = async () => handlers['ui.render']?.($, { props: {}, surface: 'terminal' }, async () => undefined)
-  const start = () => handlers['session.start']?.($, {}, async (e: unknown) => e)
+  const start = async () => {
+    await handlers['session.start']?.($, {}, async (e: unknown) => e)
+    await new Promise((res) => setTimeout(res, 0)) // the refresh runs in the background
+  }
   return { $, calls, clock, render, start, forbidden }
 }
 const text = (node: any): string => JSON.stringify(node)
@@ -88,6 +91,24 @@ describe('band module', () => {
       await r.start()
       expect(text(await r.render())).toContain('braid: not connected')
     }
+  })
+  test('a failed call keeps the last good figures, marked stale', async () => {
+    let ok = true
+    const r = rig(async () => (ok ? { exitCode: 0, stdout: fx('stats-ok.json') } : { exitCode: 1, stdout: '' }))
+    await r.start()
+    expect(text(await r.render())).not.toContain('stale')
+    ok = false
+    r.clock.t += 31_000
+    await r.render() // starts the refresh without waiting for it
+    await new Promise((res) => setTimeout(res, 0))
+    const out = text(await r.render())
+    expect(out).toContain('today')
+    expect(out).toContain('stale')
+  })
+  test('session.start does not wait for the CLI', async () => {
+    const r = rig(() => new Promise(() => {}))
+    await r.start()
+    expect(r.calls.length).toBe(1)
   })
   test('offline keeps the cached figures, marked stale', async () => {
     const r = rig(async () => ({ exitCode: 0, stdout: fx('stats-offline.json') }))
