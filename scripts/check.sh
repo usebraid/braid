@@ -14,6 +14,8 @@ go vet -tags webe2e ./e2e/web/
 golangci-lint run
 govulncheck ./...
 scripts/check-spdx.sh
+scripts/test-pins.sh
+scripts/check-pins.sh
 gitleaks detect --no-banner
 if command -v trivy >/dev/null; then trivy config --exit-code 1 --severity HIGH,CRITICAL . ; fi
 

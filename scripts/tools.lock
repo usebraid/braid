@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 The Braid Authors
+# <name> <version> <os> <arch> <url> <sha256> ; sha256 copied from the vendor's checksum file for that version
+goreleaser 2.20.2 linux amd64 https://github.com/goreleaser/goreleaser/releases/download/v2.20.2/goreleaser_Linux_x86_64.tar.gz f3d24969a7389a46613875711d15a96d8f6ef1553d84c6ace09d69ac1e7d44c0
+goreleaser 2.20.2 darwin arm64 https://github.com/goreleaser/goreleaser/releases/download/v2.20.2/goreleaser_Darwin_arm64.tar.gz 4e68482f6bbdb2d3ce7f835be50a4eb7287ee999cefc563c49c5f42ad3778c78
+cosign 3.1.4 linux amd64 https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64 424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
+cosign 3.1.4 darwin arm64 https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-darwin-arm64 9f9b8cd557cf2e5b3df3373a00baa005a86b02391e3e06dd0ce37b3a1533d3a4
+syft 1.57.1 linux amd64 https://github.com/anchore/syft/releases/download/v1.57.1/syft_1.57.1_linux_amd64.tar.gz bf52519eb57f675d47c07d43213cb6dff6449f3d6d1147ff6701ed91f44eef0c
+syft 1.57.1 darwin arm64 https://github.com/anchore/syft/releases/download/v1.57.1/syft_1.57.1_darwin_arm64.tar.gz e0a74a5d2688d1254b4e17b71f068a83215e3625f846265bf6614c7ba06f3a96
+trivy 0.76.2 linux amd64 https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_Linux-64bit.tar.gz bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
+trivy 0.76.2 darwin arm64 https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_macOS-ARM64.tar.gz ae7ea358326960406b703c77b2ac490190797d80b306b5b50c2a27221da0a5b8
