@@ -8,6 +8,7 @@ import { loginAs, RANGE } from './helpers'
 const pages = [
   '/',
   '/timeline',
+  '/timeline?view=list',
   '/live',
   '/failures',
   '/search',
@@ -17,6 +18,7 @@ const pages = [
   '/settings',
   '/sessions/g1',
   '/sessions/big1',
+  '/sessions/big1?view=canvas',
   '/sessions/big1?view=list',
 ]
 
@@ -38,7 +40,7 @@ for (const theme of ['dark', 'light'] as const) {
 
 test('keyboard: skip link, focus ring and canvas agent list', async ({ page, request }) => {
   await loginAs(page, request, 'alice')
-  await page.goto(`/sessions/g1?${RANGE}`)
+  await page.goto(`/sessions/g1?${RANGE}&view=list`)
   await page.getByRole('main').waitFor() // Tab before the app has rendered goes nowhere
   await page.keyboard.press('Tab')
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused()

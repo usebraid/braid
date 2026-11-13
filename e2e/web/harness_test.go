@@ -137,6 +137,18 @@ func TestServe(t *testing.T) {
 		beta(dt.Reply(dt.At(20), "b-m1", opus, dt.Usage(100, 10, 0, 0, 0), dt.Text("beta reply"))),
 		beta(dt.Line("ai-title", "", "aiTitle", "Beta small")),
 	}})
+	// resumed after 2 h on a second device: the timeline graph shows it twice (started on laptop, resumed on desktop)
+	resume := func(l string) string { return dt.Cwd(l, "/work/resume") }
+	const resumeRel = "-work-resume/r1.jsonl"
+	env.Put(t, aliceID, laptop, dt.File{Rel: resumeRel, Lines: []string{
+		resume(dt.Prompt(dt.At(10), "Resume first prompt")),
+		resume(dt.Reply(dt.At(20), "r-m1", opus, dt.Usage(100, 10, 0, 0, 0), dt.Text("first reply"))),
+		resume(dt.Line("ai-title", "", "aiTitle", "Resumed later")),
+	}})
+	env.Put(t, aliceID, desktop, dt.File{Rel: resumeRel, Lines: []string{
+		resume(dt.Prompt(dt.At(20+7200), "Resume second prompt")),
+		resume(dt.Reply(dt.At(30+7200), "r-m2", opus, dt.Usage(100, 10, 0, 0, 0), dt.Text("second reply"))),
+	}})
 	live := func(l string) string { return dt.Cwd(l, "/work/live") }
 	start := stamp(0)
 	env.Put(t, aliceID, laptop, dt.File{Rel: "-work-live/l1.jsonl", Lines: []string{

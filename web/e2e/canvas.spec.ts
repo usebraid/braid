@@ -6,7 +6,7 @@ import { loginAs, RANGE } from './helpers'
 
 test('canvas shows main and the nested subagents; node click opens the transcript', async ({ page, request }) => {
   await loginAs(page, request, 'alice')
-  await page.goto(`/sessions/g1?${RANGE}`)
+  await page.goto(`/sessions/g1?${RANGE}&view=canvas`)
   for (const id of ['main', 'a1', 'a2', 'a3']) await expect(page.getByTestId(`agent-node-${id}`)).toBeVisible()
   await expect(page.getByTestId('agent-node-main')).toHaveAttribute('title', /brainstorming/)
   await expect(page.locator('.react-flow__minimap')).toBeVisible()
@@ -23,7 +23,7 @@ test('a session with 102 subagents opens readable, groups wide fan-outs and has 
   request,
 }) => {
   await loginAs(page, request, 'alice')
-  await page.goto(`/sessions/big1?${RANGE}`)
+  await page.goto(`/sessions/big1?${RANGE}&view=canvas`)
   const main = page.getByTestId('agent-node-main')
   await expect(main).toBeVisible()
   // the first view keeps zoom 1, so node text renders at its CSS size

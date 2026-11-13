@@ -1597,7 +1597,7 @@ td.empty {
   text-overflow: ellipsis;
 }
 .gtag {
-  color: var(--p4);
+  font-weight: 600; /* the palette colour fails contrast on the light theme */
   margin-right: 6px;
 }
 .g-branch,
