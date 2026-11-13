@@ -23,6 +23,14 @@ Braid can be installed and self-hosted by others: signed binaries for all platfo
 Part of the site, sources in `site/docs/` (Markdown):
 
 - Quick start with `deploy/docker-compose.yml`.
+- External Postgres (instead of the bundled container), step by step:
+  - Requirements: Postgres ≥ 16, extension `pg_trgm` available.
+  - SQL to create the database and the two roles exactly as the migrations expect: `braid_owner` (owns the schema, runs migrations, `BYPASSRLS`, not superuser) and `braid_app` (`NOBYPASSRLS`, login), plus the grants.
+  - One note for managed providers: the owner role needs `BYPASSRLS` and the right to `CREATE EXTENSION pg_trgm`; check that your provider allows both. No per-provider instructions.
+  - Connection settings: `BRAID_DATABASE_URL` / owner URL, TLS with `sslmode=verify-full` and a custom CA.
+  - Compose override that removes the bundled `postgres` service.
+  - Verification: `braid-server` starts, migrations run, `/healthz` is green.
+  - Backups and upgrades for an external database.
 - OIDC setup for Pocket ID, Authentik, Keycloak, Authelia, Zitadel (client settings, group claim, `braid-admins`, allowlist).
 - Reverse proxy pointers (Caddy, Traefik, nginx), `BRAID_TRUSTED_PROXIES`, TLS.
 - Operations: backups (`pg_dump`), upgrades, `reindex`, disk usage, device management, revoking access.
