@@ -4,7 +4,6 @@
 package ingest
 
 import (
-	"bytes"
 	"cmp"
 	"compress/gzip"
 	"context"
@@ -77,19 +76,33 @@ var (
 	errBadParts     = errors.New("assembled line does not match its length or hash")
 )
 
-// storePart upserts one chunk of the line at offset and, once all chunks of that line are present,
-// assembles and verifies it, deletes the parts and returns the whole line.
-func storePart(ctx context.Context, tx pgx.Tx, id, offset int64, p *protocol.Part, chunk []byte) (whole []byte, done bool, err error) {
+// SQL of the chunk assembly. The chunks are concatenated, checked and stored inside Postgres only:
+// they never pass through Go, so memory stays flat however long the line is.
+const (
+	sqlPartsCheck = `SELECT count(*) = $4 AND sum(length(chunk)) = $5 AND
+	  sha256(string_agg(chunk, ''::bytea ORDER BY idx)) = $3 AND length(string_agg(chunk, ''::bytea ORDER BY idx)) = $5
+	  FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND sha256 = $3 AND count = $4`
+	sqlPartsLine = `INSERT INTO raw_lines(user_id, source_file_id, "offset", line_hash, line, device_id)
+	  SELECT $1, $2, $3, $4, string_agg(chunk, ''::bytea ORDER BY idx), $5::uuid
+	    FROM raw_line_parts WHERE source_file_id = $2 AND "offset" = $3 AND sha256 = $4
+	  ON CONFLICT (user_id, source_file_id, "offset", line_hash) DO NOTHING`
+	sqlPartsSnapshot = `INSERT INTO raw_snapshots(user_id, source_file_id, content_hash, content, received_at, device_id)
+	  SELECT $1, $2, $3, string_agg(chunk, ''::bytea ORDER BY idx), clock_timestamp(), $4::uuid
+	    FROM raw_line_parts WHERE source_file_id = $2 AND "offset" = 0 AND sha256 = $3
+	   AND NOT EXISTS (SELECT 1 FROM (SELECT content_hash FROM raw_snapshots WHERE source_file_id = $2
+	                    ORDER BY received_at DESC, id DESC LIMIT 1) n WHERE n.content_hash = $3)`
+)
+
+// storePart upserts one chunk of the line at offset and reports whether all chunks are now present
+// and match the announced length and hash (checked in SQL; a mismatch is errBadParts).
+func storePart(ctx context.Context, tx pgx.Tx, id, offset int64, p *protocol.Part, chunk []byte) (done bool, err error) {
 	sum, err := hex.DecodeString(p.SHA256)
 	if err != nil {
-		return nil, false, err
-	}
-	if _, err = tx.Exec(ctx, `DELETE FROM raw_line_parts WHERE received_at < now() - interval '7 days'`); err != nil {
-		return nil, false, err
+		return false, err
 	}
 	// Chunks of a different line at this offset (changed content) can never complete this one.
 	if _, err = tx.Exec(ctx, `DELETE FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND sha256 <> $3`, id, offset, sum); err != nil {
-		return nil, false, err
+		return false, err
 	}
 	if _, err = tx.Exec(ctx, `
 		INSERT INTO raw_line_parts(user_id, source_file_id, "offset", idx, count, total_len, sha256, chunk)
@@ -97,36 +110,77 @@ func storePart(ctx context.Context, tx pgx.Tx, id, offset int64, p *protocol.Par
 		ON CONFLICT (user_id, source_file_id, "offset", idx)
 		DO UPDATE SET count = excluded.count, total_len = excluded.total_len, sha256 = excluded.sha256, chunk = excluded.chunk, received_at = now()`,
 		id, offset, p.Index, p.Count, p.TotalLen, sum, chunk); err != nil {
-		return nil, false, err
+		return false, err
 	}
 	var have int
 	if err = tx.QueryRow(ctx, `SELECT count(*) FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND sha256 = $3 AND count = $4`,
 		id, offset, sum, p.Count).Scan(&have); err != nil || have < p.Count {
-		return nil, false, err
+		return false, err
 	}
-	rows, err := tx.Query(ctx, `SELECT chunk FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2 AND sha256 = $3 ORDER BY idx`, id, offset, sum)
+	var ok bool
+	if err = tx.QueryRow(ctx, sqlPartsCheck, id, offset, sum, p.Count, p.TotalLen).Scan(&ok); err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, errBadParts
+	}
+	return true, nil
+}
+
+// storePartLine stores one chunk of the line at f.FromOffset; with the last chunk the line is assembled
+// in SQL and goes through the same dedupe and conflict rules as a whole line.
+func storePartLine(ctx context.Context, tx pgx.Tx, dev Device, id, end int64, scope *string, f protocol.FileBatch, res protocol.FileResult) (protocol.FileResult, error) {
+	l := f.Lines[0]
+	b, err := l.Bytes()
 	if err != nil {
-		return nil, false, err
+		return res, err
 	}
-	for rows.Next() {
-		var c []byte
-		if err = rows.Scan(&c); err != nil {
-			break
+	sum, err := hex.DecodeString(l.Part.SHA256)
+	if err != nil {
+		return res, err
+	}
+	off := f.FromOffset
+	res.EndOffset = off + l.Part.TotalLen + 1
+	var stored bool // a resend after a lost ack: the line is already complete
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM raw_lines WHERE source_file_id = $1 AND "offset" = $2 AND line_hash = $3)`, id, off, sum).Scan(&stored); err != nil {
+		return res, err
+	}
+	if stored {
+		return res, nil
+	}
+	done, err := storePart(ctx, tx, id, off, l.Part, b)
+	if err != nil {
+		return res, err
+	}
+	if !done {
+		res.Status, res.EndOffset = protocol.StatusPending, end
+		return res, nil
+	}
+	if scope == nil && off < end {
+		var clash bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM raw_lines l WHERE l.source_file_id = $1 AND l."offset" = $2 AND l.device_id <> $4::uuid
+		    AND NOT EXISTS (SELECT 1 FROM raw_lines m WHERE m.source_file_id = $1 AND m."offset" = $2 AND m.line_hash = $3))`,
+			id, off, sum, dev.DeviceID).Scan(&clash); err != nil {
+			return res, err
 		}
-		whole = append(whole, c...)
+		if clash {
+			res.Status, res.EndOffset = protocol.StatusConflict, end
+			return res, nil
+		}
 	}
-	rows.Close()
-	if err == nil {
-		err = rows.Err()
+	if _, err := tx.Exec(ctx, sqlPartsLine, dev.UserID, id, off, sum, dev.DeviceID); err != nil {
+		return res, err
 	}
-	if err != nil {
-		return nil, false, err
+	if err := deleteParts(ctx, tx, id, off); err != nil {
+		return res, err
 	}
-	if h := sha256.Sum256(whole); int64(len(whole)) != p.TotalLen || !bytes.Equal(h[:], sum) {
-		return nil, false, errBadParts
-	}
-	_, err = tx.Exec(ctx, `DELETE FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2`, id, offset)
-	return whole, err == nil, err
+	_, err = tx.Exec(ctx, `UPDATE source_files SET end_offset = greatest(end_offset, $2) WHERE id = $1`, id, res.EndOffset)
+	return res, err
+}
+
+func deleteParts(ctx context.Context, tx pgx.Tx, id, offset int64) error {
+	_, err := tx.Exec(ctx, `DELETE FROM raw_line_parts WHERE source_file_id = $1 AND "offset" = $2`, id, offset)
+	return err
 }
 
 func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
@@ -274,7 +328,7 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 			return res, err
 		}
 		if p := f.Content.Part; p != nil {
-			whole, done, err := storePart(ctx, tx, id, 0, p, c)
+			done, err := storePart(ctx, tx, id, 0, p, c)
 			if err != nil {
 				return res, err
 			}
@@ -282,7 +336,11 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 				res.Status, res.EndOffset = protocol.StatusPending, end
 				return res, nil
 			}
-			c = whole
+			sum, _ := hex.DecodeString(p.SHA256)
+			if _, err = tx.Exec(ctx, sqlPartsSnapshot, dev.UserID, id, sum, dev.DeviceID); err != nil {
+				return res, err
+			}
+			return res, deleteParts(ctx, tx, id, 0)
 		}
 		h := sha256.Sum256(c)
 		// Append-only: skip only if the newest row already has this hash (the file row lock serialises this).
@@ -297,6 +355,9 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 		res.Status, res.EndOffset = protocol.StatusGap, end
 		return res, nil
 	}
+	if len(f.Lines) == 1 && f.Lines[0].Part != nil { // Validate allows a part only as the sole line
+		return storePartLine(ctx, tx, dev, id, end, scope, f, res)
+	}
 	offs := make([]int64, len(f.Lines))
 	hashes := make([][]byte, len(f.Lines))
 	lines := make([][]byte, len(f.Lines))
@@ -305,26 +366,6 @@ func storeFile(r *http.Request, tx pgx.Tx, dev Device, f protocol.FileBatch) (pr
 		b, err := l.Bytes()
 		if err != nil {
 			return res, err
-		}
-		if l.Part != nil { // Validate allows a part only as the sole line
-			var stored bool // a resend after a lost ack: the line is already complete
-			if sum, err := hex.DecodeString(l.Part.SHA256); err != nil {
-				return res, err
-			} else if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM raw_lines WHERE source_file_id = $1 AND "offset" = $2 AND line_hash = $3)`, id, cur, sum).Scan(&stored); err != nil {
-				return res, err
-			} else if stored {
-				res.EndOffset = cur + l.Part.TotalLen + 1
-				return res, nil
-			}
-			whole, done, err := storePart(ctx, tx, id, cur, l.Part, b)
-			if err != nil {
-				return res, err
-			}
-			if !done {
-				res.Status, res.EndOffset = protocol.StatusPending, end
-				return res, nil
-			}
-			b = whole
 		}
 		h := sha256.Sum256(b)
 		offs[i], hashes[i], lines[i] = cur, h[:], b

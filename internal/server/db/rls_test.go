@@ -211,3 +211,18 @@ func TestPartsAreInvisibleAndImmutableToOtherUsers(t *testing.T) {
 		t.Fatalf("A's part was deleted by B: %d", n)
 	}
 }
+
+func TestStalePartsAreCollected(t *testing.T) {
+	f := setup(t)
+	testdb.Exec(t, f.owner, `INSERT INTO raw_line_parts(user_id,source_file_id,"offset",idx,count,total_len,sha256,chunk,received_at)
+		SELECT $1,id,0,i,3,9,'\x01','\x7b',now() - (i * interval '5 days') FROM source_files, generate_series(0,2) i`, f.userA)
+	err := f.d.WithSystem(context.Background(), func(tx pgx.Tx) error {
+		_, err := tx.Exec(context.Background(), `SELECT gc_line_parts()`)
+		return err
+	})
+	var n int
+	ownerRead(t, f.owner, `SELECT count(*) FROM raw_line_parts`, &n)
+	if err != nil || n != 2 { // 0 and 5 days old stay, 10 days old goes
+		t.Fatalf("remaining %d, err %v", n, err)
+	}
+}

@@ -14,3 +14,6 @@ func (h *Handler) HoldSlots(n int) func() {
 		}
 	}
 }
+
+// AssemblySQL lists the statements that touch the chunks of a line (test hook for the query-shape check).
+var AssemblySQL = []string{sqlPartsCheck, sqlPartsLine, sqlPartsSnapshot}

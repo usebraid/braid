@@ -72,6 +72,9 @@ func (w *Worker) Run(ctx context.Context) error {
 	doSweep := func() {
 		var ids []string
 		err := w.DB.WithSystem(ctx, func(tx pgx.Tx) error {
+			if _, err := tx.Exec(ctx, `SELECT gc_line_parts()`); err != nil { // stale chunks of lines that never completed
+				return err
+			}
 			r, err := tx.Query(ctx, `SELECT derive_pending_users()::text`)
 			if err != nil {
 				return err

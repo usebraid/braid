@@ -774,3 +774,14 @@ func TestLargeSnapshotIsChunked(t *testing.T) {
 		t.Fatalf("snapshot differs: %v", err)
 	}
 }
+
+func TestChunksAreAssembledInSQLAndNeverReadIntoGo(t *testing.T) {
+	for _, q := range ingest.AssemblySQL {
+		if !strings.Contains(q, "string_agg(chunk") || strings.Contains(q, "SELECT chunk") {
+			t.Errorf("assembly must concatenate in SQL and never select the chunks: %s", q)
+		}
+	}
+	if len(ingest.AssemblySQL) != 3 {
+		t.Fatal("verify, line and snapshot assembly statements expected")
+	}
+}
