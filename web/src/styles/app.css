@@ -754,3 +754,53 @@ main:focus {
 .bar-text {
   color: var(--muted);
 }
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 18px;
+}
+.field {
+  display: grid;
+  gap: 4px;
+}
+.field select {
+  background: var(--track);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+}
+.banner {
+  margin-bottom: 14px;
+  color: var(--muted);
+}
+.grid-kpi {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.tl-title {
+  font-weight: 500;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chips span {
+  background: var(--track);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.more {
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+}
