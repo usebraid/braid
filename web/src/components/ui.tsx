@@ -5,14 +5,15 @@
 // kpis, the segmented control, chips and the theme button), Copyright (c) 2026 DietrichGebert, MIT License;
 // the license text is in THIRD_PARTY_NOTICES.md.
 
-import { type CSSProperties, type ReactNode, useState } from 'react'
+import { type CSSProperties, type ReactNode, useId, useState } from 'react'
 import { getTheme, nextTheme, setTheme, type ThemeChoice } from '../theme/theme'
+import { Sparkline } from './charts/Sparkline'
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return <div className={className ? `card ${className}` : 'card'}>{children}</div>
 }
 
-// colors[1] tints the card; both feed the sparkline once Task 13 wires values.
+// colors[1] tints the card; both feed the sparkline.
 export function KpiCard(p: {
   label: string
   value: string
@@ -22,11 +23,13 @@ export function KpiCard(p: {
   title?: string
   testId?: string
 }) {
+  const id = useId().replace(/:/g, '')
   return (
     <div className="card kpi" style={{ '--k': p.colors[1] } as CSSProperties} title={p.title} data-testid={p.testId}>
       <div className="kpi-label">{p.label}</div>
       <div className="kpi-value num">{p.value}</div>
       {p.note ? <div className="kpi-note">{p.note}</div> : null}
+      {p.values ? <Sparkline values={p.values} colors={p.colors} id={`kpi${id}`} /> : null}
     </div>
   )
 }
