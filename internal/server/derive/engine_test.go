@@ -216,14 +216,18 @@ func TestDatabaseErrorOnOneFileIsCountedAndSkipped(t *testing.T) {
 		dt.File{Rel: "-work-alpha/s1.jsonl", Lines: []string{
 			dt.Prompt(dt.At(0), "p"),
 			dt.Reply(dt.At(5), "m1", opus, dt.Usage(1, 1, 0, 0, 0), dt.Tool("t1", "Boom", map[string]any{})),
+			dt.Reply(dt.At(6), "m2", opus, dt.Usage(1, 1, 0, 0, 0), dt.Tool("t2", "Read", map[string]any{})),
 		}},
 		dt.File{Rel: "-work-alpha/s2.jsonl", Lines: []string{dt.Prompt(dt.At(1), "clean prompt")}})
 	e.Derive(t, u, 0) // must not fail
 	if e.N(t, `SELECT count(*) FROM sessions WHERE session_id='s2'`) != 1 {
 		t.Fatal("the user's other file was not derived")
 	}
-	if e.N(t, `SELECT coalesce(sum(errors),0) FROM derive_errors`) < 1 {
-		t.Fatal("error not counted")
+	if e.N(t, `SELECT coalesce(sum(errors),0) FROM derive_errors`) != 1 {
+		t.Fatal("exactly the rejected row must be counted")
+	}
+	if e.N(t, `SELECT count(*) FROM tool_calls WHERE tool_use_id = 't2'`) != 1 || e.N(t, `SELECT count(*) FROM usage WHERE message_id IN ('m1','m2')`) != 1 {
+		t.Fatal("the other rows of the failed batch were not derived")
 	}
 	if n := e.Derive(t, u, 0); n != 0 {
 		t.Fatalf("cursor did not advance: %d rows again", n)
