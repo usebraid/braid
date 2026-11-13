@@ -29,7 +29,7 @@ func TestOpenAPIPaths(t *testing.T) {
 	for _, l := range lines {
 		have[l] = true
 	}
-	for _, p := range []string{"/api/v1/me", "/api/v1/devices", "/api/v1/devices/{id}", "/api/v1/audit", "/api/v1/admin/users",
+	for _, p := range []string{"/api/v1/me", "/api/v1/me/avatar", "/api/v1/devices", "/api/v1/devices/{id}", "/api/v1/audit", "/api/v1/admin/users",
 		"/api/v1/admin/users/{id}/disable", "/api/v1/admin/users/{id}/enable", "/api/v1/admin/users/{id}", "/api/v1/admin/audit",
 		"/api/v1/stats/overview", "/api/v1/stats/sessions", "/api/v1/stats/sessions/{id}", "/api/v1/stats/sessions/{id}/lines",
 		"/api/v1/stats/failures", "/api/v1/stats/search", "/api/v1/admin/stats", "/v1/stats/self", "/v1/files"} {

@@ -187,7 +187,7 @@ func (a *Auth) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var claims map[string]json.RawMessage
-	var std struct{ Email, Name string }
+	var std struct{ Email, Name, Picture string }
 	if idt.Claims(&claims) != nil || idt.Claims(&std) != nil {
 		http.Error(w, "login failed", http.StatusBadRequest)
 		return
@@ -202,8 +202,8 @@ func (a *Auth) callback(w http.ResponseWriter, r *http.Request) {
 	var userID string
 	var disabled bool
 	err = a.db.WithSystem(ctx, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT user_id::text, disabled FROM upsert_oidc_user($1,$2,$3,$4,$5)`,
-			a.cfg.OIDCIssuer, idt.Subject, std.Email, std.Name, isAdmin).Scan(&userID, &disabled)
+		return tx.QueryRow(ctx, `SELECT user_id::text, disabled FROM upsert_oidc_user($1,$2,$3,$4,$5,$6)`,
+			a.cfg.OIDCIssuer, idt.Subject, std.Email, std.Name, isAdmin, picture(std.Picture)).Scan(&userID, &disabled)
 	})
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -221,6 +221,15 @@ func (a *Auth) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	setCookie(w, CookieName, sess, int(sessionTTL.Seconds()))
 	http.Redirect(w, r, safeNext(s.Next), http.StatusFound)
+}
+
+// picture keeps the picture claim as given (the avatar endpoint vets it before any fetch); an empty or absurdly long
+// value is stored as NULL.
+func picture(s string) any {
+	if s == "" || len(s) > 2048 {
+		return nil
+	}
+	return s
 }
 
 func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {

@@ -26,6 +26,7 @@ import (
 type User struct {
 	Sub, Email, Name string
 	Groups           []string // nil → claim omitted
+	Picture          string   // "" → claim omitted
 }
 
 // Provider is a running mock provider.
@@ -159,6 +160,9 @@ func (p *Provider) idToken(ac authCode) (string, error) {
 		"name": ac.user.Name, "iat": time.Now().Add(-2 * time.Hour).Unix(), "exp": exp.Unix()}
 	if ac.user.Groups != nil {
 		claims["groups"] = ac.user.Groups
+	}
+	if ac.user.Picture != "" {
+		claims["picture"] = ac.user.Picture
 	}
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: jose.JSONWebKey{Key: p.key, KeyID: "k1"}},
 		(&jose.SignerOptions{}).WithType("JWT"))

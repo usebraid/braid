@@ -162,8 +162,9 @@ h3 .count {
 .side-foot {
   margin-top: auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
   font-size: var(--t-xs);
   color: var(--faint);
   padding: 12px 2px 0 10px;
@@ -365,6 +366,25 @@ select.ctl {
 }
 .chip[aria-pressed="false"] {
   opacity: 0.45;
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--c) 22%, var(--track));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 :focus-visible {
   outline: 2px solid var(--focus);
@@ -1234,6 +1254,7 @@ td.wrap {
   .side.open .side-foot {
     display: flex;
     margin-top: 6px;
+    padding-top: 10px;
   }
   main {
     padding: 18px 16px 40px;

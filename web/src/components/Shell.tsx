@@ -7,7 +7,7 @@ import { LiveBanner } from '../api/live'
 import { useMe } from '../api/session'
 import { ROUTES, titleFor } from '../routes'
 import { Footer } from './Footer'
-import { ThemeButton } from './ui'
+import { Avatar, ThemeButton } from './ui'
 
 export function Shell() {
   const me = useMe()
@@ -80,6 +80,7 @@ export function Shell() {
           ))}
         </nav>
         <div className="side-foot">
+          <Avatar name={me.name || me.email} />
           <span className="foot-text">{me.name || me.email}</span>
           <ThemeButton />
         </div>

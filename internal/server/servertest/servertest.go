@@ -68,7 +68,14 @@ func Start(t testing.TB, opts ...server.Option) *Env {
 // Login returns a client logged in as sub with groups.
 func (e *Env) Login(t testing.TB, sub string, groups ...string) *http.Client {
 	t.Helper()
-	e.IdP.SetUser(oidctest.User{Sub: sub, Email: sub + "@example.test", Name: sub, Groups: groups})
+	return e.LoginUser(t, oidctest.User{Sub: sub, Email: sub + "@example.test", Name: sub, Groups: groups})
+}
+
+// LoginUser returns a client logged in as the given IdP user.
+func (e *Env) LoginUser(t testing.TB, user oidctest.User) *http.Client {
+	t.Helper()
+	sub := user.Sub
+	e.IdP.SetUser(user)
 	c := e.Client()
 	resp, err := c.Get(e.URL + "/auth/login")
 	if err != nil {

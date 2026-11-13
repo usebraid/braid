@@ -86,12 +86,22 @@ type AdminUser struct {
 
 // Handler serves /api/v1.
 type Handler struct {
-	cfg config.Config
-	db  *db.DB
+	cfg     config.Config
+	db      *db.DB
+	avatars *avatarCache
 }
 
 // New returns a Handler.
-func New(cfg config.Config, d *db.DB) *Handler { return &Handler{cfg: cfg, db: d} }
+func New(cfg config.Config, d *db.DB) *Handler {
+	return &Handler{cfg: cfg, db: d, avatars: &avatarCache{m: map[string]avatarEntry{},
+		fetch: IssuerAvatarFetch(cfg.OIDCIssuer, http.DefaultTransport), now: time.Now}}
+}
+
+// WithAvatarFetch replaces how picture URLs are fetched (tests use a stub).
+func (h *Handler) WithAvatarFetch(f AvatarFetch) *Handler {
+	h.avatars.fetch = f
+	return h
+}
 
 // Register mounts the routes behind auth.
 func (h *Handler) Register(mux *http.ServeMux, auth *webauth.Auth) {
@@ -106,6 +116,7 @@ func (h *Handler) Register(mux *http.ServeMux, auth *webauth.Auth) {
 	mux.Handle("GET /api/v1/about", user(h.about))
 	mux.Handle("GET /api/v1/me", user(h.me))
 	mux.Handle("PATCH /api/v1/me", mut(h.setTimeZone))
+	mux.Handle("GET /api/v1/me/avatar", user(h.avatar))
 	mux.Handle("GET /api/v1/devices", user(h.devices))
 	mux.Handle("PATCH /api/v1/devices/{id}", mut(h.rename))
 	mux.Handle("DELETE /api/v1/devices/{id}", mut(h.revoke))

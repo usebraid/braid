@@ -64,6 +64,27 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/me/avatar:
+    get:
+      operationId: getMyAvatar
+      summary: The signed-in user's picture, proxied from the IdP
+      description: >-
+        Serves the OIDC picture claim stored at login, fetched by the server only from an https URL on the issuer's
+        origin (no redirects, at most 512 KiB, PNG, JPEG, WebP or GIF, 5 s timeout) and cached in memory for an hour.
+        Without a picture, or when the fetch is refused or fails, the answer is 404 and clients show initials.
+      responses:
+        "200":
+          description: The image.
+          headers:
+            Cache-Control: { schema: { type: string, const: "private, max-age=3600" } }
+            X-Content-Type-Options: { schema: { type: string, const: nosniff } }
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+            image/gif: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/devices:
     get:
       operationId: listDevices

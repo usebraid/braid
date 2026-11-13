@@ -6,15 +6,19 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/usebraid/braid/internal/server"
 	"github.com/usebraid/braid/internal/server/api"
 	"github.com/usebraid/braid/internal/server/servertest"
+	"github.com/usebraid/braid/internal/server/webauth/oidctest"
 	"github.com/usebraid/braid/internal/testdb"
 )
 
@@ -243,5 +247,45 @@ func TestMeTimeZone(t *testing.T) {
 	}
 	if m := get(e.Login(t, "u2")); m.TimeZone != "UTC" || m.TimeZoneSet {
 		t.Fatalf("another user's zone changed: %+v", m)
+	}
+}
+
+func TestAvatarIsTheUsersOwnPicture(t *testing.T) {
+	const pic = "https://idp.example/avatars/alice.png?sig=abc"
+	img := []byte("\x89PNG\r\n\x1a\nalice")
+	var fetched []string
+	e := servertest.Start(t, server.WithAvatarFetch(func(_ context.Context, raw string) ([]byte, string, error) {
+		fetched = append(fetched, raw)
+		if raw == pic {
+			return img, "image/png", nil
+		}
+		return nil, "", errors.New("refused")
+	}))
+	alice := e.LoginUser(t, oidctest.User{Sub: "alice", Email: "alice@x.test", Name: "alice", Picture: pic})
+	resp, b := do(t, e, alice, "GET", "/api/v1/me/avatar", nil)
+	if resp.StatusCode != 200 || !bytes.Equal(b, img) || resp.Header.Get("Content-Type") != "image/png" ||
+		resp.Header.Get("Cache-Control") != "private, max-age=3600" || resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("alice: %d %q %v", resp.StatusCode, b, resp.Header)
+	}
+	// bob has no picture: his request after alice's (cached) one must not see hers
+	bob := e.Login(t, "bob")
+	if resp, b := do(t, e, bob, "GET", "/api/v1/me/avatar", nil); resp.StatusCode != 404 || bytes.Contains(b, img) {
+		t.Fatalf("bob: %d %q", resp.StatusCode, b)
+	}
+	// bob with a picture the fetcher refuses
+	e.LoginUser(t, oidctest.User{Sub: "bob", Email: "bob@x.test", Name: "bob", Picture: "https://evil.example/x.png"})
+	if resp, _ := do(t, e, bob, "GET", "/api/v1/me/avatar", nil); resp.StatusCode != 404 {
+		t.Fatalf("refused picture: %d", resp.StatusCode)
+	}
+	if resp, _ := do(t, e, e.Client(), "GET", "/api/v1/me/avatar", nil); resp.StatusCode != 401 {
+		t.Fatalf("anonymous: %d", resp.StatusCode)
+	}
+	if resp, _ := do(t, e, alice, "GET", "/api/v1/me/avatar", nil); resp.StatusCode != 200 || len(fetched) != 2 {
+		t.Fatalf("alice again: %d, fetches %v (the second read is cached)", resp.StatusCode, fetched)
+	}
+	// a later login without the claim clears the stored picture
+	e.LoginUser(t, oidctest.User{Sub: "alice", Email: "alice@x.test", Name: "alice"})
+	if resp, _ := do(t, e, alice, "GET", "/api/v1/me/avatar", nil); resp.StatusCode != 404 {
+		t.Fatalf("cleared picture: %d", resp.StatusCode)
 	}
 }

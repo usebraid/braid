@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
 
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { renderApp } from '../test/render'
 import { Shell } from './Shell'
@@ -36,4 +36,13 @@ it('has a skip link as the first tab stop and a labelled main region', () => {
   renderApp(<Shell />)
   expect(screen.getAllByRole('link')[0]).toHaveTextContent('Skip to content')
   expect(screen.getByRole('main')).toHaveAttribute('id', 'main')
+})
+
+it('shows the proxied avatar and falls back to initials when it does not load', () => {
+  const { container } = renderApp(<Shell />, { me: { name: 'Ada Lovelace' } })
+  const img = container.querySelector('.avatar img')
+  expect(img).toHaveAttribute('src', '/api/v1/me/avatar')
+  fireEvent.error(img as Element)
+  expect(container.querySelector('.avatar')).toHaveTextContent('AL')
+  expect(container.querySelector('.avatar img')).toBeNull()
 })

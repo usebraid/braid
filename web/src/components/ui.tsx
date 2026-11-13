@@ -176,6 +176,32 @@ export function ThemeButton() {
   )
 }
 
+const initials = (name: string) =>
+  name
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join('') || '?'
+
+// The IdP picture, proxied by the server (the CSP allows images only from 'self'); a 404 or any load error falls back
+// to initials on a palette colour picked from the name.
+export function Avatar({ name }: { name: string }) {
+  const [failed, setFailed] = useState(false)
+  let h = 0
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  return (
+    <span className="avatar" style={{ '--c': `var(--p${(h % 8) + 1})` } as CSSProperties} aria-hidden="true">
+      {failed ? (
+        initials(name)
+      ) : (
+        // biome-ignore lint/a11y/noNoninteractiveElementInteractions: onError is the image's load failure, not a user interaction
+        <img src="/api/v1/me/avatar" alt="" onError={() => setFailed(true)} />
+      )}
+    </span>
+  )
+}
+
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty-note">{children}</div>
 }

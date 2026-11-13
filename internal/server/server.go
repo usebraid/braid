@@ -32,13 +32,19 @@ type Server struct {
 	liveExited chan struct{}
 }
 
-type options struct{ live live.Options }
+type options struct {
+	live   live.Options
+	avatar api.AvatarFetch
+}
 
 // Option customises New.
 type Option func(*options)
 
 // WithLive overrides the live hub's limits and timings.
 func WithLive(o live.Options) Option { return func(c *options) { c.live = o } }
+
+// WithAvatarFetch replaces the fetcher behind /api/v1/me/avatar (tests serve a picture without a TLS IdP).
+func WithAvatarFetch(f api.AvatarFetch) Option { return func(c *options) { c.avatar = f } }
 
 // New opens the database (as braid_app) and registers all routes.
 func New(ctx context.Context, cfg config.Config, opts ...Option) (*Server, error) {
@@ -59,7 +65,11 @@ func New(ctx context.Context, cfg config.Config, opts ...Option) (*Server, error
 	auth.Register(mux)
 	device.New(cfg, d).Register(mux, auth)
 	ingest.New(d).Register(mux, httpx.NewLimiter(600, time.Now))
-	api.New(cfg, d).Register(mux, auth)
+	ah := api.New(cfg, d)
+	if o.avatar != nil {
+		ah.WithAvatarFetch(o.avatar)
+	}
+	ah.Register(mux, auth)
 	stats.New(d).Register(mux, auth, httpx.NewLimiter(120, time.Now))
 	hub := live.NewHub(d.Listen, o.live)
 	lctx, stop := context.WithCancel(context.Background())

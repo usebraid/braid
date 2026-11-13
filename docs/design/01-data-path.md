@@ -336,7 +336,7 @@ Audit actions: `login`, `login_denied`, `logout`, `device_code_requested`, `devi
 - `SECURITY DEFINER` functions (owned by `braid_owner`, fixed `search_path`) cover the cases before identity is known or across users:
   - `auth_session(id_hash)` → user id, admin flag; refreshes `last_seen_at`.
   - `auth_device_token(hash)` → device id, user id, scopes; refreshes `last_used_at`; rejects revoked, expired or disabled.
-  - `upsert_oidc_user(issuer, sub, email, name, is_admin)` → user id.
+  - `upsert_oidc_user(issuer, sub, email, name, is_admin, picture)` → user id; `picture` is the OIDC `picture` claim (or NULL), served only through `/api/v1/me/avatar`.
   - device-code functions (create, poll, approve/deny by user code).
   - admin: `admin_list_users()` (aggregates only), `admin_set_disabled(user_id, bool)`, `admin_delete_user(user_id)`, `admin_audit(cursor)`. Each checks the caller's admin flag.
   - `write_audit(...)`.
