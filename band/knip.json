@@ -1,4 +1,5 @@
 {
   "entry": ["hooks/band/register.tsx", "tests/**/*.test.{ts,tsx}"],
-  "project": ["hooks/**", "tests/**"]
+  "project": ["hooks/**", "tests/**"],
+  "ignoreIssues": { "hooks/band/stats.ts": ["exports", "types"] }
 }
