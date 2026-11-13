@@ -4,7 +4,7 @@ Status: draft · 2026-11-12
 
 ## 1. Outcome
 
-The server turns the raw, append-only layer (`raw_lines`, `raw_snapshots`) into queryable tables: sessions, agents, tool calls, skill phases, usage and cost, failures and a full-text index. A stats API exposes everything the dashboard (03) and the band (04) need. Derived tables are a cache: they can be dropped and rebuilt from raw at any time (`braid-server reindex`), and nothing in them is a source of truth.
+The server turns the raw, append-only layer (`raw_lines`, `raw_snapshots`) into queryable tables: sessions, agents, tool calls, skill phases, usage and cost, failures and a full-text index. A stats API exposes everything the dashboard (03) and the band (04) need. Derived tables are a cache: they can be dropped and rebuilt from raw at any time (`docker compose run --rm braid reindex`, i.e. `braid-server reindex`), and nothing in them is a source of truth.
 
 ## 2. Principles
 

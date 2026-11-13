@@ -27,8 +27,8 @@ Read the release notes first; 0.x releases may change interfaces.
 ## Rebuild derived data
 
 ```
-docker compose run --rm braid braid-server reindex
-docker compose run --rm braid braid-server reindex --user <user uuid>
+docker compose run --rm braid reindex
+docker compose run --rm braid reindex --user <user uuid>
 ```
 
 `reindex` rebuilds sessions, usage, failures and search from the raw lines, for all users or one, and prints one line per user (`<user id> <rows>`). It needs the same `BRAID_*` environment as the server.

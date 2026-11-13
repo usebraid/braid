@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -27,14 +28,30 @@ var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
-	if err := run(); err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "braid-server:", err)
+		if errors.Is(err, errUsage) {
+			os.Exit(2)
+		}
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version" || os.Args[1] == "-v") {
+const usage = "usage: braid-server [version | reindex [--user <uuid>]]  (no argument starts the server)"
+
+var errUsage = errors.New(usage)
+
+func run(args []string) error {
+	args = append([]string{"braid-server"}, args...)
+	switch {
+	case len(args) == 1, args[1] == "version", args[1] == "--version", args[1] == "-v", args[1] == "reindex":
+	default:
+		return errUsage
+	}
+	if len(args) > 2 && args[1] != "reindex" {
+		return errUsage
+	}
+	if len(args) > 1 && (args[1] == "version" || args[1] == "--version" || args[1] == "-v") {
 		v, c := buildinfo.Info()
 		if c == "" {
 			c = "unknown"
@@ -42,23 +59,27 @@ func run() error {
 		fmt.Printf("braid-server %s (%s)\n", v, c)
 		return nil
 	}
-	cfg, err := config.FromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if len(os.Args) > 1 && os.Args[1] == "reindex" {
+	var user *string
+	if len(args) > 1 && args[1] == "reindex" { // flags are checked before the environment is read
 		fs := flag.NewFlagSet("reindex", flag.ContinueOnError)
-		user := fs.String("user", "", "reindex only this user id (default: all)")
-		if err := fs.Parse(os.Args[2:]); err != nil {
-			return err
+		user = fs.String("user", "", "reindex only this user id (default: all)")
+		fs.SetOutput(io.Discard)
+		if err := fs.Parse(args[2:]); err != nil || fs.NArg() > 0 {
+			return errUsage
 		}
 		if *user != "" {
 			if !uuidRe.MatchString(*user) {
 				return errors.New("--user: not a uuid")
 			}
 		}
+	}
+	cfg, err := config.FromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if user != nil {
 		if err := db.Migrate(ctx, cfg.DatabaseOwnerURL); err != nil {
 			return fmt.Errorf("migrate: %w", err)
 		}
