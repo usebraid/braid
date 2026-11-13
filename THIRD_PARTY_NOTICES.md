@@ -59,6 +59,7 @@ Included files (each adapted from `hooks/band/board.ts` @96608e0):
 - `web/src/theme/theme.ts`: `THEMES` and `applyTheme`.
 - `web/src/components/ui.tsx`: the KPI, segmented control, chip and theme button markup.
 - `web/src/components/charts/Sparkline.tsx`, `StreamChart.tsx`, `smooth.ts`, `Honeycomb.tsx`, `BarList.tsx`: the sparkline, stream chart, smoothing, heatmap and bar drawing code (added with the dashboard charts).
+- `site/style.css`: the colour tokens and base rules, copied from `web/src/theme/tokens.css` and `web/src/styles/app.css` (themselves adapted from ponytail, see above).
 - `band/hooks/band/*.ts(x)`: adapted from `hooks/band/register.tsx` and `hooks/band/types.d.ts` @96608e0 (module structure, palette names, slot stacking).
 - `band/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`: structural templates from ponytail's `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
 
@@ -81,5 +82,9 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+## Build tools
+
+`marked` (MIT, https://github.com/markedjs/marked) renders the Markdown docs of the site at build time. It is not included in any released archive, the server image or the web app bundle, so its license text is not reproduced here; the generated pages contain no marked code.
 
 The licenses of the third-party packages bundled into the web app are listed in `/third-party-licenses.txt` of the running app.

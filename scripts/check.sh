@@ -16,6 +16,7 @@ govulncheck ./...
 scripts/check-spdx.sh
 scripts/test-pins.sh
 scripts/check-pins.sh
+scripts/check-readme.sh
 gitleaks detect --no-banner
 if command -v trivy >/dev/null; then trivy config --exit-code 1 --severity HIGH,CRITICAL . ; fi
 
