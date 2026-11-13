@@ -7,10 +7,12 @@ package webauth_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -208,7 +210,12 @@ func TestLogoutInvalidatesSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	page, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
+	// the mock IdP has an end_session endpoint: a same-origin page refreshes there (a 303 would break form-action 'self')
+	if resp.StatusCode != 200 || !strings.Contains(string(page), `http-equiv="refresh" content="0;url=`+e.idp.Issuer+`/end_session?`) {
+		t.Fatalf("logout page: %d %s", resp.StatusCode, page)
+	}
 	c.CheckRedirect = nil
 	r2, _ := c.Get(e.srv.URL + "/api/v1/whoami")
 	r2.Body.Close()

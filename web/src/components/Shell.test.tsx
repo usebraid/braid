@@ -38,6 +38,16 @@ it('has a skip link as the first tab stop and a labelled main region', () => {
   expect(screen.getByRole('main')).toHaveAttribute('id', 'main')
 })
 
+it('links the brand to the overview and signs out with a same-origin form POST', () => {
+  renderApp(<Shell />, { me: { name: 'Ada Lovelace' } })
+  expect(screen.getByRole('link', { name: 'Braid, go to overview' })).toHaveAttribute('href', '/')
+  const button = screen.getByRole('button', { name: 'Sign out' })
+  const form = button.closest('form')
+  expect(form).toHaveAttribute('method', 'post')
+  expect(form).toHaveAttribute('action', '/auth/logout')
+  expect(button).toHaveAttribute('type', 'submit')
+})
+
 it('shows the proxied avatar and falls back to initials when it does not load', () => {
   const { container } = renderApp(<Shell />, { me: { name: 'Ada Lovelace' } })
   const img = container.querySelector('.avatar img')

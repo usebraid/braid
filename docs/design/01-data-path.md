@@ -208,7 +208,7 @@ No domain or provider is hard-coded. One hostname is enough; operators may split
 | `GET /healthz` | none | Liveness + DB reachability, no details. |
 | `GET /auth/login` | none | Starts OIDC (code + PKCE, `state`, `nonce`). |
 | `GET /auth/callback` | none | Completes OIDC, applies group rules, creates/updates user, sets session. |
-| `POST /auth/logout` | session | Deletes session; RP-initiated logout if the provider supports it. |
+| `POST /auth/logout` | session | Deletes session; RP-initiated logout if the provider supports it, through a same-origin page that refreshes to the provider's end-session endpoint (a redirect would break the dashboard's `form-action 'self'`). |
 | `GET /api/v1/me` | session | Current user, `is_admin`. |
 | `GET /api/v1/devices` | session | Own devices with last sync, backlog warning. |
 | `PATCH /api/v1/devices/{id}` | session | Rename. |

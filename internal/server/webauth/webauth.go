@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -256,5 +257,18 @@ func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	setCookie(w, CookieName, "", -1)
-	http.Redirect(w, r, dest, http.StatusSeeOther)
+	if dest == "/" {
+		http.Redirect(w, r, dest, http.StatusSeeOther)
+		return
+	}
+	// The dashboard's CSP has form-action 'self', which also covers the redirects of a form submission, so a 303 to
+	// the IdP would be blocked. A same-origin page that refreshes to the IdP is a new navigation and is not.
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = signedOut.Execute(w, dest)
 }
+
+var signedOut = template.Must(template.New("out").Parse(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url={{.}}"><title>Signed out · Braid</title></head>
+<body><p>Signed out of Braid. <a href="{{.}}">Continue to sign out at your identity provider</a>.</p></body></html>
+`))

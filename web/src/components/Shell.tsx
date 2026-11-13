@@ -2,7 +2,7 @@
 // Copyright (C) 2026 The Braid Authors
 
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { LiveBanner } from '../api/live'
 import { useMe } from '../api/session'
 import { ROUTES, titleFor } from '../routes'
@@ -28,7 +28,7 @@ export function Shell() {
       </a>
       <aside className={open ? 'side open' : 'side'}>
         <div className="side-top">
-          <div className="brand">
+          <Link to="/" className="brand" aria-label="Braid, go to overview">
             <svg
               width="22"
               height="22"
@@ -43,7 +43,7 @@ export function Shell() {
               <path d="M5 9c0 6 7 6 7 12" stroke="var(--p3)" />
             </svg>
             Braid
-          </div>
+          </Link>
           <button
             type="button"
             className="menu-btn"
@@ -83,6 +83,12 @@ export function Shell() {
           <Avatar name={me.name || me.email} />
           <span className="foot-text">{me.name || me.email}</span>
           <ThemeButton />
+          {/* a real form POST: /auth/logout checks the Origin header and must never be a GET link */}
+          <form method="post" action="/auth/logout" className="signout">
+            <button type="submit" className="btn ghost">
+              Sign out
+            </button>
+          </form>
         </div>
       </aside>
       <div>

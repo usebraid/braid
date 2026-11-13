@@ -109,6 +109,8 @@ h3 .count {
   justify-content: space-between;
 }
 .brand {
+  color: var(--text);
+  text-decoration: none;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -385,6 +387,18 @@ select.ctl {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.signout {
+  margin: 0;
+  flex-basis: 100%;
+}
+.signout .btn {
+  margin-left: -8px;
+}
+.side-foot .btn {
+  height: 28px;
+  padding: 0 8px;
+  font-size: var(--t-xs);
 }
 :focus-visible {
   outline: 2px solid var(--focus);
