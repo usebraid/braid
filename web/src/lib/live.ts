@@ -121,6 +121,7 @@ export class LiveClient {
       case 'session_updated':
       case 'device_synced':
       case 'reindex':
+      case 'resync':
         this.emit(msg as LiveEvent)
     }
   }

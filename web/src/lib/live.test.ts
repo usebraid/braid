@@ -43,6 +43,17 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 describe('LiveClient', () => {
+  it('forwards a resync sent by the server', () => {
+    const c = make()
+    const got: LiveEvent[] = []
+    c.subscribe((e) => got.push(e))
+    c.start()
+    last().open()
+    last().send({ type: 'hello' })
+    last().send({ type: 'resync' })
+    expect(got).toEqual([{ type: 'resync' }])
+  })
+
   it('connects, reports status and delivers events but not ping/hello/garbage', () => {
     const c = make()
     const got: LiveEvent[] = []
