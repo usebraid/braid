@@ -81,19 +81,7 @@ function Frame() {
       <aside className={open ? 'side open' : 'side'}>
         <div className="side-top">
           <Link to="/" className="brand" aria-label="Braid, go to overview">
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              strokeWidth="2"
-              strokeLinecap="round"
-              aria-hidden="true"
-            >
-              <path d="M5 3c0 6 14 6 14 12" stroke="var(--p1)" />
-              <path d="M12 3c0 6 7 6 7 12" stroke="var(--p2)" />
-              <path d="M5 9c0 6 7 6 7 12" stroke="var(--p3)" />
-            </svg>
+            <img src="/favicon.svg" width="24" height="24" alt="" />
             Braid
           </Link>
           <button

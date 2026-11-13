@@ -1,4 +1,6 @@
-# Braid
+<p align="center"><img src="site/assets/logo.svg" width="96" height="96" alt="Braid logo"></p>
+
+<h1 align="center">Braid</h1>
 
 Braid is a self-hosted daemon and server that syncs Claude Code transcripts from your machines into one place, so sessions, subagents, costs and failures can be browsed and replayed.
 
