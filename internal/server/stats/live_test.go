@@ -71,3 +71,31 @@ func TestFilterOptions(t *testing.T) {
 		t.Fatalf("bad range: %d", st)
 	}
 }
+
+func TestLiveShowsTheCurrentToolOfEveryActiveAgent(t *testing.T) {
+	x := newEnv(t)
+	now := time.Now().UTC()
+	ts := func(d time.Duration) string { return now.Add(d).Format("2006-01-02T15:04:05.000Z") }
+	files := []dt.File{{Rel: "-work-live/l1.jsonl", Lines: []string{
+		dt.Prompt(ts(-30*time.Second), "p"),
+		dt.Reply(ts(-10*time.Second), "m-main", opus, dt.Usage(1, 1, 0, 0, 0), dt.Tool("t-main", "Bash", map[string]any{"command": "main"})),
+	}}}
+	for _, a := range []string{"a1", "a2", "a3"} {
+		files = append(files,
+			dt.File{Rel: "-work-live/l1/subagents/agent-" + a + ".meta.json", JSON: `{"agentType":"Explore","description":"d"}`},
+			dt.File{Rel: "-work-live/l1/subagents/agent-" + a + ".jsonl", Lines: []string{
+				dt.Side(dt.SidePrompt(ts(-20*time.Second), "task"), a),
+				dt.Side(dt.Reply(ts(-9*time.Second), "m-"+a, opus, dt.Usage(1, 1, 0, 0, 0), dt.Tool("t-"+a, "Read", map[string]any{"file_path": a})), a)}})
+	}
+	x.dt.Put(t, x.uid, x.dev, files...)
+	x.dt.Derive(t, x.uid, 0)
+	var lp stats.LivePage
+	if st := x.get(t, "/api/v1/stats/live", &lp); st != 200 || len(lp.Items) != 1 || len(lp.Items[0].Agents) != 4 {
+		t.Fatalf("%d %+v", st, lp)
+	}
+	for _, a := range lp.Items[0].Agents {
+		if a.CurrentTool == nil {
+			t.Errorf("agent %s has no current tool", a.AgentID)
+		}
+	}
+}

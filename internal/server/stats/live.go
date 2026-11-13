@@ -74,7 +74,7 @@ func (h *Handler) live(w http.ResponseWriter, r *http.Request) {
 		for id := range idx {
 			ids = append(ids, id)
 		}
-		at := map[[2]string]*LiveAgent{}
+		at := map[[2]string][2]int{} // (session, agent) -> (item, agent) indices; pointers would dangle when Agents grows
 		if err := collect(ctx, tx, `SELECT a.session_id, a.agent_id, coalesce(a.agent_type, ''), coalesce(a.description, ''), a.parent_agent_id, a.started_at
 		  FROM agents a WHERE a.session_id = ANY($1) AND a.ended_at > $2 AND a.finished IS NOT TRUE
 		  ORDER BY a.session_id, a.agent_id <> 'main', a.started_at NULLS LAST, a.agent_id`, []any{ids, now.Add(-2 * time.Minute)}, func(rows pgx.Rows) error {
@@ -85,12 +85,11 @@ func (h *Handler) live(w http.ResponseWriter, r *http.Request) {
 			}
 			it := &page.Items[idx[sid]]
 			it.Agents = append(it.Agents, a)
-			at[[2]string{sid, a.AgentID}] = &it.Agents[len(it.Agents)-1]
+			at[[2]string{sid, a.AgentID}] = [2]int{idx[sid], len(it.Agents) - 1}
 			return nil
 		}); err != nil {
 			return err
 		}
-		// Pointers into Agents stay valid: no appends after this point.
 		return collect(ctx, tx, `SELECT DISTINCT ON (t.session_id, t.agent_id) t.session_id, t.agent_id, t.tool_name, t.input_summary, t.started_at
 		  FROM tool_calls t WHERE t.session_id = ANY($1) AND t.ended_at IS NULL AND t.started_at > $2
 		  ORDER BY t.session_id, t.agent_id, t.started_at DESC`, []any{ids, now.Add(-15 * time.Minute)}, func(rows pgx.Rows) error {
@@ -99,8 +98,8 @@ func (h *Handler) live(w http.ResponseWriter, r *http.Request) {
 			if err := rows.Scan(&sid, &aid, &c.Name, &c.Summary, &c.StartedAt); err != nil {
 				return err
 			}
-			if a := at[[2]string{sid, aid}]; a != nil {
-				a.CurrentTool = &c
+			if i, ok := at[[2]string{sid, aid}]; ok {
+				page.Items[i[0]].Agents[i[1]].CurrentTool = &c
 			}
 			return nil
 		})
