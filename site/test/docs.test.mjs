@@ -36,9 +36,10 @@ describe('docs', () => {
     assert.equal(block, file)
   })
 
-  test('every BRAID_* variable mentioned exists in config.go', () => {
+  test('every BRAID_* variable mentioned exists in the server config or the daemon paths', () => {
     const cfg = read(path.join(site, '..', 'internal', 'server', 'config', 'config.go'))
-    const known = new Set(cfg.match(/BRAID_[A-Z_]+/g))
+    const daemon = read(path.join(site, '..', 'internal', 'daemon', 'paths', 'paths.go'))
+    const known = new Set([...cfg.match(/BRAID_[A-Z_]+/g), ...daemon.match(/BRAID_[A-Z_]+/g)])
     // Compose-level variables of deploy/.env.example, not server settings.
     const compose = new Set(['BRAID_DB_OWNER_PASSWORD', 'BRAID_DB_APP_PASSWORD'])
     for (const p of pages) {
