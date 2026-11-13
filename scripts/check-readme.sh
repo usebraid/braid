@@ -32,4 +32,14 @@ for f in README.md CREDITS.md CONTRIBUTING.md; do
   done
 done
 
+# Release checklist
+c=docs/RELEASE_CHECKLIST.md
+if [ -f "$c" ]; then
+  for s in "cosign verify-blob" "imagetools inspect" "brew install" "install.sh" "band/RELEASE_CHECKLIST.md"; do
+    grep -qF "$s" "$c" || err "$c: missing '$s'"
+  done
+  grep -qF "docs/RELEASE_CHECKLIST.md" CONTRIBUTING.md || err "CONTRIBUTING.md: does not link the release checklist"
+else
+  err "$c missing"
+fi
 exit "$fail"
