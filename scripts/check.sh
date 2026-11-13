@@ -10,6 +10,7 @@ out="$(gofmt -l .)"
 if [ -n "$out" ]; then echo "gofmt needed:"; echo "$out"; exit 1; fi
 go vet ./...
 go vet -tags e2e ./e2e/
+go vet -tags webe2e ./e2e/web/
 golangci-lint run
 govulncheck ./...
 scripts/check-spdx.sh

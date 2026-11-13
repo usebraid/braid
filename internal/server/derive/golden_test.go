@@ -16,70 +16,9 @@ import (
 
 var update = flag.Bool("update", false, "rewrite testdata golden files")
 
-// scenario returns the files of one session "g1" (main + 3 subagents incl. a nested one) in a fixed order.
-func scenario() []dt.File {
-	fast := dt.Usage(10, 10, 0, 0, 0)
-	fast["speed"] = "fast"
-	searches := dt.Usage(0, 0, 0, 0, 0)
-	searches["server_tool_use"] = map[string]any{"web_search_requests": 2, "web_fetch_requests": 0}
-	return []dt.File{
-		{Rel: "-work-alpha/g1.jsonl", Lines: []string{
-			dt.Line("mode", "", "mode", "auto"),
-			dt.Line("pr-link", dt.At(1), "prNumber", 7, "prUrl", "https://example.invalid/pr/7"),
-			dt.Line("attachment", dt.At(2), "attachment", map[string]any{"type": "hook"}),
-			dt.Line("api-request", dt.At(3), "id", "r1"),
-			dt.Line("api-request-blob", "", "hash", "h"),
-			dt.Prompt(dt.At(10), "Golden prompt"),
-			dt.Reply(dt.At(20), "g-m1", opus, dt.Usage(1000, 100, 500, 200, 300), dt.Text("a"),
-				dt.Tool("sk1", "Skill", map[string]any{"skill": "superpowers:brainstorming"}), dt.Tool("tuA", "Agent", map[string]any{"description": "explore"})),
-			dt.Reply(dt.At(21), "g-m1", opus, dt.Usage(1000, 150, 500, 200, 300)), // same message, streamed further
-			dt.Result(dt.At(30), "tuA", false, map[string]any{"agentId": "a1", "status": "completed", "totalDurationMs": 9000}),
-			dt.Reply(dt.At(40), "g-m2", sonnet, dt.Usage(2000, 200, 0, 0, 0),
-				dt.Tool("tuB", "Agent", map[string]any{"description": "async"}), dt.Tool("t1", "Bash", map[string]any{"command": "go test"})),
-			dt.Result(dt.At(41), "tuB", false, map[string]any{"agentId": "a2", "status": "async_launched"}),
-			dt.Result(dt.At(45), "t1", true, map[string]any{"durationMs": 50}),
-			dt.Reply(dt.At(60), "g-m3", "claude-fable-5-2", dt.Usage(100, 10, 0, 0, 0)), // model without a price
-			dt.Reply(dt.At(70), "g-m4", opus, fast),
-			dt.Reply(dt.At(80), "g-m5", opus, searches),
-			dt.Notify(dt.At(90), "tuB", 12000),
-			dt.Turn(dt.At(100), 2000),
-			dt.Turn(dt.At(200), 3000),
-			dt.APIError(dt.At(300), "error", "rate_limit", "apiError", "usage_limit_reached", "apiErrorStatus", 429,
-				"quotaLimits", map[string]any{"resetsAt": dt.Unix(300 + 3600), "rateLimitType": "five_hour"}),
-			dt.Reply(dt.At(900), "g-m6", opus, dt.Usage(1, 1, 0, 0, 0)),
-			dt.APIError(dt.At(910), "error", "server_error", "apiError", "computer_slept"),
-			dt.Line("system", dt.At(920), "subtype", "model_refusal_fallback", "apiRefusalCategory", "cyber"),
-			dt.APIError(dt.At(930), "error", "rate_limit"),
-			dt.APIError(dt.At(935), "error", "server_error"),
-			dt.APIError(dt.At(940), "error", "invalid_request"),
-			dt.Line("ai-title", "", "aiTitle", "Golden AI"),
-			dt.Reply(dt.At(950), "g-m7", opus, dt.Usage(1, 1, 0, 0, 0), dt.Tool("sk2", "Skill", map[string]any{"skill": "superpowers:writing-plans"})),
-			dt.Line("brand-new-type", dt.At(960), "x", 1),
-			"not json",
-		}},
-		{Rel: "-work-alpha/g1/custom-title.json", JSON: `{"customTitle":"Golden custom"}`},
-		{Rel: "-work-alpha/g1/subagents/agent-a1.meta.json", JSON: `{"agentType":"Explore","description":"d1","toolUseId":"tuA","spawnDepth":1,"finished":true}`},
-		{Rel: "-work-alpha/g1/subagents/agent-a1.jsonl", Lines: []string{
-			dt.Side(dt.SidePrompt(dt.At(22), "sub task"), "a1"),
-			dt.Side(dt.Reply(dt.At(25), "g-s1", sonnet, dt.Usage(500, 50, 0, 0, 0),
-				dt.Tool("ssk", "Skill", map[string]any{"skill": "x:debug"}), dt.Tool("tuC", "Agent", map[string]any{"description": "nested"})), "a1"),
-		}},
-		{Rel: "-work-alpha/g1/subagents/agent-a2.meta.json", JSON: `{"agentType":"general-purpose","description":"d2","toolUseId":"tuB","spawnDepth":1,"finished":true}`},
-		{Rel: "-work-alpha/g1/subagents/agent-a2.jsonl", Lines: []string{
-			dt.Side(dt.SidePrompt(dt.At(42), "async task"), "a2"),
-			dt.Side(dt.Reply(dt.At(50), "g-s2", sonnet, dt.Usage(300, 30, 0, 0, 0)), "a2"),
-		}},
-		{Rel: "-work-alpha/g1/subagents/agent-a3.meta.json", JSON: `{"agentType":"Explore","description":"d3","toolUseId":"tuC","spawnDepth":2}`},
-		{Rel: "-work-alpha/g1/subagents/agent-a3.jsonl", Lines: []string{
-			dt.Side(dt.SidePrompt(dt.At(27), "nested task"), "a3"),
-			dt.Side(dt.Reply(dt.At(35), "g-s3", sonnet, dt.Usage(100, 10, 0, 0, 0)), "a3"),
-		}},
-	}
-}
-
 func TestGoldenFullScenario(t *testing.T) {
 	e, u, d := setup(t)
-	e.Put(t, u, d, scenario()...)
+	e.Put(t, u, d, dt.Scenario()...)
 	e.Derive(t, u, 0)
 
 	checks := map[string]string{ // independent of the golden file: figures worked out by hand from the price table (fast mode and the unknown fable-5-2 are estimated, not zero)
@@ -119,7 +58,7 @@ func TestGoldenFullScenario(t *testing.T) {
 
 func TestDerivationIsIdempotentChunkIndependentAndEqualsReindex(t *testing.T) {
 	e := dt.New(t)
-	files := scenario()
+	files := dt.Scenario()
 	repl := func(u, d string) map[string]string { return map[string]string{u: "USER", d: "DEVICE"} }
 	newUser := func(sub string) (string, string) {
 		u := e.User(t, sub)
@@ -159,5 +98,12 @@ func TestDerivationIsIdempotentChunkIndependentAndEqualsReindex(t *testing.T) {
 	e.Derive(t, u, 0)
 	if got := e.Dump(t, u, repl(u, d)); got != base {
 		t.Fatal("incremental result differs from the full run")
+	}
+}
+
+func TestScenarioIsExported(t *testing.T) {
+	files := dt.Scenario()
+	if len(files) != 8 || files[0].Rel != "-work-alpha/g1.jsonl" {
+		t.Fatalf("%d files, first %s", len(files), files[0].Rel)
 	}
 }

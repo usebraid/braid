@@ -3,7 +3,7 @@
 
 import react from '@vitejs/plugin-react'
 import license from 'rollup-plugin-license'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [
@@ -31,6 +31,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    exclude: [...configDefaults.exclude, 'e2e/**'], // Playwright specs
     setupFiles: ['src/test/setup.ts'],
   },
 })
