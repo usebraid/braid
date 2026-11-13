@@ -58,10 +58,10 @@ func TestSelfStatsAreTodaysAggregatesOnly(t *testing.T) {
 	if err := json.Unmarshal(b, &s); err != nil {
 		t.Fatal(err)
 	}
-	if s.Today.TimeZone != "UTC" || s.Today.Sessions != 1 || s.Today.AgentMs != 2000 || s.Today.Tokens != 1100 || !near(s.Today.CostUSD, 0.006) || s.Today.Failures != 0 {
+	if s.Today.TimeZone != "UTC" || s.Today.Sessions != 1 || s.Today.AgentMs != 1000 || s.Today.Tokens != 1100 || !near(s.Today.CostUSD, 0.006) || s.Today.Failures != 0 {
 		t.Fatalf("today %+v", s.Today)
 	}
-	if s.Session == nil || s.Session.SessionID != "today" || s.Session.AgentMs != 2000 || s.Session.TotalAgentMs != 2000 || s.Session.Tokens != 1100 {
+	if s.Session == nil || s.Session.SessionID != "today" || s.Session.AgentMs != 1000 || s.Session.TotalAgentMs != 1000 || s.Session.Tokens != 1100 {
 		t.Fatalf("session %+v", s.Session)
 	}
 	var raw map[string]map[string]any

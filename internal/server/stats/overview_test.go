@@ -83,7 +83,7 @@ func TestOverview(t *testing.T) {
 		t.Fatalf("status %d", st)
 	}
 	k := ov.KPI
-	if ov.TimeZone != "Europe/Berlin" || ov.Reindexing || k.Sessions != 2 || k.AgentMs != 180000 || k.TotalAgentMs != 180000 || k.AgentMsEstimated ||
+	if ov.TimeZone != "Europe/Berlin" || ov.Reindexing || k.Sessions != 2 || k.AgentMs != 1800000 || k.TotalAgentMs != 1800000 || k.AgentMsEstimated ||
 		!near(k.CostUSD, 12) || k.Tokens != 2_200_000 || k.Failures != 1 || k.TimeLostS != 14400 || k.StreakDays != 0 || len(k.CostUnknownModels) != 0 {
 		t.Fatalf("%+v", ov)
 	}
@@ -94,7 +94,7 @@ func TestOverview(t *testing.T) {
 	if len(ov.PerModel) != 1 || ov.PerModel[0].Model != opus || ov.PerModel[0].Messages != 2 || ov.PerModel[0].PriceUnknown {
 		t.Fatalf("per_model %+v", ov.PerModel)
 	}
-	if len(ov.PerProject) != 1 || ov.PerProject[0].Path != "/work/alpha" || ov.PerProject[0].Name != "alpha" || ov.PerProject[0].Sessions != 2 || ov.PerProject[0].AgentMs != 180000 {
+	if len(ov.PerProject) != 1 || ov.PerProject[0].Path != "/work/alpha" || ov.PerProject[0].Name != "alpha" || ov.PerProject[0].Sessions != 2 || ov.PerProject[0].AgentMs != 1800000 { // 20 min + 10 min of active time
 		t.Fatalf("per_project %+v", ov.PerProject)
 	}
 	if want := []stats.HeatCell{{Weekday: 1, Hour: 0, Count: 1}, {Weekday: 2, Hour: 11, Count: 1}}; !reflect.DeepEqual(ov.Heatmap, want) { // Mon 00:30, Tue 11:00 Berlin

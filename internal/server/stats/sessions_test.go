@@ -33,7 +33,7 @@ func TestSessionList(t *testing.T) {
 		t.Fatalf("%d %v", st, ids(pg))
 	}
 	s1 := pg.Items[2]
-	if s1.Title != "Alpha work" || s1.Project != "/work/alpha" || s1.ProjectName != "alpha" || s1.AgentMs != 3000 || s1.TotalAgentMs != 8000 || s1.AgentMsEstimated ||
+	if s1.Title != "Alpha work" || s1.Project != "/work/alpha" || s1.ProjectName != "alpha" || s1.AgentMs != 45000 || s1.TotalAgentMs != 50000 || s1.AgentMsEstimated ||
 		s1.Tokens != 3850 || s1.Failures != 2 || s1.LineCount != 11 || s1.IsLive || s1.GitBranch != "main" || !near(s1.CostUSD, 0.0195) ||
 		!slices.Equal(s1.Models, []string{opus, sonnet}) || !slices.Equal(s1.Skills, []string{"superpowers:writing-plans"}) ||
 		s1.DeviceID == nil || *s1.DeviceID != d1 || !slices.Equal(s1.DeviceIDs, []string{d1}) {
@@ -96,7 +96,7 @@ func TestSessionDetail(t *testing.T) {
 		agents[a.AgentID] = a
 	}
 	m, a1 := agents["main"], agents["a1"]
-	if len(det.Agents) != 2 || det.Agents[0].AgentID != "main" || m.ParentAgentID != nil || m.DurationMs != 3000 || m.DurationEstimated ||
+	if len(det.Agents) != 2 || det.Agents[0].AgentID != "main" || m.ParentAgentID != nil || m.DurationMs != 45000 || m.DurationEstimated ||
 		!reflect.DeepEqual(m.ToolCalls, map[string]int64{"Skill": 1, "Agent": 1, "Bash": 1}) || m.ToolErrors != 1 ||
 		m.Usage.Messages != 2 || m.Usage.Tokens != 3300 || m.Usage.Input != 3000 || m.Usage.Output != 300 || !near(m.Usage.CostUSD, 0.018) {
 		t.Fatalf("main %+v", m)

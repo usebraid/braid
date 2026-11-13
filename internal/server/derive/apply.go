@@ -61,9 +61,53 @@ type batch struct {
 	aiTitle, customTitle          *string
 	meta                          *parse.AgentMeta
 	// agent time
-	turnMs, estMs int64
-	turnCount     int64
-	prevTS        time.Time // newest Touch so far, seeded from the cursor so the gap logic survives chunk borders
+	activeMs, activeTurns int64       // deltas of this batch
+	at                    activeState // running state, seeded from the agent row
+	prevTS                time.Time   // newest Touch so far, seeded from the cursor (failure timestamps)
+}
+
+// activeState is the open turn of an agent (see agents.work_prev, pending_ms, turn_asst).
+type activeState struct {
+	prev    time.Time // zero: no turn started yet
+	pending int64     // ms of the open turn before its first assistant line
+	asst    bool
+}
+
+// maxGap is the longest gap that counts in full; a longer one counts only as far as the tool result reports.
+const maxGap = 30 * time.Minute
+
+// activeTime applies one line to the agent's active time (spec 02 section 4).
+func (b *batch) activeTime(e parse.Event) {
+	s := &b.at
+	if e.TurnStart {
+		*s = activeState{prev: e.TS}
+		return
+	}
+	if !e.Work || s.prev.IsZero() {
+		return
+	}
+	var ms int64
+	if gap := e.TS.Sub(s.prev); gap > maxGap {
+		if e.ReportedMs != nil {
+			ms = min(gap.Milliseconds(), max(*e.ReportedMs, 0))
+		}
+	} else if gap > 0 {
+		ms = gap.Milliseconds()
+	}
+	if e.TS.After(s.prev) {
+		s.prev = e.TS
+	}
+	if e.WorkAsst && !s.asst { // a turn counts once it has an assistant line
+		s.asst = true
+		b.activeTurns++
+		b.activeMs += s.pending
+		s.pending = 0
+	}
+	if s.asst {
+		b.activeMs += ms
+	} else {
+		s.pending += ms
+	}
 }
 
 func newBatch(userID string, fileID int64, fi parse.FileInfo) *batch {
@@ -103,9 +147,7 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 		}
 		switch e.Kind {
 		case parse.KindTouch:
-			if gap := e.TS.Sub(b.prevTS); !b.prevTS.IsZero() && gap > 0 {
-				b.estMs += min(gap, 5*time.Minute).Milliseconds()
-			}
+			b.activeTime(e)
 			if later(b.prevTS, e.TS) {
 				b.prevTS = e.TS
 			}
@@ -180,11 +222,6 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 			t.name, t.skill, t.summary = e.Tool, e.Skill, e.Summary
 			if !e.TS.IsZero() && earlier(t.started, e.TS) {
 				t.started = e.TS
-			}
-		case parse.KindTurn:
-			if e.DurationMs != nil {
-				b.turnMs += *e.DurationMs
-				b.turnCount++
 			}
 		case parse.KindTaskNote:
 			b.tool(e.ToolUseID).totalMs = e.AgentTotalMs
@@ -290,16 +327,19 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 			if m == nil {
 				m = &parse.AgentMeta{}
 			}
-			if err := exec(`INSERT INTO agents(user_id, session_id, agent_id, agent_type, description, parent_hint, spawn_tool_use_id, spawn_depth, finished, started_at, ended_at, turn_ms, turn_count, est_ms)
-			  VALUES ($1, $2, $3, coalesce(nullif($4::text, ''), $12::text), nullif($5, ''), nullif($6, ''), nullif($7, ''), $8, $9, $10, $11, $14, $15, $16)
+			if err := exec(`INSERT INTO agents(user_id, session_id, agent_id, agent_type, description, parent_hint, spawn_tool_use_id, spawn_depth, finished, started_at, ended_at,
+			    active_ms, turn_count, work_prev, pending_ms, turn_asst)
+			  VALUES ($1, $2, $3, coalesce(nullif($4::text, ''), $12::text), nullif($5, ''), nullif($6, ''), nullif($7, ''), $8, $9, $10, $11, $14, $15, $16, $17, $18)
 			  ON CONFLICT (user_id, session_id, agent_id) DO UPDATE SET
 			    agent_type = coalesce(EXCLUDED.agent_type, agents.agent_type), description = coalesce(EXCLUDED.description, agents.description),
 			    parent_hint = coalesce(EXCLUDED.parent_hint, agents.parent_hint), spawn_tool_use_id = coalesce(EXCLUDED.spawn_tool_use_id, agents.spawn_tool_use_id),
 			    spawn_depth = CASE WHEN $13 THEN EXCLUDED.spawn_depth ELSE agents.spawn_depth END, finished = coalesce(EXCLUDED.finished, agents.finished),
 			    started_at = least(agents.started_at, EXCLUDED.started_at), ended_at = greatest(agents.ended_at, EXCLUDED.ended_at),
-			    turn_ms = agents.turn_ms + EXCLUDED.turn_ms, turn_count = agents.turn_count + EXCLUDED.turn_count, est_ms = agents.est_ms + EXCLUDED.est_ms`,
+			    active_ms = agents.active_ms + EXCLUDED.active_ms, turn_count = agents.turn_count + EXCLUDED.turn_count,
+			    work_prev = CASE WHEN $19 THEN EXCLUDED.work_prev ELSE agents.work_prev END, pending_ms = CASE WHEN $19 THEN EXCLUDED.pending_ms ELSE agents.pending_ms END,
+			    turn_asst = CASE WHEN $19 THEN EXCLUDED.turn_asst ELSE agents.turn_asst END`,
 				b.session, b.agent, m.AgentType, m.Description, m.ParentAgentID, m.ToolUseID, m.SpawnDepth, m.Finished,
-				nullTime(b.started), nullTime(b.ended), agentType, b.meta != nil, b.turnMs, b.turnCount, b.estMs); err != nil {
+				nullTime(b.started), nullTime(b.ended), agentType, b.meta != nil, b.activeMs, b.activeTurns, nullTime(b.at.prev), b.at.pending, b.at.asst, b.main || b.sub); err != nil {
 				return err
 			}
 		}

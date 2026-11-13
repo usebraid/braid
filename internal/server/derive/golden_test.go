@@ -27,7 +27,7 @@ func TestGoldenFullScenario(t *testing.T) {
 		`SELECT round(cost_usd*1e6)::bigint FROM usage WHERE message_id='g-m1'`:                                                                        "10500", // 1000*4+200*5+300*8+500*0.2+150*20 (final streamed output wins)
 		`SELECT round(cost_usd*1e6)::bigint FROM usage WHERE message_id='g-m5'`:                                                                        "20000", // two web searches
 		`SELECT title || '|' || line_count || '|' || project_path FROM sessions`:                                                                       "Golden custom|35|/work/alpha",
-		`SELECT string_agg(agent_id || '=' || duration_ms || '/' || duration_estimated, ',' ORDER BY agent_id) FROM agents`:                            "a1=9000/false,a2=12000/false,a3=8000/true,main=5000/false",
+		`SELECT string_agg(agent_id || '=' || duration_ms || '/' || duration_estimated, ',' ORDER BY agent_id) FROM agents`:                            "a1=3000/false,a2=8000/false,a3=8000/false,main=940000/false",
 		`SELECT string_agg(agent_id || '>' || coalesce(parent_agent_id, '-'), ',' ORDER BY agent_id) FROM agents`:                                      "a1>main,a2>main,a3>a1,main>-",
 		`SELECT string_agg(category || '=' || n, ',' ORDER BY category) FROM (SELECT category, count(*) n FROM failures GROUP BY 1) x`:                 "network=1,other_api_error=1,rate_limit=1,refusal=1,server_error=1,tool_error=1,usage_limit=1",
 		`SELECT string_agg(agent_id || ':' || seq || ':' || skill, ',' ORDER BY agent_id, seq) FROM skill_phases`:                                      "a1:1:x:debug,main:1:superpowers:brainstorming,main:2:superpowers:writing-plans",

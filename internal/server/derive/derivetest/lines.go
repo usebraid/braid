@@ -99,6 +99,11 @@ func Notify(ts, toolUseID string, ms int) string {
 		"content", fmt.Sprintf("<task-notification><tool-use-id>%s</tool-use-id><duration_ms>%d</duration_ms></task-notification>", toolUseID, ms))
 }
 
+// TaskNote is the user line Claude Code writes when a background task reports back.
+func TaskNote(ts string) string {
+	return Line("user", ts, "origin", map[string]any{"kind": "task-notification"}, "message", userMsg("<task-notification>done</task-notification>"))
+}
+
 func patch(line string, kv ...any) string {
 	var m map[string]any
 	if err := json.Unmarshal([]byte(line), &m); err != nil {

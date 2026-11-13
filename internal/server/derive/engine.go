@@ -21,7 +21,7 @@ import (
 )
 
 // ParserVersion is bumped whenever a parser or engine change requires re-deriving from raw data.
-const ParserVersion = 1
+const ParserVersion = 2
 
 // Deriver derives the pending raw rows of users.
 type Deriver struct {
@@ -226,6 +226,17 @@ func (d *Deriver) chunkN(ctx context.Context, userID string, f pendingFile, maxL
 		b := newBatch(userID, f.id, info)
 		if lastTS != nil {
 			b.prevTS = *lastTS
+		}
+		if b.main || b.sub { // the open turn of the agent continues across batches
+			var prev *time.Time
+			err := tx.QueryRow(ctx, `SELECT work_prev, pending_ms, turn_asst FROM agents WHERE user_id = $1 AND session_id = $2 AND agent_id = $3`,
+				userID, info.SessionID, info.AgentID).Scan(&prev, &b.at.pending, &b.at.asst)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+			if prev != nil {
+				b.at.prev = *prev
+			}
 		}
 		var last int64
 		if f.snapshot {

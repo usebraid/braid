@@ -116,6 +116,11 @@ type Event struct {
 	DurationMs, AgentTotalMs                *int64
 	Failure                                 *Failure
 	Meta                                    *AgentMeta
+	// Agent time (spec 02 section 4), set on KindTouch events only.
+	TurnStart  bool   // a user line that is neither a tool_result nor isMeta
+	Work       bool   // an assistant line or a user line carrying a tool_result
+	WorkAsst   bool   // Work, and an assistant line
+	ReportedMs *int64 // Work: the duration the tool result reports (durationMs, else totalDurationMs)
 }
 
 // MaxText caps Event.Text in bytes.
@@ -199,7 +204,7 @@ func ParseLine(raw []byte) ([]Event, error) {
 		evs = append(evs, e)
 	}
 	if !base.TS.IsZero() {
-		add(Event{Kind: KindTouch})
+		add(touchEvent(m))
 	}
 	switch str(m, "type") {
 	case "user":
@@ -234,6 +239,27 @@ func ParseLine(raw []byte) ([]Event, error) {
 		}
 	}
 	return evs, nil
+}
+
+func touchEvent(m obj) Event {
+	e := Event{Kind: KindTouch}
+	switch str(m, "type") {
+	case "assistant":
+		e.Work, e.WorkAsst = true, true
+	case "user":
+		for _, b := range arr(sub(m, "message"), "content") {
+			if blk, _ := b.(obj); str(blk, "type") == "tool_result" {
+				tur := sub(m, "toolUseResult")
+				e.Work, e.ReportedMs = true, num(tur, "durationMs")
+				if e.ReportedMs == nil {
+					e.ReportedMs = num(tur, "totalDurationMs")
+				}
+				return e
+			}
+		}
+		e.TurnStart = !boolean(m, "isMeta")
+	}
+	return e
 }
 
 func parseUser(m obj, add func(Event)) {
