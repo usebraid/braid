@@ -1,0 +1,14 @@
+/home/u/.config/systemd/user/braid.service
+[Unit]
+Description=Braid sync daemon
+
+[Service]
+Environment="CLAUDE_CONFIG_DIR=/w/my claude"
+Environment="XDG_STATE_HOME=/s"
+Environment="BRAID_URL=https://b.example/%%x"
+ExecStart=/usr/local/bin/braid run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
