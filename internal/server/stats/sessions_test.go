@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usebraid/braid/internal/protocol"
 	dt "github.com/usebraid/braid/internal/server/derive/derivetest"
 	"github.com/usebraid/braid/internal/server/stats"
 )
@@ -170,5 +171,23 @@ func TestLinePageQueryIsLimited(t *testing.T) {
 		if q := stats.LinesQuery("r.id > $3", "true", order); !strings.HasSuffix(q, " LIMIT $4") {
 			t.Errorf("unbounded line query for order %s: %s", order, q)
 		}
+	}
+}
+
+func TestOversizedLineIsAPlaceholder(t *testing.T) {
+	x := newEnv(t)
+	seed(t, x)
+	x.dt.Exec(t, `UPDATE raw_lines SET line = convert_to(repeat('x', $1), 'UTF8') WHERE id = (SELECT min(id) FROM raw_lines)`, protocol.MaxReadLine+1)
+	var p stats.LinePage
+	if st := x.get(t, "/api/v1/stats/sessions/s1/lines?agent=main&limit=2", &p); st != 200 || len(p.Lines) != 2 {
+		t.Fatalf("%d %+v", st, p)
+	}
+	var ph struct {
+		TooLarge bool  `json:"too_large"`
+		Offset   int64 `json:"offset"`
+		Size     int64 `json:"size"`
+	}
+	if err := json.Unmarshal(p.Lines[0].Line, &ph); err != nil || !ph.TooLarge || ph.Size != protocol.MaxReadLine+1 || ph.Offset != 0 {
+		t.Fatalf("%s %v", p.Lines[0].Line, err)
 	}
 }

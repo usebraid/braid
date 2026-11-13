@@ -42,18 +42,18 @@ type usageAcc struct {
 
 // batch holds the in-memory deltas of one chunk; a chunk is always one file, hence one session and one agent.
 type batch struct {
-	userID, session, agent string
-	fileID                 int64
-	main, sub, metaFile    bool
-	lines, bad, badOffset  int64
-	maxTS                  time.Time
-	devices                map[string]int64
-	projects               map[string]*projAcc
-	tools                  map[string]*toolAcc
-	usage                  map[string]*usageAcc
-	models                 map[string]bool
-	failures               map[int64]*failureAcc
-	docs                   map[int64]*docAcc
+	userID, session, agent          string
+	fileID                          int64
+	main, sub, metaFile             bool
+	lines, bad, tooLarge, badOffset int64
+	maxTS                           time.Time
+	devices                         map[string]int64
+	projects                        map[string]*projAcc
+	tools                           map[string]*toolAcc
+	usage                           map[string]*usageAcc
+	models                          map[string]bool
+	failures                        map[int64]*failureAcc
+	docs                            map[int64]*docAcc
 	// session and agent
 	started, ended                time.Time
 	projPath, branch, firstPrompt string

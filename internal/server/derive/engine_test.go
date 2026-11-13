@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/usebraid/braid/internal/protocol"
 	dt "github.com/usebraid/braid/internal/server/derive/derivetest"
 )
 
@@ -254,5 +255,24 @@ func TestDeriveLogsCarryNoLineContent(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "TOPSECRET") {
 		t.Fatalf("a log line carries transcript content:\n%s", buf.String())
+	}
+}
+
+func TestOversizedLineIsCountedNotLoaded(t *testing.T) {
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	e, u, d := setup(t)
+	e.Put(t, u, d, dt.File{Rel: "-work-alpha/s1.jsonl", Lines: []string{"x", dt.Prompt(dt.At(0), "hi")}})
+	e.Exec(t, `UPDATE raw_lines SET line = convert_to(repeat('x', $1), 'UTF8') WHERE "offset" = 0`, protocol.MaxReadLine+1)
+	if n := e.Derive(t, u, 0); n != 2 {
+		t.Fatalf("rows %d", n)
+	}
+	if got := e.Row(t, `SELECT errors FROM derive_errors`); got != "1" || !strings.Contains(buf.String(), "too_large=1") {
+		t.Fatalf("errors %q, log %s", got, buf.String())
+	}
+	if e.N(t, `SELECT count(*) FROM sessions WHERE session_id='s1'`) != 1 || e.N(t, `SELECT count(*) FROM raw_lines WHERE octet_length(line) > 64*1024*1024`) != 1 {
+		t.Fatal("the next line was not derived or raw changed")
 	}
 }

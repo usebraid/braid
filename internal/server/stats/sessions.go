@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/usebraid/braid/internal/protocol"
 	"github.com/usebraid/braid/internal/server/httpx"
 	"github.com/usebraid/braid/internal/server/webauth"
 )
@@ -310,7 +311,7 @@ func (h *Handler) sessionLines(w http.ResponseWriter, r *http.Request) {
 
 // linesQuery selects one page of raw lines plus one row; the LIMIT keeps a long transcript from being read whole.
 func linesQuery(cond, files, order string) string {
-	return `SELECT r.id, r."offset", r.line FROM raw_lines r WHERE ` + cond + ` AND ` + files + ` ORDER BY ` + order + ` LIMIT $4`
+	return `SELECT r.id, r."offset", octet_length(r.line), CASE WHEN octet_length(r.line) <= ` + strconv.Itoa(protocol.MaxReadLine) + ` THEN r.line END FROM raw_lines r WHERE ` + cond + ` AND ` + files + ` ORDER BY ` + order + ` LIMIT $4`
 }
 
 // readLines pages the lines of one agent: ascending after `after`, or with before > 0 the newest lines below `before`, ascending.
@@ -347,10 +348,13 @@ func (h *Handler) readLines(ctx context.Context, tx pgx.Tx, session, agent strin
 		}
 		var it LineItem
 		var raw []byte
-		if err := rows.Scan(&it.ID, &it.Offset, &raw); err != nil {
+		var n int64
+		if err := rows.Scan(&it.ID, &it.Offset, &n, &raw); err != nil {
 			return err
 		}
-		if json.Valid(raw) {
+		if n > protocol.MaxReadLine { // never loaded: a placeholder with the size
+			it.Line, _ = json.Marshal(map[string]any{"too_large": true, "offset": it.Offset, "size": n})
+		} else if json.Valid(raw) {
 			it.Line = raw
 		} else {
 			it.Line, _ = json.Marshal(map[string]string{"invalid_json_b64": base64.StdEncoding.EncodeToString(raw)})

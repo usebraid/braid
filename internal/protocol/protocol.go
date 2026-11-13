@@ -38,7 +38,10 @@ const (
 	// MaxLineBytes caps one line or snapshot: derive, the viewer and Postgres assemble it in memory.
 	// Larger ones are never uploaded (the daemon records them as skipped).
 	MaxLineBytes = 256 << 20
-	maxParts     = MaxLineBytes/ChunkSize + 1
+	// MaxReadLine caps what derive and the line viewer load into memory; larger stored lines are
+	// counted or shown as a placeholder.
+	MaxReadLine = 64 << 20
+	maxParts    = MaxLineBytes/ChunkSize + 1
 )
 
 // Kind is the sync mode of a file: append-only log or whole-file snapshot.

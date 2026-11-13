@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/usebraid/braid/internal/protocol"
 	"github.com/usebraid/braid/internal/server/db"
 	"github.com/usebraid/braid/internal/server/derive/parse"
 )
@@ -169,6 +170,7 @@ func (d *Deriver) Reset(ctx context.Context, userID string) error {
 type rawRow struct {
 	id, offset int64
 	device     string
+	size       int64
 	data       []byte
 }
 
@@ -228,8 +230,9 @@ func (d *Deriver) chunkN(ctx context.Context, userID string, f pendingFile, maxL
 		var last int64
 		if f.snapshot {
 			var row rawRow
-			err := tx.QueryRow(ctx, `SELECT id, device_id::text, content FROM raw_snapshots WHERE source_file_id = $1 ORDER BY id DESC LIMIT 1`, f.id).
-				Scan(&row.id, &row.device, &row.data)
+			err := tx.QueryRow(ctx, `SELECT id, device_id::text, octet_length(content), CASE WHEN octet_length(content) <= $2 THEN content END
+			  FROM raw_snapshots WHERE source_file_id = $1 ORDER BY id DESC LIMIT 1`, f.id, protocol.MaxReadLine).
+				Scan(&row.id, &row.device, &row.size, &row.data)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}
@@ -239,11 +242,16 @@ func (d *Deriver) chunkN(ctx context.Context, userID string, f pendingFile, maxL
 			if row.id <= lastSnap {
 				return nil
 			}
-			evs, perr := parse.ParseSnapshot(info, row.data)
-			if perr != nil {
+			if row.size > protocol.MaxReadLine {
 				b.bad++
+				b.tooLarge++
+			} else {
+				evs, perr := parse.ParseSnapshot(info, row.data)
+				if perr != nil {
+					b.bad++
+				}
+				b.add(evs, 0)
 			}
-			b.add(evs, 0)
 			n, last = 1, row.id
 			if err := b.flush(ctx, tx); err != nil {
 				return err
@@ -253,15 +261,16 @@ func (d *Deriver) chunkN(ctx context.Context, userID string, f pendingFile, maxL
 			return err
 		}
 		var rows []rawRow
-		r, err := tx.Query(ctx, `SELECT id, "offset", device_id::text, line FROM raw_lines WHERE source_file_id = $1 AND id > $2 ORDER BY id LIMIT $3`,
-			f.id, lastLine, maxLines)
+		r, err := tx.Query(ctx, `SELECT id, "offset", device_id::text, octet_length(line), CASE WHEN octet_length(line) <= $4 THEN line END
+			  FROM raw_lines WHERE source_file_id = $1 AND id > $2 ORDER BY id LIMIT $3`,
+			f.id, lastLine, maxLines, protocol.MaxReadLine)
 		if err != nil {
 			return err
 		}
 		size := 0
 		for r.Next() {
 			var row rawRow
-			if err := r.Scan(&row.id, &row.offset, &row.device, &row.data); err != nil {
+			if err := r.Scan(&row.id, &row.offset, &row.device, &row.size, &row.data); err != nil {
 				r.Close()
 				return err
 			}
@@ -280,6 +289,12 @@ func (d *Deriver) chunkN(ctx context.Context, userID string, f pendingFile, maxL
 		for _, row := range rows {
 			b.lines++
 			b.devices[row.device]++
+			if row.size > protocol.MaxReadLine { // never loaded; raw stays intact
+				b.bad++
+				b.tooLarge++
+				b.badOffset = max(b.badOffset, row.offset)
+				continue
+			}
 			evs, perr := parse.ParseLine(row.data)
 			if perr != nil {
 				b.bad++
@@ -290,7 +305,7 @@ func (d *Deriver) chunkN(ctx context.Context, userID string, f pendingFile, maxL
 		}
 		n, last = len(rows), rows[len(rows)-1].id
 		if b.bad > 0 { // counts only, never line content
-			slog.Warn("derive: skipped unparsable lines", "user", userID, "file", f.id, "count", b.bad)
+			slog.Warn("derive: skipped unparsable lines", "user", userID, "file", f.id, "count", b.bad, "too_large", b.tooLarge)
 		}
 		if err := b.flush(ctx, tx); err != nil {
 			return err
