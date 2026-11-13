@@ -9,6 +9,7 @@ import type {
   LinePage,
   LivePage,
   Overview,
+  SearchResult,
   SessionDetail,
   SessionPage,
 } from './types'
@@ -25,3 +26,4 @@ export const statsSessionLines = (id: string, q: Query, signal?: AbortSignal) =>
   get<LinePage>(`/api/v1/stats/sessions/${enc(id)}/lines`, q, signal)
 export const statsLive = (signal?: AbortSignal) => get<LivePage>('/api/v1/stats/live', undefined, signal)
 export const statsFailures = (q: Query, signal?: AbortSignal) => get<FailurePage>('/api/v1/stats/failures', q, signal)
+export const statsSearch = (q: Query, signal?: AbortSignal) => get<SearchResult>('/api/v1/stats/search', q, signal)
