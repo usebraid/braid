@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Braid">
+  <title>Braid</title>
+  <rect width="32" height="32" rx="7" fill="#0c0c0c"/>
+  <g fill="none" stroke-width="3" stroke-linecap="round">
+    <path d="M7 6c9 0 9 10 0 10s-9 10 0 10" stroke="#5fe08a" transform="translate(2 0)"/>
+    <path d="M16 6c9 0 9 10 0 10s-9 10 0 10" stroke="#7c8cff" transform="translate(2 0)"/>
+    <path d="M25 6c-9 0-9 10 0 10s-9 10 0 10" stroke="#ff8a3d" transform="translate(-3 0)"/>
+  </g>
+</svg>

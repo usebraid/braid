@@ -64,7 +64,7 @@ export function Session() {
 
   const backLink = (
     <Link to={backTo} className="crumb">
-      Back to timeline
+      ← Back to timeline
     </Link>
   )
   if (error && !data)
