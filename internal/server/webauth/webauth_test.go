@@ -182,10 +182,13 @@ func TestCallbackWithoutStateCookieRejected(t *testing.T) {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 	// styled shell (logo, title, way back), no echo of the request
-	for _, w := range []string{`src="/favicon.svg"`, "Sign-in expired", `href="/"`} {
+	for _, w := range []string{"<svg", "Sign-in expired", `href="/"`} {
 		if !strings.Contains(string(html), w) {
 			t.Errorf("missing %q", w)
 		}
+	}
+	if strings.Contains(string(html), "favicon.svg") {
+		t.Error("page references favicon.svg")
 	}
 	if strings.Contains(string(html), "state=y") || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
 		t.Errorf("unexpected page: %s", resp.Header.Get("Content-Type"))

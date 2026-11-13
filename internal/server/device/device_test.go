@@ -307,13 +307,16 @@ func TestPagesRenderShell(t *testing.T) {
 		{conf, []string{"Approve this device?"}},
 		{bad, []string{"Code not found or expired."}},
 		{appr, []string{"Device approved", "close this tab"}},
-		{den, []string{"Denied"}},
+		{den, []string{"Denied", "The device was not connected."}},
 	} {
 		page := tc.page
-		for _, w := range append(tc.want, `src="/favicon.svg"`, ">Braid<") {
+		for _, w := range append(tc.want, "<svg", ">Braid<") {
 			if !strings.Contains(page, w) {
 				t.Errorf("missing %q in page %q", w, tc.want[0])
 			}
+		}
+		if strings.Contains(page, "favicon.svg") {
+			t.Errorf("favicon.svg referenced in page %q", tc.want[0])
 		}
 		for _, ext := range []string{"http://", "https://", "//cdn"} {
 			if strings.Contains(page, ext) {

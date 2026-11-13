@@ -251,7 +251,7 @@ func (h *Handler) entry(w http.ResponseWriter, r *http.Request) {
 		return e
 	})
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		h.page(w, http.StatusInternalServerError, view{View: "none", Title: "Something went wrong", Body: "The server hit an error. Please try again."})
 		return
 	}
 	disp := code[:4] + "-" + code[4:]
@@ -310,7 +310,7 @@ func (h *Handler) decide(approve bool) func(http.ResponseWriter, *http.Request) 
 		})
 		if err != nil {
 			slog.Error("device decide", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			h.page(w, http.StatusInternalServerError, view{View: "none", Title: "Something went wrong", Body: "The server hit an error. Please try again."})
 			return
 		}
 		switch {

@@ -165,7 +165,11 @@ func (a *Auth) auditSystem(r *http.Request, subject any, action string, detail a
 
 // fail renders a styled error page with fixed text: never IdP error text, tokens or codes.
 func fail(w http.ResponseWriter, status int, title, body string) {
-	page.Render(w, status, page.View{View: "none", Title: title, Body: body, Retry: true})
+	failLink(w, status, title, body, "Back to sign in")
+}
+
+func failLink(w http.ResponseWriter, status int, title, body, label string) {
+	page.Render(w, status, page.View{View: "none", Title: title, Body: body, Retry: true, RetryLabel: label})
 }
 
 func (a *Auth) callback(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +251,7 @@ func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {
 	p, id, ok, lerr := a.lookup(r)
 	if lerr != nil { // cannot tell whether the session exists: keep the cookie so the user can retry
 		slog.Error("logout lookup", "err", lerr)
-		fail(w, http.StatusServiceUnavailable, "Temporarily unavailable", "The server cannot sign you out right now. Please try again.")
+		failLink(w, http.StatusServiceUnavailable, "Temporarily unavailable", "The server cannot sign you out right now. Please try again.", "Back to Braid")
 		return
 	}
 	if ok {
@@ -258,7 +262,7 @@ func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {
 			return a.audit(r.Context(), tx, r, p.UserID, "logout", map[string]any{})
 		})
 		if err != nil { // keep the cookie so the user can retry
-			fail(w, http.StatusInternalServerError, "Something went wrong", "The server hit an error. Please try again.")
+			failLink(w, http.StatusInternalServerError, "Something went wrong", "The server hit an error. Please try again.", "Back to Braid")
 			return
 		}
 	}

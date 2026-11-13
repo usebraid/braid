@@ -19,14 +19,14 @@ var tmplFS embed.FS
 var tmpl = template.Must(template.ParseFS(tmplFS, "templates/shell.html"))
 
 // View is the data of one page. View selects the body ("form", "confirm", else none); Info is the confirm view's
-// device details; Retry adds a link back to "/".
+// device details; Retry adds a link back to "/" labelled RetryLabel.
 type View struct {
-	Nonce, View, Title, Body, Error, UserCode string
-	Retry                                     bool
-	Info                                      any
+	Nonce, View, Title, Body, Error, UserCode, RetryLabel string
+	Retry                                                 bool
+	Info                                                  any
 }
 
-// Render writes v with the given status and a CSP that allows only the nonce'd style block and same-origin assets.
+// Render writes v with the given status and a CSP that allows only the nonce'd style block and no assets.
 func Render(w http.ResponseWriter, status int, v View) {
 	nonce := make([]byte, 16)
 	_, _ = rand.Read(nonce)
