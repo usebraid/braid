@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 The Braid Authors
+
+import { describe, expect, it } from 'vitest'
+import type { AgentItem, ChatLine } from '../api/types'
+import { buildRows } from './chatRows'
+
+const L = (line: unknown) => line as ChatLine['line']
+
+const use = (id: number, agent: string, toolId: string): ChatLine => ({
+  id,
+  agent_id: agent,
+  ts: null,
+  offset: id,
+  line: L({
+    type: 'assistant',
+    message: { content: [{ type: 'tool_use', id: toolId, name: 'Task', input: { description: 'go' } }] },
+  }),
+})
+const res = (id: number, agent: string, toolId: string): ChatLine => ({
+  id,
+  agent_id: agent,
+  ts: null,
+  offset: id,
+  line: L({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: toolId, content: 'done' }] } }),
+})
+const say = (id: number, agent: string): ChatLine => ({
+  id,
+  agent_id: agent,
+  ts: null,
+  offset: id,
+  line: L({ type: 'assistant', message: { content: 'hi' } }),
+})
+const sub = (merged: string | null) =>
+  ({
+    agent_id: 'a',
+    agent_type: 'Explore',
+    description: 'look',
+    parent_agent_id: 'main',
+    spawn_tool_use_id: 't1',
+    merged_at: merged,
+  }) as AgentItem
+const lanes = new Map([
+  ['main', 0],
+  ['a', 1],
+])
+const lines = [use(1, 'main', 't1'), say(2, 'a'), say(3, 'a'), res(4, 'main', 't1')]
+
+describe('buildRows', () => {
+  it('emits branch, entries and merge', () => {
+    const r = buildRows(lines, [sub('x')], lanes, new Set())
+    expect(r.map((x) => x.kind)).toEqual(['branch', 'entry', 'entry', 'merge'])
+    expect(r[1]).toMatchObject({ lane: 1 })
+  })
+  it('leaves an unfinished agent without a merge row', () => {
+    const r = buildRows(lines.slice(0, 3), [sub(null)], lanes, new Set())
+    expect(r.map((x) => x.kind)).toEqual(['branch', 'entry', 'entry'])
+  })
+  it('collapses to branch and merge with a step count', () => {
+    const r = buildRows(lines, [sub('x')], lanes, new Set(['a']))
+    expect(r.map((x) => x.kind)).toEqual(['branch', 'merge'])
+    expect(r[0]).toMatchObject({ label: expect.stringContaining('2 steps') })
+    expect(r[1]).toMatchObject({ summary: '2 steps' })
+  })
+})
