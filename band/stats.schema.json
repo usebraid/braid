@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://usebraid.dev/schemas/band-stats-v1.json",
+  "title": "braid stats --json output, version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "sync", "today"],
+  "properties": {
+    "version": { "const": 1 },
+    "sync": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "backlog_bytes"],
+      "properties": {
+        "state": { "enum": ["ok", "backlog", "blocked", "offline", "logged_out"] },
+        "backlog_bytes": { "type": "integer", "minimum": 0 },
+        "last_ack": { "type": "string", "format": "date-time" }
+      }
+    },
+    "today": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cost_usd", "tokens", "sessions", "agent_time_s", "failures"],
+      "properties": {
+        "cost_usd": { "type": "number", "minimum": 0 },
+        "tokens": { "type": "integer", "minimum": 0 },
+        "sessions": { "type": "integer", "minimum": 0 },
+        "agent_time_s": { "type": "integer", "minimum": 0 },
+        "failures": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cost_usd", "tokens", "failures"],
+      "properties": {
+        "cost_usd": { "type": "number", "minimum": 0 },
+        "tokens": { "type": "integer", "minimum": 0 },
+        "failures": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "limit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "resets_at"],
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "resets_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
