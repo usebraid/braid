@@ -20,6 +20,7 @@ import (
 	"github.com/usebraid/braid/internal/protocol"
 	"github.com/usebraid/braid/internal/server/db"
 	"github.com/usebraid/braid/internal/server/httpx"
+	"github.com/usebraid/braid/internal/server/live"
 )
 
 // Handler serves the ingest endpoints.
@@ -113,7 +114,11 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.Exec(r.Context(), `UPDATE devices SET last_sync_at = now() WHERE id = $1`, dev.DeviceID); err != nil {
 			return err
 		}
-		_, err := tx.Exec(r.Context(), `SELECT pg_notify('braid_ingest', $1)`, dev.UserID) // delivered at commit
+		if _, err := tx.Exec(r.Context(), `SELECT pg_notify('braid_ingest', $1)`, dev.UserID); err != nil { // delivered at commit
+			return err
+		}
+		synced, _ := json.Marshal(live.Event{UserID: dev.UserID, Type: "device_synced", DeviceID: dev.DeviceID})
+		_, err := tx.Exec(r.Context(), `SELECT pg_notify($1, $2)`, live.ChannelSynced, string(synced))
 		return err
 	})
 	switch {

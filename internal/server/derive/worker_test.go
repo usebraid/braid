@@ -5,12 +5,14 @@ package derive_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/usebraid/braid/internal/server/derive"
 	dt "github.com/usebraid/braid/internal/server/derive/derivetest"
+	"github.com/usebraid/braid/internal/server/live"
 	"github.com/usebraid/braid/internal/testdb"
 )
 
@@ -62,7 +64,8 @@ func TestNotificationDrivesDerivationAndAnnouncesIt(t *testing.T) {
 	wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	n, err := c.WaitForNotification(wctx)
-	if err != nil || n.Payload != u {
+	var ev live.Event
+	if err != nil || json.Unmarshal([]byte(n.Payload), &ev) != nil || ev.UserID != u || ev.Type != "session_updated" || ev.SessionID != "s1" {
 		t.Fatalf("braid_derived: %+v %v", n, err)
 	}
 }
@@ -101,5 +104,40 @@ func TestReindexAllRebuildsFromRaw(t *testing.T) {
 	}
 	if after := e.Dump(t, u, map[string]string{u: "U", d: "D"}); after != before {
 		t.Fatalf("reindex differs:\n%s\n---\n%s", before, after)
+	}
+}
+
+func TestReindexAnnouncesStartAndDone(t *testing.T) {
+	ctx := context.Background()
+	e, u, d := setup(t)
+	e.Put(t, u, d, dt.File{Rel: "-work-alpha/s1.jsonl", Lines: []string{dt.Prompt(dt.At(0), "hello")}})
+	c, err := pgx.Connect(ctx, e.Owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close(ctx) }()
+	if _, err := c.Exec(ctx, `LISTEN braid_derived`); err != nil {
+		t.Fatal(err)
+	}
+	w := &derive.Worker{D: &derive.Deriver{DB: e.DB}, DB: e.DB}
+	if err := w.Reindex(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for len(got) < 2 {
+		wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		n, err := c.WaitForNotification(wctx)
+		cancel()
+		if err != nil {
+			t.Fatalf("got %v, then %v", got, err)
+		}
+		var ev live.Event
+		_ = json.Unmarshal([]byte(n.Payload), &ev)
+		if ev.Type == "reindex" {
+			got = append(got, ev.State)
+		}
+	}
+	if got[0] != "started" || got[1] != "done" {
+		t.Fatalf("%v", got)
 	}
 }

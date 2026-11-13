@@ -22,6 +22,7 @@ import (
 	"github.com/usebraid/braid/internal/server/db"
 	"github.com/usebraid/braid/internal/server/httpx"
 	"github.com/usebraid/braid/internal/server/ingest"
+	"github.com/usebraid/braid/internal/server/live"
 	"github.com/usebraid/braid/internal/testdb"
 )
 
@@ -568,6 +569,31 @@ func TestIngestNotifiesTheWorker(t *testing.T) {
 	defer cancel()
 	n, err := c.WaitForNotification(wctx)
 	if err != nil || n.Payload != uid {
+		t.Fatalf("%+v %v", n, err)
+	}
+}
+
+func TestIngestAnnouncesTheSyncedDevice(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c, err := pgx.Connect(ctx, e.owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close(ctx) }()
+	if _, err := c.Exec(ctx, `LISTEN braid_synced`); err != nil {
+		t.Fatal(err)
+	}
+	e.post(t, e.tokA, appendReq(0, `{"a":0}`), nil)
+	var uid, dev string
+	if err := c.QueryRow(ctx, `SELECT u.id::text, d.id::text FROM users u JOIN devices d ON d.user_id = u.id WHERE u.oidc_sub = 'a' AND d.id = md5('a')::uuid`).Scan(&uid, &dev); err != nil {
+		t.Fatal(err)
+	}
+	wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	n, err := c.WaitForNotification(wctx)
+	var ev live.Event
+	if err != nil || json.Unmarshal([]byte(n.Payload), &ev) != nil || ev != (live.Event{UserID: uid, Type: "device_synced", DeviceID: dev}) {
 		t.Fatalf("%+v %v", n, err)
 	}
 }

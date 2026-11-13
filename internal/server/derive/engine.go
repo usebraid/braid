@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,6 +36,12 @@ type pendingFile struct {
 
 // DeriveUser derives everything pending for userID and returns the number of raw rows (lines + snapshots) processed.
 func (d *Deriver) DeriveUser(ctx context.Context, userID string) (rows int, err error) {
+	rows, _, err = d.DeriveUserSessions(ctx, userID)
+	return rows, err
+}
+
+// DeriveUserSessions is DeriveUser that also returns the distinct session ids of the files that had rows.
+func (d *Deriver) DeriveUserSessions(ctx context.Context, userID string) (rows int, sessions []string, err error) {
 	var files []pendingFile
 	err = d.DB.WithUser(ctx, userID, func(tx pgx.Tx) error {
 		r, err := tx.Query(ctx, `
@@ -58,21 +65,24 @@ func (d *Deriver) DeriveUser(ctx context.Context, userID string) (rows int, err 
 		return r.Err()
 	})
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	for _, f := range files {
 		for {
 			n, err := d.chunk(ctx, userID, f)
 			if err != nil {
-				return rows, fmt.Errorf("derive file %d: %w", f.id, err)
+				return rows, sessions, fmt.Errorf("derive file %d: %w", f.id, err)
 			}
 			if n == 0 {
 				break
 			}
 			rows += n
+			if sid := parse.ClassifyPath(f.rel).SessionID; sid != "" && !slices.Contains(sessions, sid) {
+				sessions = append(sessions, sid)
+			}
 		}
 	}
-	return rows, nil
+	return rows, sessions, nil
 }
 
 // Reset deletes every derived row and cursor of the user (never raw data, never derive_state).

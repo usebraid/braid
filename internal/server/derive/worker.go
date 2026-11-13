@@ -5,6 +5,7 @@ package derive
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/usebraid/braid/internal/server/db"
+	"github.com/usebraid/braid/internal/server/live"
 )
 
 // Worker derives users whose raw data changed (LISTEN/NOTIFY plus a periodic sweep as safety net).
@@ -193,25 +195,37 @@ loop:
 }
 
 func (w *Worker) deriveOne(ctx context.Context, userID string) {
-	rows, err := w.D.DeriveUser(ctx, userID)
+	rows, sessions, err := w.D.DeriveUserSessions(ctx, userID)
 	if err != nil {
 		if ctx.Err() == nil {
 			slog.Error("derive failed", "user", userID, "err", err) // retried at the next sweep
 		}
 		return
 	}
-	if rows > 0 {
-		w.announce(ctx, userID)
+	if rows == 0 {
+		return
+	}
+	if len(sessions) > maxAnnounced {
+		w.announce(ctx, live.Event{UserID: userID, Type: "resync"})
+		return
+	}
+	for _, s := range sessions {
+		w.announce(ctx, live.Event{UserID: userID, Type: "session_updated", SessionID: s})
 	}
 }
 
-func (w *Worker) announce(ctx context.Context, userID string) {
-	err := w.DB.WithUser(ctx, userID, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `SELECT pg_notify('braid_derived', $1)`, userID)
+// maxAnnounced is the most sessions announced one by one after a run; more become a single resync.
+const maxAnnounced = 200
+
+// announce sends ev on braid_derived in its own transaction.
+func (w *Worker) announce(ctx context.Context, ev live.Event) {
+	payload, _ := json.Marshal(ev)
+	err := w.DB.WithUser(ctx, ev.UserID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, live.ChannelDerived, string(payload))
 		return err
 	})
 	if err != nil && ctx.Err() == nil {
-		slog.Error("derive notify failed", "user", userID, "err", err)
+		slog.Error("derive notify failed", "user", ev.UserID, "err", err)
 	}
 }
 
@@ -272,6 +286,7 @@ func (w *Worker) Reindex(ctx context.Context, userID string) error {
 	if err != nil {
 		return err
 	}
+	w.announce(ctx, live.Event{UserID: userID, Type: "reindex", State: "started"})
 	if err := w.D.Reset(ctx, userID); err != nil {
 		return err
 	}
@@ -293,7 +308,7 @@ func (w *Worker) Reindex(ctx context.Context, userID string) error {
 	if err != nil {
 		return err
 	}
-	w.announce(ctx, userID)
+	w.announce(ctx, live.Event{UserID: userID, Type: "reindex", State: "done"})
 	if w.OnReindexed != nil {
 		w.OnReindexed(userID, total)
 	}
