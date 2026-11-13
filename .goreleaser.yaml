@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 The Braid Authors
+version: 2
+project_name: braid
+before:
+  hooks:
+    - sh -c 'cd web && npm ci --ignore-scripts && npm run build'   # web/dist is embedded by cmd/braid-server
+builds:
+  - id: braid
+    main: ./cmd/braid
+    binary: braid
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/usebraid/braid/internal/buildinfo.Version={{.Version}} -X github.com/usebraid/braid/internal/buildinfo.Commit={{.FullCommit}}
+  - id: braid-server
+    main: ./cmd/braid-server
+    binary: braid-server
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/usebraid/braid/internal/buildinfo.Version={{.Version}} -X github.com/usebraid/braid/internal/buildinfo.Commit={{.FullCommit}}
+archives:
+  - id: braid
+    ids: [braid]
+    formats: [tar.gz]
+    format_overrides: [{goos: windows, formats: [zip]}]
+    name_template: "braid_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE, README.md, THIRD_PARTY_NOTICES.md]
+  - id: braid-server
+    ids: [braid-server]
+    formats: [tar.gz]
+    name_template: "braid-server_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE, README.md, THIRD_PARTY_NOTICES.md]
+checksum: { name_template: checksums.txt, algorithm: sha256 }
+sboms:
+  - artifacts: archive            # syft, one <archive>.sbom.json each
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args: [sign-blob, --yes, "--bundle=${signature}", "${artifact}"]
+    output: true
+brews:
+  - ids: [braid]
+    name: braid
+    repository: { owner: usebraid, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
+    homepage: https://usebraid.dev
+    description: Sync Claude Code sessions from all your devices into one Braid server
+    license: AGPL-3.0-or-later
+    install: bin.install "braid"
+    test: system "#{bin}/braid", "version"
+    caveats: |
+      Next: braid login <server-url>, then braid install
+changelog: { disable: true }       # release-please writes the notes
+release: { mode: append, github: { owner: usebraid, name: braid } }
+snapshot: { version_template: "{{ incpatch .Version }}-snapshot" }

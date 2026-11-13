@@ -11,3 +11,4 @@
 /web/.e2e/
 /web/playwright-report/
 /web/test-results/
+/.tools/
