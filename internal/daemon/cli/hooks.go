@@ -6,14 +6,16 @@ package cli
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // Hooks override environment lookups. Only meant for tests; Run uses the zero value.
 type Hooks struct {
-	NoKeychain bool   // keychain Set fails with auth.ErrNoKeychain
-	FakeToken  string // skip the device flow and use this token
-	ConfigDir  string // overrides the config dir
-	DataDir    string // overrides the data dir
+	NoKeychain bool             // keychain Set fails with auth.ErrNoKeychain
+	FakeToken  string           // skip the device flow and use this token
+	ConfigDir  string           // overrides the config dir
+	DataDir    string           // overrides the data dir
+	Now        func() time.Time // nil means time.Now
 }
 
 // Run dispatches subcommands; returns the process exit code.

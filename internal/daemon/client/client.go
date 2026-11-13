@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -97,6 +98,49 @@ func (c *Client) Files(ctx context.Context) ([]protocol.RemoteFile, error) {
 		return nil, err
 	}
 	var out []protocol.RemoteFile
+	return out, decode(body, st, &out)
+}
+
+// Self is the subset of GET /v1/stats/self the CLI uses; unknown fields are ignored.
+type Self struct {
+	Today   SelfToday    `json:"today"`
+	Session *SelfSession `json:"session"`
+	Limit   *SelfLimit   `json:"limit"`
+}
+
+// SelfToday is today's aggregates across devices.
+type SelfToday struct {
+	SessionCount int64   `json:"sessions"`
+	AgentMs      int64   `json:"agent_ms"`
+	CostUSD      float64 `json:"cost_usd"`
+	Tokens       int64   `json:"tokens"`
+	Failures     int64   `json:"failures"`
+}
+
+// SelfSession is one session's figures.
+type SelfSession struct {
+	CostUSD  float64 `json:"cost_usd"`
+	Tokens   int64   `json:"tokens"`
+	Failures int64   `json:"failures"`
+}
+
+// SelfLimit is the active usage limit.
+type SelfLimit struct {
+	Type     string    `json:"type"`
+	ResetsAt time.Time `json:"resets_at"`
+}
+
+// StatsSelf fetches the user's figures for today and, if session is not empty, for that session.
+func (c *Client) StatsSelf(ctx context.Context, session string) (Self, error) {
+	path := "/v1/stats/self"
+	if session != "" {
+		path += "?session=" + url.QueryEscape(session)
+	}
+	var out Self
+	body, st, err := c.do(ctx, http.MethodGet, path, nil, false)
+	if err != nil {
+		return out, err
+	}
 	return out, decode(body, st, &out)
 }
 

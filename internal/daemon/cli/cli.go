@@ -45,7 +45,7 @@ const usage = `usage: braid <command>
   import               sync everything now (or follow the running service)
   run                  foreground sync loop (what the service runs)
   install | uninstall  register / remove the user service
-  stats --json         not implemented yet
+  stats --json [--session <id>]  print today's figures and sync state as JSON
   version
 `
 
@@ -80,8 +80,7 @@ func RunWithHooks(ctx context.Context, args []string, stdin io.Reader, stdout, s
 		_, _ = fmt.Fprintf(stdout, "braid %s (%s) protocol %d\n", Version, Commit, protocol.Version)
 		return 0
 	case "stats":
-		_, _ = fmt.Fprintln(stdout, `{"error":"not implemented yet"}`)
-		return 2
+		return e.stats(args[1:])
 	case "status":
 		return e.status()
 	case "login":
