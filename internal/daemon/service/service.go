@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode/utf16"
@@ -24,34 +25,46 @@ type Spec struct {
 	Env                            []string
 }
 
-// Environ picks the variables that change where the daemon looks for files or how it behaves.
-// Variables with TOKEN in the name are never persisted into a service definition.
-func Environ(environ []string) []string {
+// allowed lists the only variables persisted into a service definition: the ones the daemon reads
+// (internal/daemon/paths) and no secrets. Everything else, the server's BRAID_* settings included, is dropped.
+var allowed = map[string]bool{"CLAUDE_CONFIG_DIR": true, "XDG_CONFIG_HOME": true, "XDG_DATA_HOME": true, "XDG_STATE_HOME": true,
+	"XDG_CACHE_HOME": true, "BRAID_DATA_DIR": true, "BRAID_CONFIG_DIR": true}
+
+var keyRE = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+
+func checkPair(k, v string) error {
+	if !keyRE.MatchString(k) {
+		return fmt.Errorf("service: invalid variable name %q", k)
+	}
+	if strings.ContainsAny(v, "\r\n\x00") {
+		return fmt.Errorf("service: %s contains a line break or NUL", k)
+	}
+	return nil
+}
+
+// Environ picks the allowed variables that change where the daemon looks for files; a bad value is an error.
+func Environ(environ []string) ([]string, error) {
 	var out []string
 	for _, kv := range environ {
 		k, v, ok := strings.Cut(kv, "=")
-		if !ok || v == "" || strings.Contains(strings.ToUpper(k), "TOKEN") {
+		if !ok || v == "" || !allowed[k] {
 			continue
 		}
-		switch k {
-		case "CLAUDE_CONFIG_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME":
-		default:
-			if !strings.HasPrefix(k, "BRAID_") {
-				continue
-			}
+		if err := checkPair(k, v); err != nil {
+			return nil, err
 		}
 		out = append(out, kv)
 	}
 	sort.Strings(out)
-	return out
+	return out, nil
 }
 
 func (s Spec) pairs() ([][2]string, error) {
 	var out [][2]string
 	for _, kv := range s.Env {
 		k, v, _ := strings.Cut(kv, "=")
-		if strings.ContainsAny(v, "\r\n") {
-			return nil, fmt.Errorf("service: %s contains a line break", k)
+		if err := checkPair(k, v); err != nil {
+			return nil, err
 		}
 		out = append(out, [2]string{k, v})
 	}
@@ -186,6 +199,9 @@ func windowsCommand(exe string, env [][2]string) (cmd, args string, err error) {
 	if len(env) == 0 {
 		return exe, "run", nil
 	}
+	if strings.Contains(exe, "%") { // cmd expands % inside quotes too
+		return "", "", fmt.Errorf("service: %% in the executable path %q cannot be passed to the Windows task", exe)
+	}
 	var b strings.Builder
 	for _, e := range env {
 		// cmd expands % even inside quotes and treats " as a terminator: refuse instead of mis-quoting.
@@ -201,7 +217,11 @@ func write(path string, content []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
-	return os.WriteFile(path, content, 0o644) //nolint:gosec // unit files must be readable by the service manager
+	// The manager runs as the same user, so 0600 suffices; WriteFile keeps the mode of an existing file, hence the Chmod.
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }
 
 // utf16le encodes with BOM, as schtasks expects for XML declared as UTF-16.

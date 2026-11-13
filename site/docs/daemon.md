@@ -37,7 +37,7 @@ State lives in `%LOCALAPPDATA%\braid`, the file-token fallback in `%APPDATA%\bra
 
 ## Claude Code location
 
-The daemon reads `~/.claude/projects`. If you set `CLAUDE_CONFIG_DIR`, it reads `$CLAUDE_CONFIG_DIR/projects` instead. `braid install` copies `CLAUDE_CONFIG_DIR`, the `XDG_*_HOME` variables and all `BRAID_*` variables that are set in your shell into the service definition (launchd `EnvironmentVariables`, systemd `Environment=`, the Windows task). Variables with `TOKEN` in the name are never copied. Change a variable, then run `braid install` again.
+The daemon reads `~/.claude/projects`. If you set `CLAUDE_CONFIG_DIR`, it reads `$CLAUDE_CONFIG_DIR/projects` instead. `braid install` copies only these variables, if they are set in your shell, into the service definition (launchd `EnvironmentVariables`, systemd `Environment=`, the Windows task): `CLAUDE_CONFIG_DIR`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `BRAID_DATA_DIR` and `BRAID_CONFIG_DIR`. Nothing else is copied, so server secrets in your shell never reach the service file. A value with a line break or NUL byte makes `braid install` fail. The service file is readable only by you (mode 0600); running `braid install` again fixes the mode of an older file. Change a variable, then run `braid install` again.
 
 ## Commands
 

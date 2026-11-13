@@ -69,9 +69,49 @@ func TestRenderEnv(t *testing.T) {
 }
 
 func TestEnviron(t *testing.T) {
-	got := service.Environ([]string{"PATH=/bin", "BRAID_TOKEN=s", "BRAID_API_TOKEN=s", "BRAID_URL=u", "CLAUDE_CONFIG_DIR=/c", "XDG_DATA_HOME=", "XDG_CACHE_HOME=/x", "HOME=/h"})
-	if strings.Join(got, ",") != "BRAID_URL=u,CLAUDE_CONFIG_DIR=/c,XDG_CACHE_HOME=/x" {
-		t.Fatalf("%v", got)
+	got, err := service.Environ([]string{"PATH=/bin", "BRAID_TOKEN=s", "BRAID_API_TOKEN=s", "BRAID_OIDC_CLIENT_SECRET=s3cr3t", "BRAID_DATABASE_URL=postgres://u:pw@h/db",
+		"BRAID_DATA_DIR=/d", "BRAID_CONFIG_DIR=/cfg", "CLAUDE_CONFIG_DIR=/c", "XDG_DATA_HOME=", "XDG_CACHE_HOME=/x", "HOME=/h"})
+	if err != nil || strings.Join(got, ",") != "BRAID_CONFIG_DIR=/cfg,BRAID_DATA_DIR=/d,CLAUDE_CONFIG_DIR=/c,XDG_CACHE_HOME=/x" {
+		t.Fatalf("%v %v", got, err)
+	}
+}
+
+func TestEnvironRejectsBadValuesAndKeys(t *testing.T) {
+	for _, kv := range []string{"CLAUDE_CONFIG_DIR=/a\nExecStartPre=/tmp/evil", "BRAID_DATA_DIR=/a\x00b", "XDG_DATA_HOME=/a\rb"} {
+		if _, err := service.Environ([]string{kv}); err == nil {
+			t.Errorf("%q accepted", kv)
+		}
+	}
+	for _, key := range []string{"BRAID_A\nExecStartPre=/tmp/evil", "lower", "A-B", "1A", ""} {
+		for _, goos := range []string{"linux", "darwin", "windows"} {
+			if _, _, err := service.Render(service.Spec{GOOS: goos, Exe: "/b", User: "u", Env: []string{key + "=1"}}); err == nil {
+				t.Errorf("%s: key %q accepted", goos, key)
+			}
+		}
+	}
+}
+
+func TestWindowsRefusesPercentInExePathWithEnv(t *testing.T) {
+	if _, _, err := service.Render(service.Spec{GOOS: "windows", Exe: `C:\%PATH%\braid.exe`, User: "u", Env: []string{"BRAID_DATA_DIR=d"}}); err == nil {
+		t.Error("% in the exe path accepted")
+	}
+}
+
+func TestServiceFilesAreOwnerOnlyAndExistingOnesAreFixed(t *testing.T) {
+	run := func(string, ...string) error { return nil }
+	home := t.TempDir()
+	path := home + "/.config/systemd/user/braid.service"
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil { //nolint:gosec // simulates a file from an older version
+		t.Fatal(err)
+	}
+	if err := service.Install(service.Spec{GOOS: "linux", Exe: "/b", Home: home, DataDir: home}, run); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("%v %v", fi, err)
 	}
 }
 

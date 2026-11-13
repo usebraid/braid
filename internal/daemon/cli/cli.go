@@ -330,7 +330,11 @@ func (e *env) install(f func(service.Spec, func(string, ...string) error) error)
 	if u, err := user.Current(); err == nil {
 		acct = u.Username
 	}
-	spec := service.Spec{GOOS: runtime.GOOS, Exe: exe, Home: home, DataDir: e.dirs.Data, User: acct, Env: service.Environ(os.Environ())}
+	senv, err := service.Environ(os.Environ())
+	if err != nil {
+		return err
+	}
+	spec := service.Spec{GOOS: runtime.GOOS, Exe: exe, Home: home, DataDir: e.dirs.Data, User: acct, Env: senv}
 	return f(spec, func(name string, args ...string) error {
 		return exec.CommandContext(e.ctx, name, args...).Run() //nolint:gosec // fixed service-manager commands
 	})
