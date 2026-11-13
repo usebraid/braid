@@ -33,7 +33,7 @@ func Handler(files fs.FS) http.Handler {
 		case strings.HasPrefix(p, "/api/"):
 			httpx.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 			return
-		case strings.HasPrefix(p, "/v1/"), strings.HasPrefix(p, "/auth/"), strings.HasPrefix(p, "/device"):
+		case strings.HasPrefix(p, "/v1/"), strings.HasPrefix(p, "/auth/"), p == "/device", strings.HasPrefix(p, "/device/"): // not "/devices", a web app route
 			http.NotFound(w, r)
 			return
 		}

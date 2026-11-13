@@ -25,7 +25,7 @@ func TestServesShellAssetsAndFallback(t *testing.T) {
 		"index.html":    {Data: []byte(`<!doctype html><script type="module" src="/assets/app.js"></script>`)},
 		"assets/app.js": {Data: []byte("console.log(1)")},
 	})
-	for _, p := range []string{"/", "/timeline", "/sessions/abc%2Fdef", "/index.html"} {
+	for _, p := range []string{"/", "/timeline", "/devices", "/sessions/abc%2Fdef", "/index.html"} {
 		rec := get(h, "GET", p)
 		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "app.js") || rec.Header().Get("Cache-Control") != "no-cache" {
 			t.Errorf("%s: %d %q %q", p, rec.Code, rec.Header().Get("Cache-Control"), rec.Body.String())
@@ -45,7 +45,7 @@ func TestServesShellAssetsAndFallback(t *testing.T) {
 
 func TestMissingFilesAndAPIPathsAreNotHTML(t *testing.T) {
 	h := spa.Handler(fstest.MapFS{"index.html": {Data: []byte("<html>")}})
-	for _, p := range []string{"/assets/missing.js", "/missing.css", "/api/v1/nope", "/v1/nope", "/auth/nope"} {
+	for _, p := range []string{"/assets/missing.js", "/missing.css", "/api/v1/nope", "/v1/nope", "/auth/nope", "/device", "/device/nope"} {
 		rec := get(h, "GET", p)
 		if rec.Code != 404 || strings.Contains(rec.Body.String(), "<html>") {
 			t.Errorf("%s: %d %q", p, rec.Code, rec.Body.String())
