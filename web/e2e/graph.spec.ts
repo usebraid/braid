@@ -61,6 +61,8 @@ test.describe('graph views as alice', () => {
     await page.goto(`/sessions/big1?${RANGE}`)
     const rows = page.locator('ol.grows > li.grow')
     await expect(rows.first()).toBeVisible()
+    // 4x CPU throttling stands in for a 2 vCPU CI runner, so local runs catch what only CI showed
+    await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: 4 })
     await page.evaluate(() => {
       const w = window as unknown as { __long: number[] }
       w.__long = []
@@ -68,14 +70,19 @@ test.describe('graph views as alice', () => {
         for (const e of l.getEntries()) w.__long.push(e.duration)
       }).observe({ type: 'longtask', buffered: false })
     })
-    for (let i = 0; i < 400; i++) {
+    // The end check is plain DOM: a getByRole count walks every row's accessibility tree in the page's main thread and
+    // would itself show up as a long task.
+    const atEnd = () =>
+      page.evaluate(
+        () =>
+          window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2 &&
+          ![...document.querySelectorAll('section.graph > button')].some((b) => b.textContent === 'Load more'),
+      )
+    for (let i = 0; i < 400 && !(await atEnd()); i++) {
       await page.mouse.wheel(0, 4000)
       await page.waitForTimeout(30)
-      if (await page.evaluate(() => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2)) {
-        if (!(await page.getByRole('button', { name: 'Load more' }).count())) break
-      }
     }
-    await expect(page.getByRole('button', { name: 'Load more' })).toHaveCount(0)
+    expect(await atEnd()).toBe(true)
     const long = await page.evaluate(() => (window as unknown as { __long: number[] }).__long)
     expect(long.filter((d) => d > 50)).toEqual([])
   })
