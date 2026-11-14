@@ -95,6 +95,9 @@ func TestWindowsRefusesPercentInExePathWithEnv(t *testing.T) {
 	if _, _, err := service.Render(service.Spec{GOOS: "windows", Exe: `C:\%PATH%\braid.exe`, User: "u", Env: []string{"BRAID_DATA_DIR=d"}}); err == nil {
 		t.Error("% in the exe path accepted")
 	}
+	if _, _, err := service.Render(service.Spec{GOOS: "windows", Exe: `C:\braid.exe`, DataDir: `C:\%TEMP%\braid`, User: "u"}); err == nil {
+		t.Error("% in the data dir accepted")
+	}
 }
 
 func TestServiceFilesAreOwnerOnlyAndExistingOnesAreFixed(t *testing.T) {

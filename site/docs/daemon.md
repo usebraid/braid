@@ -37,7 +37,7 @@ braid login <server-url>
 braid install
 ```
 
-`braid install` creates a scheduled task named `Braid` that runs at logon and starts it. After `scoop update braid`, run `braid uninstall` and `braid install` so the task restarts on the new version.
+`braid install` creates a scheduled task named `Braid` that runs at logon and starts it. It runs without a console window (through `conhost.exe --headless`, Windows 10 1809 or later) and appends its output to `%LOCALAPPDATA%\braid\braid.log`. After `scoop update braid`, run `braid uninstall` and `braid install` so the task restarts on the new version.
 
 Without Scoop, manual steps:
 

@@ -125,12 +125,10 @@ RestartSec=10
 WantedBy=default.target
 `, systemdEnv(env), s.Exe), nil
 	case "windows":
-		// shortcut: braid.exe is a console program, so a console window opens at logon and closing it stops the daemon;
-		// start it hidden (conhost --headless or a windowsgui build) once Windows is tested for real.
 		if s.User == "" {
 			return "", nil, errors.New("service: windows account name missing")
 		}
-		cmd, args, err := windowsCommand(s.Exe, env)
+		cmd, args, err := windowsCommand(s.Exe, s.DataDir, env)
 		if err != nil {
 			return "", nil, err
 		}
@@ -195,22 +193,22 @@ func systemdEnv(env [][2]string) string {
 }
 
 // windowsCommand runs braid directly, or through cmd /c set when variables must be passed (tasks have no environment).
-func windowsCommand(exe string, env [][2]string) (cmd, args string, err error) {
-	if len(env) == 0 {
-		return exe, "run", nil
-	}
-	if strings.Contains(exe, "%") { // cmd expands % inside quotes too
-		return "", "", fmt.Errorf("service: %% in the executable path %q cannot be passed to the Windows task", exe)
+// windowsCommand runs braid.exe through a headless conhost, so no console window opens at logon (closing one would
+// stop the daemon), and through cmd.exe to set the environment and append the output to braid.log as on macOS.
+func windowsCommand(exe, dataDir string, env [][2]string) (cmd, args string, err error) {
+	// cmd expands % even inside quotes and treats " as a terminator: refuse instead of mis-quoting.
+	if strings.ContainsAny(exe+dataDir, `"%`) {
+		return "", "", fmt.Errorf("service: the executable path %q or data dir %q cannot be passed to the Windows task", exe, dataDir)
 	}
 	var b strings.Builder
 	for _, e := range env {
-		// cmd expands % even inside quotes and treats " as a terminator: refuse instead of mis-quoting.
 		if strings.ContainsAny(e[0]+e[1], `"%`) {
 			return "", "", fmt.Errorf("service: %s contains a character that cannot be passed to the Windows task", e[0])
 		}
 		fmt.Fprintf(&b, `set "%s=%s" && `, e[0], e[1])
 	}
-	return "cmd.exe", fmt.Sprintf(`/d /c "%s"%s" run"`, b.String(), exe), nil
+	log := strings.TrimRight(dataDir, `\`) + `\braid.log`
+	return "conhost.exe", fmt.Sprintf(`--headless cmd.exe /d /c "%s"%s" run >> "%s" 2>&1"`, b.String(), exe, log), nil
 }
 
 func write(path string, content []byte) error {

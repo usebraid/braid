@@ -26,8 +26,8 @@
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>C:\Users\u\AppData\Local\braid\braid.exe</Command>
-      <Arguments>run</Arguments>
+      <Command>conhost.exe</Command>
+      <Arguments>--headless cmd.exe /d /c &#34;&#34;C:\Users\u\AppData\Local\braid\braid.exe&#34; run &gt;&gt; &#34;C:\Users\u\AppData\Local\braid\braid.log&#34; 2&gt;&amp;1&#34;</Arguments>
     </Exec>
   </Actions>
 </Task>
