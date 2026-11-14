@@ -22,7 +22,7 @@ const mergeLines = (a: ChatLine[], b: ChatLine[]) => {
 }
 const TAIL = 200 // a live tick that expects late subagent lines refetches this many of the newest loaded lines
 const PAGE = 500
-const STEP = 100 // lines per scroll-driven page: a render of all of them must stay a short task
+const STEP = 25 // lines per scroll-driven page: a render of all of them must stay a short task
 const MAX_PAGES = 10 // per tick; the "Load more" sentinel takes over beyond
 
 // The `after` cursor of a loaded line (api/openapi.yaml, statsSessionChat).

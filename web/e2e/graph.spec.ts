@@ -61,8 +61,10 @@ test.describe('graph views as alice', () => {
     await page.goto(`/sessions/big1?${RANGE}`)
     const rows = page.locator('ol.grows > li.grow')
     await expect(rows.first()).toBeVisible()
-    // 4x CPU throttling stands in for a 2 vCPU CI runner, so local runs catch what only CI showed
-    await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: 4 })
+    // Locally, 4x CPU throttling stands in for a 2 vCPU runner, so local runs catch what only CI showed (CI is slow itself).
+    await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', {
+      rate: process.env.CI ? 1 : 4,
+    })
     await page.evaluate(() => {
       const w = window as unknown as { __long: number[] }
       w.__long = []
