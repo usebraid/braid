@@ -20,8 +20,29 @@ const mergeLines = (a: ChatLine[], b: ChatLine[]) => {
   const seen = new Set(a.map((l) => l.id))
   return [...a, ...b.filter((l) => !seen.has(l.id))].sort(order)
 }
-const WINDOW = 2000 // a live tick rechecks at most this many of the newest loaded lines
+const TAIL = 200 // a live tick that expects late subagent lines refetches this many of the newest loaded lines
 const PAGE = 500
+const MAX_PAGES = 10 // per tick; the "Load more" sentinel takes over beyond
+
+// The `after` cursor of a loaded line (api/openapi.yaml, statsSessionChat).
+const cursorOf = (l: ChatLine) =>
+  btoa(`${l.ts ?? '-infinity'}|${l.id}`)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+
+// An agent whose last activity lies inside the loaded window but after its newest loaded line has late lines there.
+const hasLateLines = (agents: SessionDetail['agents'], lines: ChatLine[]) => {
+  const newest = new Map<string, number>()
+  for (const l of lines) newest.set(l.agent_id, Math.max(newest.get(l.agent_id) ?? Number.NEGATIVE_INFINITY, stamp(l)))
+  const first = lines.find((l) => l.ts)
+  const lo = first ? stamp(first) : Number.POSITIVE_INFINITY
+  const hi = stamp(lines[lines.length - 1] as ChatLine)
+  return agents.some((a) => {
+    const end = a.ended_at ? Date.parse(a.ended_at) : Number.NaN
+    return end >= lo && end <= hi && end > (newest.get(a.agent_id) ?? Number.NEGATIVE_INFINITY)
+  })
+}
 
 export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
   const { agents, session } = p.detail
@@ -45,6 +66,8 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
   const stick = useRef(false)
   const first = useRef(true)
   const epoch = useRef(0) // bumps when the session or deep link changes, so stale page loads are dropped
+  const live = useRef(session.is_live)
+  live.current = session.is_live
 
   useEffect(() => {
     const ctl = new AbortController()
@@ -55,9 +78,12 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     setError(undefined)
     setLoading(true)
     focused.current = undefined
-    statsSessionChat(id, p.focusLine ? { at: p.focusLine } : {}, ctl.signal).then(
+    // a live session opens at its newest page with the bottom in view; a finished one at its start
+    const latest = !p.focusLine && live.current
+    statsSessionChat(id, p.focusLine ? { at: p.focusLine } : latest ? { latest: 1 } : {}, ctl.signal).then(
       (pg) => {
         if (ctl.signal.aborted) return
+        stick.current = latest
         setLines(pg.lines ?? [])
         setPrev(pg.prev ?? null)
         setNext(pg.next ?? null)
@@ -72,9 +98,10 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     return () => ctl.abort()
   }, [id, p.focusLine])
 
-  // Live: the session detail reloads on session_updated; once the end is loaded, refetch the newest loaded window
-  // forward, so late lines (a subagent synced after its parent) land in their time position.
-  // shortcut: a line later than WINDOW lines behind the end shows only after a reload of the view.
+  // Live: the session detail reloads on session_updated; once the end is loaded, fetch the lines after it. Only when an
+  // agent has activity inside the loaded window that is not loaded (a subagent synced after its parent), refetch the
+  // newest TAIL lines too, so those late lines land in their time position.
+  // shortcut: a late line more than TAIL lines behind the end shows only after a reload of the view.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the detail object is the trigger, the rest is read from the ref
   useEffect(() => {
     if (first.current) {
@@ -84,11 +111,14 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     const { lines: cur, next: n, loading: busy } = state.current
     if (n !== null || busy || cur.length === 0) return
     const ctl = new AbortController()
+    const end = cur[cur.length - 1] as ChatLine
     void (async () => {
-      let q: { at?: number; after?: string } = { at: cur[Math.max(0, cur.length - WINDOW)]?.id }
+      let q: { at?: number; after?: string } = hasLateLines(p.detail.agents, cur)
+        ? { at: cur[Math.max(0, cur.length - TAIL)]?.id }
+        : { after: cursorOf(end) }
       const got: ChatLine[] = []
       let nxt: string | null = null
-      for (let i = 0; i < WINDOW / PAGE + 2; i++) {
+      for (let i = 0; i < MAX_PAGES; i++) {
         const pg = await statsSessionChat(id, { ...q, limit: PAGE }, ctl.signal)
         got.push(...(pg.lines ?? []))
         nxt = pg.next ?? null

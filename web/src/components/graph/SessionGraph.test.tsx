@@ -25,6 +25,7 @@ const ag = (id: string, o: Partial<AgentItem> = {}): AgentItem => ({
   ended_at: null,
   spawned_at: null,
   merged_at: null,
+  background: false,
   finished: null,
   duration_ms: 0,
   duration_estimated: false,
@@ -160,15 +161,17 @@ function liveHarness() {
   }
 }
 const liveDetail = { ...detail(true), agents: detail().agents }
+const LATE = { ...L(6, 'a1', 3, asst('fresh line')), ts: '2026-11-01T10:03:30Z' } // newer id, older than the end
+const lateDetail = {
+  ...liveDetail,
+  agents: [liveDetail.agents[0], { ...liveDetail.agents[1], ended_at: LATE.ts }] as AgentItem[],
+}
 
-async function liveCase(scrolledUp: boolean) {
+function renderLive(d: SessionDetail, chat: (q?: Record<string, string | number>) => unknown) {
   const { live, emit } = liveHarness()
   get.mockImplementation(async (p: string, q?: Record<string, string | number>) => {
-    if (p.endsWith('/chat'))
-      return q?.at === 1 // a late line: newer id, but a time before the last loaded line
-        ? { lines: [...LINES, L(6, 'a1', 1, asst('fresh line'))], next: null, prev: null }
-        : { lines: LINES, next: null, prev: null }
-    return p.endsWith('/devices') ? [] : { ...liveDetail } // a reload yields a new object, as parsed JSON does
+    if (p.endsWith('/chat')) return chat(q)
+    return p.endsWith('/devices') ? [] : { ...d } // a reload yields a new object, as parsed JSON does
   })
   renderApp(
     <Routes>
@@ -176,7 +179,15 @@ async function liveCase(scrolledUp: boolean) {
     </Routes>,
     { route: '/sessions/g1', live },
   )
+  return emit
+}
+
+async function liveCase(scrolledUp: boolean) {
+  const emit = renderLive(lateDetail, (q) =>
+    q?.at === 1 ? { lines: [...LINES, LATE], next: null, prev: null } : { lines: LINES, next: null, prev: null },
+  )
   await screen.findByText('all done')
+  vi.mocked(window.scrollTo).mockClear() // the newest page opens with the bottom in view
   if (scrolledUp) Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 9000 })
   emit({ type: 'session_updated', session_id: 'g1' })
   expect(await screen.findByText('fresh line')).toBeInTheDocument()
@@ -185,8 +196,8 @@ async function liveCase(scrolledUp: boolean) {
     .getAllByRole('listitem')
     .map((li) => li.textContent ?? '')
   const at = (t: string) => texts.findIndex((x) => x.includes(t))
-  expect(at('fresh line')).toBeGreaterThan(at('build the export'))
-  expect(at('fresh line')).toBeLessThan(at('d-a1'))
+  expect(at('fresh line')).toBeGreaterThan(at('grepping inside the subagent'))
+  expect(at('fresh line')).toBeLessThan(at('pdfkit'))
   expect(within(screen.getByLabelText('Session chat')).getAllByText('all done')).toHaveLength(1)
 }
 it('appends a live line and keeps the bottom in view when the reader is at the end', async () => {
@@ -196,6 +207,43 @@ it('appends a live line and keeps the bottom in view when the reader is at the e
 it('appends a live line without moving the scroll position when the reader scrolled up', async () => {
   await liveCase(true)
   expect(window.scrollTo).not.toHaveBeenCalled()
+})
+
+it('opens a live session at its newest page and pages upward', async () => {
+  renderLive(liveDetail, (q) =>
+    q?.before === 'p1'
+      ? { lines: LINES.slice(0, 3), next: 'n', prev: null }
+      : { lines: LINES.slice(3), next: null, prev: 'p1' },
+  )
+  await screen.findByText('all done')
+  const chat = get.mock.calls.filter(([p]) => p.endsWith('/chat'))
+  expect(chat[0]?.[1]).toMatchObject({ latest: 1 })
+  expect(window.scrollTo).toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  await userEvent.click(screen.getByRole('button', { name: 'Load earlier' }))
+  expect(await screen.findByText('build the export')).toBeInTheDocument()
+})
+
+it('a normal live tick asks only for the lines after the loaded end', async () => {
+  const emit = renderLive(liveDetail, (q) =>
+    q?.after
+      ? { lines: [L(7, 'main', 6, asst('next reply'))], next: null, prev: null }
+      : { lines: LINES, next: null, prev: null },
+  )
+  await screen.findByText('all done')
+  get.mockClear()
+  emit({ type: 'session_updated', session_id: 'g1' })
+  expect(await screen.findByText('next reply')).toBeInTheDocument()
+  const chat = get.mock.calls.filter(([p]) => p.endsWith('/chat')).map(([, q]) => q)
+  expect(chat).toHaveLength(1)
+  expect(atob(String(chat[0]?.after).replace(/-/g, '+').replace(/_/g, '/'))).toBe('2026-11-01T10:05:00Z|5')
+  expect(chat[0]?.at).toBeUndefined()
+})
+
+it('finished sessions open at their start', async () => {
+  renderApp(<SessionGraph detail={detail()} />)
+  await screen.findByText('all done')
+  expect(get.mock.calls[0]?.[1]).toEqual({})
 })
 
 function Host() {

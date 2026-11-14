@@ -18,7 +18,8 @@ type projAcc struct{ first, last time.Time }
 type toolAcc struct {
 	name, skill, summary string
 	started, ended       time.Time
-	isErr                bool
+	isErr, background    bool
+	noteAt               time.Time // the <task-notification> line's time
 	resultMs, totalMs    *int64
 }
 
@@ -85,6 +86,7 @@ type batch struct {
 	order             []orderRow
 	lineTS, lineFirst *time.Time // lineTS: ts carried to lines without one, seeded from line_order; lineFirst: first ts of a file that had none
 	lineSeeded        bool
+	lineOrphans       bool // a line of this file got stored as -infinity: in this batch, or in an earlier one (seeded)
 }
 
 // activeState is the open turn of an agent (see agents.work_prev, pending_ms, turn_asst).
@@ -160,6 +162,7 @@ func (b *batch) lineOrder(id int64, evs []parse.Event) {
 			b.lineFirst = &ts
 		}
 	}
+	b.lineOrphans = b.lineOrphans || b.lineTS == nil
 	b.order = append(b.order, orderRow{id, b.lineTS})
 }
 
@@ -263,7 +266,7 @@ func (b *batch) add(evs []parse.Event, row rawRow) {
 			b.meta = e.Meta
 		case parse.KindAssistant:
 			doc.role, doc.text, doc.at = "assistant", e.Text, e.TS
-			if m := NormalizeModel(e.Model); b.main && !e.Sidechain && e.Model != "" {
+			if m := NormalizeModel(e.Model); b.main && !e.Sidechain && e.Model != "" && e.Model != "<synthetic>" { // a synthetic line is no reply of a model
 				for _, ev := range b.open {
 					ev.model = m
 				}
@@ -284,12 +287,16 @@ func (b *batch) add(evs []parse.Event, row rawRow) {
 			}
 			doc.tools, doc.idents = strings.TrimSpace(doc.tools+" "+e.Tool), strings.TrimSpace(doc.idents+" "+e.Idents)
 			t := b.tool(e.ToolUseID)
-			t.name, t.skill, t.summary = e.Tool, e.Skill, e.Summary
+			t.name, t.skill, t.summary, t.background = e.Tool, e.Skill, e.Summary, e.Background
 			if !e.TS.IsZero() && earlier(t.started, e.TS) {
 				t.started = e.TS
 			}
 		case parse.KindTaskNote:
-			b.tool(e.ToolUseID).totalMs = e.AgentTotalMs
+			t := b.tool(e.ToolUseID)
+			t.totalMs, t.background = e.AgentTotalMs, true // only a background task reports back this way
+			if !e.TS.IsZero() && earlier(t.noteAt, e.TS) {
+				t.noteAt = e.TS
+			}
 		case parse.KindToolResult:
 			t := b.tool(e.ToolUseID)
 			if later(t.ended, e.TS) && !e.TS.IsZero() {
@@ -417,16 +424,17 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 
 	if len(b.tools) > 0 {
 		var ids, names, skills, sums []string
-		var started, ended []*time.Time
-		var errs []bool
+		var started, ended, notes []*time.Time
+		var errs, bg []bool
 		var res, tot []*int64
 		for id, t := range b.tools {
 			ids, names, skills, sums = append(ids, id), append(names, t.name), append(skills, t.skill), append(sums, t.summary)
+			bg, notes = append(bg, t.background), append(notes, nullTime(t.noteAt))
 			started, ended, errs, res, tot = append(started, nullTime(t.started)), append(ended, nullTime(t.ended)), append(errs, t.isErr), append(res, t.resultMs), append(tot, t.totalMs)
 		}
-		if err := exec(`INSERT INTO tool_calls(user_id, session_id, tool_use_id, agent_id, tool_name, skill, input_summary, started_at, ended_at, is_error, result_ms, agent_total_ms)
-		  SELECT $1, $2, i, $3, n, nullif(k, ''), s, st, en, e, r, t FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::timestamptz[], $9::timestamptz[], $10::bool[], $11::bigint[], $12::bigint[])
-		    AS x(i, n, k, s, st, en, e, r, t)
+		if err := exec(`INSERT INTO tool_calls(user_id, session_id, tool_use_id, agent_id, tool_name, skill, input_summary, started_at, ended_at, is_error, result_ms, agent_total_ms, background, note_at)
+		  SELECT $1, $2, i, $3, n, nullif(k, ''), s, st, en, e, r, t, g, na FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::timestamptz[], $9::timestamptz[], $10::bool[], $11::bigint[], $12::bigint[], $13::bool[], $14::timestamptz[])
+		    AS x(i, n, k, s, st, en, e, r, t, g, na)
 		  ON CONFLICT (user_id, session_id, tool_use_id) DO UPDATE SET
 		    tool_name = CASE WHEN EXCLUDED.tool_name <> '' THEN EXCLUDED.tool_name ELSE tool_calls.tool_name END,
 		    skill = CASE WHEN EXCLUDED.tool_name <> '' THEN EXCLUDED.skill ELSE tool_calls.skill END,
@@ -434,8 +442,9 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 		    agent_id = CASE WHEN EXCLUDED.tool_name <> '' THEN EXCLUDED.agent_id ELSE tool_calls.agent_id END,
 		    started_at = least(tool_calls.started_at, EXCLUDED.started_at), ended_at = greatest(tool_calls.ended_at, EXCLUDED.ended_at),
 		    is_error = tool_calls.is_error OR EXCLUDED.is_error,
-		    result_ms = coalesce(EXCLUDED.result_ms, tool_calls.result_ms), agent_total_ms = coalesce(EXCLUDED.agent_total_ms, tool_calls.agent_total_ms)`,
-			b.session, b.agent, ids, names, skills, sums, started, ended, errs, res, tot); err != nil {
+		    result_ms = coalesce(EXCLUDED.result_ms, tool_calls.result_ms), agent_total_ms = coalesce(EXCLUDED.agent_total_ms, tool_calls.agent_total_ms),
+		    background = tool_calls.background OR EXCLUDED.background, note_at = least(tool_calls.note_at, EXCLUDED.note_at)`,
+			b.session, b.agent, ids, names, skills, sums, started, ended, errs, res, tot, bg, notes); err != nil {
 			return err
 		}
 	}
@@ -559,9 +568,9 @@ func (b *batch) flushGraph(ctx context.Context, tx pgx.Tx) error {
 		u, b.session, stripNUL(b.agent), ids, ts); err != nil {
 		return err
 	}
-	if b.lineFirst != nil { // the leading lines of the file without a timestamp take the file's first one
+	if b.lineFirst != nil && b.lineOrphans { // the leading lines of the file without a timestamp take the file's first one
 		_, err := tx.Exec(ctx, `UPDATE line_order o SET ts = $3 FROM raw_lines l
-		  WHERE o.user_id = $1 AND l.id = o.raw_line_id AND l.source_file_id = $2 AND o.ts = '-infinity'`, u, b.fileID, *b.lineFirst)
+		  WHERE o.user_id = $1 AND o.session_id = $4 AND o.ts = '-infinity' AND l.id = o.raw_line_id AND l.source_file_id = $2`, u, b.fileID, *b.lineFirst, b.session)
 		return err
 	}
 	return nil

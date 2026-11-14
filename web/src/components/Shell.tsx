@@ -28,7 +28,9 @@ function ProjectNav() {
       search: withFilter(sp, 'project', path).toString(),
     })
   const total = list.reduce((a, p) => a + p.sessions, 0)
-  const recent = [...list].sort((a, b) => b.last_active.localeCompare(a.last_active)).slice(0, RECENT_PROJECTS)
+  const recent = [...list]
+    .sort((a, b) => Date.parse(b.last_active) - Date.parse(a.last_active))
+    .slice(0, RECENT_PROJECTS)
   if (current && !recent.some((p) => p.path === current)) {
     const sel = list.find((p) => p.path === current)
     if (sel) recent.push(sel)

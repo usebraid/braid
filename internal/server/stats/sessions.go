@@ -75,7 +75,8 @@ type AgentItem struct {
 	DurationMs        int64            `json:"duration_ms"`
 	DurationEstimated bool             `json:"duration_estimated"`
 	SpawnedAt         *time.Time       `json:"spawned_at"` // the spawning tool call's start
-	MergedAt          *time.Time       `json:"merged_at"`  // its result's time; null while open
+	MergedAt          *time.Time       `json:"merged_at"`  // its result's time (a background agent's: its task notification); null while open
+	Background        bool             `json:"background"` // spawned with run_in_background: its tool result is only the launch ack
 	ToolCalls         map[string]int64 `json:"tool_calls"`
 	ToolErrors        int64            `json:"tool_errors"`
 	Usage             AgentUsage       `json:"usage"`
@@ -237,7 +238,10 @@ func (h *Handler) sessionDetail(w http.ResponseWriter, r *http.Request) {
 		    (SELECT count(*) FROM tool_calls t WHERE t.session_id = a.session_id AND t.agent_id = a.agent_id AND t.is_error),
 		    us.cost, us.tok, us.inp, us.outp, us.cr, us.cw, us.n,
 		    (SELECT t.started_at FROM tool_calls t WHERE t.session_id = a.session_id AND t.tool_use_id = a.spawn_tool_use_id),
-		    (SELECT t.ended_at FROM tool_calls t WHERE t.session_id = a.session_id AND t.tool_use_id = a.spawn_tool_use_id)
+		    (SELECT CASE WHEN NOT t.background THEN t.ended_at WHEN t.agent_total_ms IS NOT NULL -- the task note arrived
+		              THEN coalesce(t.note_at, t.started_at + t.agent_total_ms * interval '1 millisecond', a.ended_at) END
+		       FROM tool_calls t WHERE t.session_id = a.session_id AND t.tool_use_id = a.spawn_tool_use_id),
+		    coalesce((SELECT t.background FROM tool_calls t WHERE t.session_id = a.session_id AND t.tool_use_id = a.spawn_tool_use_id), false)
 		  FROM agents a CROSS JOIN LATERAL (SELECT coalesce(sum(u.cost_usd), 0)::float8 cost, coalesce(sum(`+tokExpr+`), 0)::bigint tok,
 		      coalesce(sum(u.input_tokens), 0)::bigint inp, coalesce(sum(u.output_tokens), 0)::bigint outp,
 		      coalesce(sum(u.cache_read_tokens), 0)::bigint cr, coalesce(sum(u.cache_write_5m_tokens + u.cache_write_1h_tokens), 0)::bigint cw, count(*) n
@@ -246,7 +250,7 @@ func (h *Handler) sessionDetail(w http.ResponseWriter, r *http.Request) {
 			var a AgentItem
 			u := &a.Usage
 			err := rows.Scan(&a.AgentID, &a.AgentType, &a.Description, &a.ParentAgentID, &a.SpawnToolUseID, &a.SpawnDepth, &a.StartedAt, &a.EndedAt,
-				&a.Finished, &a.DurationMs, &a.DurationEstimated, &a.ToolCalls, &a.ToolErrors, &u.CostUSD, &u.Tokens, &u.Input, &u.Output, &u.CacheRead, &u.CacheWrite, &u.Messages, &a.SpawnedAt, &a.MergedAt)
+				&a.Finished, &a.DurationMs, &a.DurationEstimated, &a.ToolCalls, &a.ToolErrors, &u.CostUSD, &u.Tokens, &u.Input, &u.Output, &u.CacheRead, &u.CacheWrite, &u.Messages, &a.SpawnedAt, &a.MergedAt, &a.Background)
 			det.Agents = append(det.Agents, a)
 			return err
 		}); err != nil {

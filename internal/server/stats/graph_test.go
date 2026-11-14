@@ -4,12 +4,15 @@
 package stats_test
 
 import (
+	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/usebraid/braid/internal/server/api"
 	dt "github.com/usebraid/braid/internal/server/derive/derivetest"
 	"github.com/usebraid/braid/internal/server/stats"
 )
@@ -162,8 +165,12 @@ func TestChatAtLine(t *testing.T) {
 	if st := x.get(t, "/api/v1/stats/sessions/p1/chat?at="+itoa(sub.ID), &pg); st != 200 || pg.Lines[0].ID != sub.ID || pg.Prev == nil || len(pg.Lines) != 4 {
 		t.Fatalf("%d %v", st, chatIDs(pg.Lines))
 	}
-	if x.get(t, "/api/v1/stats/sessions/s1/chat?at="+itoa(sub.ID), nil) != 404 {
-		t.Fatal("line of another session")
+	var s1 stats.ChatPage // a line of another session is ignored: the first page
+	if st := x.get(t, "/api/v1/stats/sessions/s1/chat?at="+itoa(sub.ID), &s1); st != 200 || len(s1.Lines) == 0 || s1.Prev != nil || s1.Lines[0].AgentID != "main" {
+		t.Fatalf("line of another session: %d %+v", st, s1)
+	}
+	if st := x.get(t, "/api/v1/stats/sessions/p1/chat?at=999999999", &pg); st != 200 || !slices.Equal(chatIDs(pg.Lines), chatIDs(all.Lines)) {
+		t.Fatalf("unknown line: %d %v", st, chatIDs(pg.Lines))
 	}
 }
 
@@ -204,5 +211,118 @@ func TestAgentSpawnMerge(t *testing.T) {
 	}
 	if a := by["main"]; a.SpawnedAt != nil || a.MergedAt != nil {
 		t.Fatalf("main: %+v", a)
+	}
+}
+
+func TestChatLatest(t *testing.T) {
+	x := newEnv(t)
+	d1, d2 := seed(t, x)
+	seedParallel(t, x, d1, d2)
+	var all, pg, up stats.ChatPage
+	x.get(t, "/api/v1/stats/sessions/p1/chat", &all)
+	if st := x.get(t, "/api/v1/stats/sessions/p1/chat?latest=1&limit=3", &pg); st != 200 || !slices.Equal(chatIDs(pg.Lines), chatIDs(all.Lines[5:])) || pg.Next != nil || pg.Prev == nil {
+		t.Fatalf("%d %v %+v", st, chatIDs(pg.Lines), pg)
+	}
+	x.get(t, "/api/v1/stats/sessions/p1/chat?limit=3&before="+url.QueryEscape(*pg.Prev), &up)
+	if !slices.Equal(chatIDs(up.Lines), chatIDs(all.Lines[2:5])) {
+		t.Fatalf("before: %v", chatIDs(up.Lines))
+	}
+	if x.get(t, "/api/v1/stats/sessions/p1/chat?latest=1", &pg); !slices.Equal(chatIDs(pg.Lines), chatIDs(all.Lines)) || pg.Next != nil || pg.Prev != nil {
+		t.Fatalf("whole session: %+v", pg)
+	}
+	if x.get(t, "/api/v1/stats/sessions/p1/chat?latest=2", nil) != 400 || x.get(t, "/api/v1/stats/sessions/p1/chat?latest=1&at=1", nil) != 400 {
+		t.Fatal("status")
+	}
+}
+
+func TestTimelineEventIDsUnique(t *testing.T) {
+	x := newEnv(t)
+	d1, d2 := seed(t, x)
+	seedParallel(t, x, d1, d2)
+	var pg stats.TimelinePage
+	x.get(t, "/api/v1/stats/timeline?"+rng, &pg)
+	seen := map[string]bool{}
+	for _, e := range pg.Events {
+		if e.ID == "" || seen[e.ID] {
+			t.Fatalf("id %q of %s/%s", e.ID, e.SessionID, e.Kind)
+		}
+		seen[e.ID] = true
+	}
+	if len(seen) != 8 {
+		t.Fatalf("%d events", len(seen))
+	}
+}
+
+func TestBackgroundAgentMergesAtTaskNote(t *testing.T) {
+	x := newEnv(t)
+	bg := map[string]any{"description": "bg", "run_in_background": true}
+	x.dt.Put(t, x.uid, x.dev,
+		dt.File{Rel: "-work-bg/g1.jsonl", Lines: []string{
+			dt.Prompt(dt.At(day(5)), "go"),
+			dt.Reply(dt.At(day(5)+10), "g-m1", opus, dt.Usage(1, 1, 0, 0, 0), dt.Tool("tuG1", "Agent", bg), dt.Tool("tuG2", "Agent", bg)),
+			dt.Result(dt.At(day(5)+11), "tuG1", false, map[string]any{"status": "async_launched"}),
+			dt.Result(dt.At(day(5)+11), "tuG2", false, map[string]any{"status": "async_launched"}),
+			dt.Notify(dt.At(day(5)+100), "tuG1", 90000),
+			dt.Reply(dt.At(day(5)+110), "g-m2", opus, dt.Usage(1, 1, 0, 0, 0), dt.Text("done")),
+		}},
+		dt.File{Rel: "-work-bg/g1/subagents/agent-g1.meta.json", JSON: `{"agentType":"Explore","description":"one","toolUseId":"tuG1","spawnDepth":1}`},
+		dt.File{Rel: "-work-bg/g1/subagents/agent-g1.jsonl", Lines: []string{dt.Side(dt.SidePrompt(dt.At(day(5)+12), "s"), "g1")}},
+		dt.File{Rel: "-work-bg/g1/subagents/agent-g2.meta.json", JSON: `{"agentType":"Explore","description":"two","toolUseId":"tuG2","spawnDepth":1}`},
+		dt.File{Rel: "-work-bg/g1/subagents/agent-g2.jsonl", Lines: []string{dt.Side(dt.SidePrompt(dt.At(day(5)+12), "s"), "g2")}})
+	x.dt.Derive(t, x.uid, 0)
+	at := func(sec int) time.Time { v, _ := time.Parse("2006-01-02T15:04:05.000Z", dt.At(sec)); return v }
+	var det stats.SessionDetail
+	x.get(t, "/api/v1/stats/sessions/g1", &det)
+	by := map[string]stats.AgentItem{}
+	for _, a := range det.Agents {
+		by[a.AgentID] = a
+	}
+	if a := by["g1"]; !a.Background || a.MergedAt == nil || !a.MergedAt.Equal(at(day(5)+100)) {
+		t.Fatalf("g1 merges at its task note: %+v", a)
+	}
+	if a := by["g2"]; !a.Background || a.MergedAt != nil { // launched, no note yet: still open
+		t.Fatalf("g2: %+v", a)
+	}
+	x.dt.Exec(t, `UPDATE tool_calls SET note_at = NULL WHERE tool_use_id = 'tuG1'`) // a note line without a time
+	x.get(t, "/api/v1/stats/sessions/g1", &det)
+	for _, a := range det.Agents {
+		if a.AgentID == "g1" && (a.MergedAt == nil || !a.MergedAt.Equal(at(day(5)+100))) { // spawn + 90 s
+			t.Fatalf("fallback: %+v", a)
+		}
+	}
+}
+
+func TestSameSessionIDTwoUsers(t *testing.T) {
+	x := newEnv(t)
+	cB := x.Login(t, "u2")
+	var meB api.Me
+	x.getAs(t, cB, "/api/v1/me", &meB)
+	dB := x.dt.Device(t, meB.ID, "b-laptop")
+	file := func(text string, sec int) dt.File {
+		return dt.File{Rel: "-work-same/shared-id.jsonl", Lines: []string{dt.Prompt(dt.At(day(5)+sec), text), dt.Reply(dt.At(day(5)+sec+5), "m-"+text, opus, dt.Usage(1, 1, 0, 0, 0), dt.Text("re "+text))}}
+	}
+	x.dt.Put(t, x.uid, x.dev, file("from-a", 0))
+	x.dt.Put(t, meB.ID, dB, file("from-b", 600))
+	x.dt.Derive(t, x.uid, 0)
+	x.dt.Derive(t, meB.ID, 0)
+	for _, c := range []struct {
+		c            *http.Client
+		mine, theirs string
+		at           int
+	}{{x.c, "from-a", "from-b", 0}, {cB, "from-b", "from-a", 600}} {
+		var tp stats.TimelinePage
+		if x.getAs(t, c.c, "/api/v1/stats/timeline?"+rng, &tp); len(tp.Events) != 1 || tp.Events[0].SessionID != "shared-id" ||
+			!tp.Events[0].At.Equal(time.Unix(dt.Unix(day(5)+c.at), 0)) {
+			t.Fatalf("%s timeline: %+v", c.mine, tp.Events)
+		}
+		var pg stats.ChatPage
+		x.getAs(t, c.c, "/api/v1/stats/sessions/shared-id/chat", &pg)
+		var raw []byte
+		for _, l := range pg.Lines {
+			raw = append(raw, l.Line...)
+		}
+		if len(pg.Lines) != 2 || !strings.Contains(string(raw), c.mine) || strings.Contains(string(raw), c.theirs) {
+			t.Fatalf("%s chat: %s", c.mine, raw)
+		}
 	}
 }

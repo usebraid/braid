@@ -99,3 +99,26 @@ it('shows only the ten most recently active projects but keeps a selected older 
   expect(within(nav).getByRole('button', { name: 'p0, 1 session' })).toHaveAttribute('aria-pressed', 'true')
   expect(within(nav).getByRole('button', { name: 'All projects, 12 sessions' })).toBeInTheDocument()
 })
+
+it('orders projects by instant, whatever their fractional digits', async () => {
+  const { get } = await import('../api/client')
+  const projects = [
+    { path: '/w/x', name: 'x', sessions: 1, last_active: '2026-11-01T00:00:00Z' },
+    { path: '/w/y', name: 'y', sessions: 1, last_active: '2026-11-01T00:00:00.5Z' },
+    { path: '/w/z', name: 'z', sessions: 1, last_active: '2026-10-31T23:59:59.999999Z' },
+  ]
+  vi.mocked(get).mockImplementation((async () => ({ projects, models: [], skills: [] })) as never)
+  renderApp(<Shell />)
+  const nav = screen.getByRole('navigation', { name: 'Projects' })
+  await within(nav).findByRole('button', { name: 'x, 1 session' })
+  expect(
+    within(nav)
+      .getAllByRole('button')
+      .map((b) => b.textContent),
+  ).toEqual([
+    expect.stringContaining('All projects'),
+    expect.stringContaining('y'),
+    expect.stringContaining('x'),
+    expect.stringContaining('z'),
+  ])
+})

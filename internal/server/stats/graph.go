@@ -5,6 +5,7 @@ package stats
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"slices"
 	"strconv"
@@ -21,6 +22,7 @@ import (
 
 // TimelineEvent is one start or resume of a session.
 type TimelineEvent struct {
+	ID          string    `json:"id"` // opaque and unique: the event's cursor key
 	SessionID   string    `json:"session_id"`
 	Kind        string    `json:"kind"`
 	At          time.Time `json:"at"`
@@ -71,7 +73,6 @@ func (h *Handler) timeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := TimelinePage{Events: []TimelineEvent{}}
-	var keys []string
 	err = h.db.WithUser(r.Context(), p.UserID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(r.Context(), `SELECT e.session_id, e.kind, e.at, e.device_id::text, e.model, coalesce(s.project_path, ''), coalesce(pr.name, ''),
 		    coalesce(s.title, ''), coalesce(s.ended_at, 'epoch'::timestamptz), (SELECT count(*) FROM failures x WHERE x.session_id = s.session_id),
@@ -94,8 +95,9 @@ func (h *Handler) timeline(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			ev.IsLive = ended.After(h.now().Add(-2 * time.Minute))
+			key := strconv.FormatInt(ev.At.UnixMicro(), 10) + "|" + ev.Kind + "|" + strconv.FormatInt(file, 10) + "|" + strconv.FormatInt(off, 10) + "|" + ev.SessionID
+			ev.ID = base64.RawURLEncoding.EncodeToString([]byte(key))
 			page.Events = append(page.Events, ev)
-			keys = append(keys, strconv.FormatInt(ev.At.UnixMicro(), 10)+"|"+ev.Kind+"|"+strconv.FormatInt(file, 10)+"|"+strconv.FormatInt(off, 10)+"|"+ev.SessionID)
 		}
 		return rows.Err()
 	})
@@ -105,8 +107,7 @@ func (h *Handler) timeline(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(page.Events) > limit {
 		page.Events = page.Events[:limit]
-		c := base64.RawURLEncoding.EncodeToString([]byte(keys[limit-1]))
-		page.Next = &c
+		page.Next = &page.Events[limit-1].ID
 	}
 	httpx.WriteJSON(w, http.StatusOK, page)
 }
@@ -154,7 +155,7 @@ func (h *Handler) sessionChat(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, err := limitParam(r, 200, 500)
 	n := 0
-	for _, k := range []string{"after", "before", "at"} {
+	for _, k := range []string{"after", "before", "at", "latest"} {
 		if q.Get(k) != "" {
 			n++
 		}
@@ -174,6 +175,12 @@ func (h *Handler) sessionChat(w http.ResponseWriter, r *http.Request) {
 			err = errInvalid
 		}
 	}
+	if s := q.Get("latest"); err == nil && s != "" {
+		mode = "latest"
+		if s != "1" {
+			err = errInvalid
+		}
+	}
 	if err != nil || n > 1 {
 		fail(w, r, errInvalid)
 		return
@@ -190,7 +197,10 @@ func (h *Handler) sessionChat(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		if mode == "at" { // start at that line: its time is the cursor, inclusive
-			if err := tx.QueryRow(ctx, `SELECT `+tsText+` FROM line_order lo WHERE session_id = $1 AND raw_line_id = $2`, session, curID).Scan(&curTs); err != nil {
+			err := tx.QueryRow(ctx, `SELECT `+tsText+` FROM line_order lo WHERE session_id = $1 AND raw_line_id = $2`, session, curID).Scan(&curTs)
+			if errors.Is(err, pgx.ErrNoRows) { // a stale or foreign deep link still opens the chat, at its start
+				mode = ""
+			} else if err != nil {
 				return err
 			}
 		}
@@ -200,11 +210,13 @@ func (h *Handler) sessionChat(w http.ResponseWriter, r *http.Request) {
 			cond = "(lo.ts, lo.raw_line_id) > ($2::timestamptz, $3::bigint)"
 		case "before":
 			cond, order = "(lo.ts, lo.raw_line_id) < ($2::timestamptz, $3::bigint)", "lo.ts DESC, lo.raw_line_id DESC"
+		case "latest":
+			order = "lo.ts DESC, lo.raw_line_id DESC"
 		case "at":
 			cond = "(lo.ts, lo.raw_line_id) >= ($2::timestamptz, $3::bigint)"
 		}
 		args := []any{session, nil, nil, limit + 1}
-		if mode != "" {
+		if mode != "" && mode != "latest" {
 			args[1], args[2] = curTs, curID
 		}
 		rows, err := tx.Query(ctx, `SELECT r.id, lo.agent_id, `+tsText+`, lo.ts, r."offset", octet_length(r.line),
@@ -242,7 +254,8 @@ func (h *Handler) sessionChat(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		rows.Close()
-		if mode == "before" {
+		backward := mode == "before" || mode == "latest"
+		if backward {
 			slices.Reverse(page.Lines)
 			slices.Reverse(tss)
 		}
@@ -250,13 +263,13 @@ func (h *Handler) sessionChat(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 		last := len(page.Lines) - 1
-		if mode == "before" || more {
+		if mode == "before" || (more && !backward) { // backward, more means earlier lines; latest has no later ones
 			page.Next = chatCursor(tss[last], page.Lines[last].ID)
 		}
 		var earlier bool
-		if mode == "before" && more {
+		if backward && more {
 			earlier = true
-		} else if mode != "before" {
+		} else if !backward {
 			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM line_order lo WHERE lo.session_id = $1 AND (lo.ts, lo.raw_line_id) < ($2::timestamptz, $3::bigint))`,
 				session, tss[0], page.Lines[0].ID).Scan(&earlier); err != nil {
 				return err

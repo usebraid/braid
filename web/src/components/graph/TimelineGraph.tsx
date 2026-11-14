@@ -26,7 +26,7 @@ export function TimelineGraph() {
   const names = new Map((Array.isArray(devs.data) ? devs.data : []).map((d) => [d.id, d.name]))
   const list = useInfinite<TimelineEvent>({
     key: JSON.stringify(query),
-    id: (e) => `${e.session_id}:${e.kind}:${e.at}`,
+    id: (e) => e.id,
     load: async (cursor, signal) => {
       const p = await statsTimeline({ ...query, cursor, limit: 50 }, signal)
       return { items: p.events, next: p.next }
@@ -49,7 +49,7 @@ export function TimelineGraph() {
               const dev = e.device_id ? (names.get(e.device_id) ?? e.device_id.slice(0, 8)) : null
               const meta = [e.project_name, dev, e.model ? modelName(e.model) : null].filter(Boolean).join(' · ')
               return (
-                <Fragment key={`${e.session_id}:${e.kind}:${e.at}`}>
+                <Fragment key={e.id}>
                   {sep ? <li className="tl-day">{dayLabel(d)}</li> : null}
                   <li>
                     <Link className="tl-row" to={`/sessions/${e.session_id}`}>

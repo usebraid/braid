@@ -78,4 +78,27 @@ describe('buildRows', () => {
     expect(r[0]).toMatchObject({ label: expect.stringContaining('2 steps') })
     expect(r[1]).toMatchObject({ summary: '2 steps' })
   })
+  it('merges a background agent at its task notification and keeps the launch ack an entry', () => {
+    const note = (id: number, toolId: string): ChatLine => ({
+      id,
+      agent_id: 'main',
+      ts: null,
+      offset: id,
+      line: L({
+        type: 'queue-operation',
+        operation: 'enqueue',
+        content: `<task-notification><tool-use-id>${toolId}</tool-use-id><duration_ms>9</duration_ms></task-notification>`,
+      }),
+    })
+    const bg = { ...sub(null), background: true } as AgentItem
+    const launched = [use(1, 'main', 't1'), res(2, 'main', 't1'), say(3, 'a')]
+    const open = buildRows(launched, [bg], lanes, new Set())
+    expect(open.map((x) => x.kind)).toEqual(['branch', 'entry', 'entry'])
+    expect(open[0]).toMatchObject({ open: true })
+    expect(open[1]).toMatchObject({ kind: 'entry', entry: { kind: 'tool_result' } })
+    const done = buildRows([...launched, say(4, 'main'), note(5, 't1')], [{ ...bg, merged_at: 'x' }], lanes, new Set())
+    expect(done.map((x) => x.kind)).toEqual(['branch', 'entry', 'entry', 'entry', 'merge'])
+    expect(done[0]).toMatchObject({ open: false })
+    expect(done[4]).toMatchObject({ lane: 1, into: 0, key: 'merge:5:0' })
+  })
 })

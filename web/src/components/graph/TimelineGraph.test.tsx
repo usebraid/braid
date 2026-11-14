@@ -8,6 +8,7 @@ import { renderApp } from '../../test/render'
 import { Timeline } from '../../views/Timeline'
 
 const ev = (id: string, kind: string, at: string, over = {}) => ({
+  id: `${id}|${kind}|${at}`,
   session_id: id,
   kind,
   at,
@@ -76,4 +77,24 @@ it.each([
   renderApp(<Timeline />, { me: { time_zone } })
   await screen.findByRole('link', { name: /Title s1/ })
   expect(document.querySelectorAll('.tl-day')).toHaveLength(days)
+})
+
+it('keeps two events of one session at the same instant apart by their id', async () => {
+  const base = get.getMockImplementation()
+  if (!base) throw new Error('no mock')
+  const at = '2026-11-13T09:00:00Z'
+  get.mockImplementation(async (path: string, q?: Record<string, string>) =>
+    path.endsWith('/timeline')
+      ? {
+          events: [ev('s9', 'resume', at, { id: 'e1' }), ev('s9', 'resume', at, { id: 'e2', device_id: 'd2' })],
+          next: null,
+        }
+      : base(path, q),
+  )
+  try {
+    renderApp(<Timeline />)
+    expect(await screen.findAllByRole('link', { name: /Title s9/ })).toHaveLength(2)
+  } finally {
+    get.mockImplementation(base)
+  }
 })

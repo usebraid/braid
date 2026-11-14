@@ -150,3 +150,12 @@ func TestGraphTablesEqualReindex(t *testing.T) {
 		}
 	}
 }
+
+func TestEventsSkipSyntheticModel(t *testing.T) {
+	for _, batch := range []int{0, 1} {
+		got := events(t, batch, dt.Prompt(dt.At(0), "a"), dt.Reply(dt.At(5), "m0", "<synthetic>", gu, dt.Text("API error")), dt.Reply(dt.At(9), "m1", opus, gu))
+		if want := "start@10:00/claude-opus-5-5"; got != want {
+			t.Errorf("batch %d: %s want %s", batch, got, want)
+		}
+	}
+}

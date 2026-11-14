@@ -767,9 +767,11 @@ export interface components {
             spawned_at: string | null;
             /**
              * Format: date-time
-             * @description Time of that call's result; null while open.
+             * @description Time of that call's result (a background agent's: its task notification); null while open.
              */
             merged_at: string | null;
+            /** @description Spawned with run_in_background; its tool result is only the launch ack. */
+            background: boolean;
             finished: boolean | null;
             /** Format: int64 */
             duration_ms: number;
@@ -829,6 +831,8 @@ export interface components {
             prev: string | null;
         };
         TimelineEvent: {
+            /** @description Opaque and unique per event. */
+            id: string;
             session_id: string;
             /** @enum {string} */
             kind: "start" | "resume";
@@ -1595,12 +1599,14 @@ export interface operations {
     statsSessionChat: {
         parameters: {
             query?: {
-                /** @description Cursor (next of a page); lines after it. Not combinable with before or at. */
+                /** @description Cursor (next of a page, or base64url without padding of `<line ts as RFC 3339, or -infinity>|<line id>`); lines after it. Not combinable with before, at or latest. */
                 after?: string;
                 /** @description Cursor (prev of a page); the newest lines before it */
                 before?: string;
-                /** @description A raw line id; the page starts at that line. */
+                /** @description A raw line id; the page starts at that line. An id not in the session is ignored (the first page). */
                 at?: number;
+                /** @description 1: the newest page; prev is set when earlier lines exist, next is null. */
+                latest?: 1;
                 limit?: number;
             };
             header?: never;

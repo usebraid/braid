@@ -79,6 +79,14 @@ export function entriesOf(item: LineItem): Entry[] {
     case 'system':
       add('system', str(l.subtype))
       break
+    case 'queue-operation': {
+      // a background agent reports back here; the id ties it to the spawning tool call
+      const id = /<tool-use-id>([^<]*)<\/tool-use-id>/.exec(str(l.content))?.[1]
+      if (l.operation === 'enqueue' && id && str(l.content).includes('<task-notification>'))
+        add('event', 'task notification', { tool: { id, name: '' } })
+      else add('event', 'queue-operation')
+      break
+    }
     default:
       add('event', str(l.type).slice(0, 60))
   }

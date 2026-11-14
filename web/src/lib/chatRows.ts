@@ -42,9 +42,11 @@ export function buildRows(
   const steps = new Map<string, number>()
   for (const { l, entries } of perLine) steps.set(l.agent_id, (steps.get(l.agent_id) ?? 0) + entries.length)
 
+  // A background agent returns with its task notification; its tool result is only the launch ack.
+  const returns = (e: Entry, a: AgentItem | undefined) => e.kind === (a?.background ? 'event' : 'tool_result')
   const resolved = new Set<string>()
   for (const { entries } of perLine)
-    for (const e of entries) if (e.kind === 'tool_result' && e.tool) resolved.add(e.tool.id)
+    for (const e of entries) if (e.tool && returns(e, bySpawn.get(e.tool.id))) resolved.add(e.tool.id)
   const stepsOf = (id: string) => {
     const n = steps.get(id) ?? 0
     return `${n} ${n === 1 ? 'step' : 'steps'}`
@@ -68,7 +70,7 @@ export function buildRows(
           at: entry.at ?? l.ts,
           open: !agent.merged_at && !resolved.has(entry.tool?.id ?? ''),
         })
-      } else if (agent && entry.kind === 'tool_result' && l.agent_id === parentId) {
+      } else if (agent && returns(entry, agent) && l.agent_id === parentId) {
         rows.push({
           kind: 'merge',
           key: `merge:${entry.key}`,

@@ -15,6 +15,7 @@ const agent = (id: string, parent: string | null, over: Partial<AgentItem> = {})
   spawn_tool_use_id: null,
   spawned_at: null,
   merged_at: null,
+  background: false,
   spawn_depth: 0,
   started_at: null,
   ended_at: null,

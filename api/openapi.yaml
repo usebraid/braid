@@ -285,9 +285,10 @@ paths:
       summary: Lines of all agents of a session in time order
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - { name: after, in: query, description: Cursor (next of a page); lines after it. Not combinable with before or at., schema: { type: string } }
+        - { name: after, in: query, description: "Cursor (next of a page, or base64url without padding of `<line ts as RFC 3339, or -infinity>|<line id>`); lines after it. Not combinable with before, at or latest.", schema: { type: string } }
         - { name: before, in: query, description: Cursor (prev of a page); the newest lines before it, ascending., schema: { type: string } }
-        - { name: at, in: query, description: A raw line id; the page starts at that line., schema: { type: integer, format: int64, minimum: 1 } }
+        - { name: at, in: query, description: A raw line id; the page starts at that line. An id not in the session is ignored (the first page)., schema: { type: integer, format: int64, minimum: 1 } }
+        - { name: latest, in: query, description: "1: the newest page; prev is set when earlier lines exist, next is null.", schema: { type: integer, enum: [1] } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 200 } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ChatPage" } } } }
@@ -708,7 +709,7 @@ components:
         messages: { type: integer, format: int64 }
     AgentItem:
       type: object
-      required: [agent_id, agent_type, description, parent_agent_id, spawn_tool_use_id, spawn_depth, started_at, ended_at, spawned_at, merged_at, finished, duration_ms, duration_estimated, tool_calls, tool_errors, usage]
+      required: [agent_id, agent_type, description, parent_agent_id, spawn_tool_use_id, spawn_depth, started_at, ended_at, spawned_at, merged_at, background, finished, duration_ms, duration_estimated, tool_calls, tool_errors, usage]
       properties:
         agent_id: { type: string }
         agent_type: { type: string }
@@ -719,7 +720,8 @@ components:
         started_at: { type: [string, "null"], format: date-time }
         ended_at: { type: [string, "null"], format: date-time }
         spawned_at: { type: [string, "null"], format: date-time, description: Start of the tool call that spawned the agent. }
-        merged_at: { type: [string, "null"], format: date-time, description: Time of that call's result; null while open. }
+        merged_at: { type: [string, "null"], format: date-time, description: "Time of that call's result (a background agent's: its task notification); null while open." }
+        background: { type: boolean, description: Spawned with run_in_background; its tool result is only the launch ack. }
         finished: { type: [boolean, "null"] }
         duration_ms: { type: integer, format: int64 }
         duration_estimated: { type: boolean }
@@ -772,8 +774,9 @@ components:
         prev: { type: [string, "null"], description: Id of the first returned line when an earlier line of the agent exists. }
     TimelineEvent:
       type: object
-      required: [session_id, kind, at, device_id, model, project, project_name, title, is_live, failures]
+      required: [id, session_id, kind, at, device_id, model, project, project_name, title, is_live, failures]
       properties:
+        id: { type: string, description: Opaque and unique per event. }
         session_id: { type: string }
         kind: { type: string, enum: [start, resume] }
         at: { type: string, format: date-time }

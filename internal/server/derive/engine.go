@@ -243,11 +243,12 @@ func (d *Deriver) chunkN(ctx context.Context, userID string, f pendingFile, maxL
 			}
 			// the line timestamp carried across the batch border: that of the file's last line so far
 			var carry *time.Time
-			if err := tx.QueryRow(ctx, `SELECT nullif(o.ts, '-infinity') FROM raw_lines l JOIN line_order o ON o.user_id = l.user_id AND o.raw_line_id = l.id
-			  WHERE l.source_file_id = $1 AND l.id <= $2 ORDER BY l.id DESC LIMIT 1`, f.id, lastLine).Scan(&carry); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			err = tx.QueryRow(ctx, `SELECT nullif(o.ts, '-infinity') FROM raw_lines l JOIN line_order o ON o.user_id = l.user_id AND o.raw_line_id = l.id
+			  WHERE l.source_file_id = $1 AND l.id <= $2 ORDER BY l.id DESC LIMIT 1`, f.id, lastLine).Scan(&carry)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
-			b.lineTS, b.lineSeeded = carry, carry != nil
+			b.lineTS, b.lineSeeded, b.lineOrphans = carry, carry != nil, err == nil && carry == nil
 		}
 		var last int64
 		if f.snapshot {

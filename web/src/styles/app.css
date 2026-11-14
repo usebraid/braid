@@ -1620,14 +1620,25 @@ td.empty {
 
 /* Timeline graph: one line, a dot per start (filled) or resume (ring) */
 .tl-graph {
+  position: relative;
   list-style: none;
   margin: 0;
   padding: 8px 16px;
 }
+/* one line through all rows and day separators: padding + time column + half the dot column */
+.tl-graph::before {
+  content: "";
+  position: absolute;
+  left: calc(16px + 48px + 13px);
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--line2);
+}
 .tl-day {
   color: var(--faint);
   font-size: var(--t-xs);
-  padding: 14px 0 4px 0;
+  padding: 14px 0 4px 76px;
 }
 .tl-row {
   display: grid;
@@ -1646,15 +1657,6 @@ td.empty {
 }
 .tl-dot {
   position: relative;
-}
-.tl-dot::before {
-  content: "";
-  position: absolute;
-  left: 13px;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--line2);
 }
 .tl-dot::after {
   content: "";
