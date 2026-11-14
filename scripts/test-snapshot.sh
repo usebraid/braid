@@ -16,7 +16,7 @@ expect 'braid-server_*_linux_*.tar.gz' 2
 expect 'braid_*.sbom.json' 6
 expect 'braid-server_*.sbom.json' 2
 [ -f "$dist/checksums.txt" ] || err "checksums.txt missing"
-[ -f "$dist/braid.rb" ] || [ -f "$dist/homebrew/braid.rb" ] || err "braid.rb missing"
+[ -f "$dist/homebrew/Formula/braid.rb" ] || err "braid.rb missing"
 [ "$fail" = 0 ] || exit 1
 
 (cd "$dist" && if command -v sha256sum >/dev/null; then sha256sum -c checksums.txt; else shasum -a 256 -c checksums.txt; fi >/dev/null) || err "checksums.txt does not verify"
