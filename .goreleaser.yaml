@@ -59,6 +59,16 @@ brews:
     test: system "#{bin}/braid", "version"
     caveats: |
       Next: braid login <server-url>, then braid install
+scoops:
+  - ids: [braid]
+    name: braid
+    # Same token as the tap; without it the manifest is only written to dist/.
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}auto{{ else }}true{{ end }}'
+    repository: { owner: usebraid, name: scoop-bucket, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
+    directory: bucket
+    homepage: https://usebraid.dev
+    description: Sync Claude Code sessions from all your devices into one Braid server
+    license: AGPL-3.0-or-later
 changelog: { disable: true }       # release-please writes the notes
 release: { mode: append, github: { owner: usebraid, name: braid } }
 snapshot: { version_template: "{{ incpatch .Version }}-snapshot" }

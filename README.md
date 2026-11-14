@@ -33,7 +33,7 @@ Daemon (macOS and Linux), with the install script that checks a SHA-256 sum befo
 curl -fsSL https://get.usebraid.dev | sh
 ```
 
-Windows: download the zip from the release page and follow the [manual steps](https://usebraid.dev/docs/daemon/#windows).
+Windows, with [Scoop](https://scoop.sh): `scoop bucket add usebraid https://github.com/usebraid/scoop-bucket` and `scoop install braid` ([details](https://usebraid.dev/docs/daemon/#windows)).
 
 Server: Docker Compose, see [Quick start](https://usebraid.dev/docs/quick-start/). More in the [docs](https://usebraid.dev/docs/): external Postgres, OIDC providers, reverse proxy, operations.
 
