@@ -108,6 +108,33 @@ it('renders prompt, tool call, branch, merge with duration and result summary, a
   expect(screen.getByRole('button', { name: 'Expand subagents' })).toBeInTheDocument()
 })
 
+it('hides bookkeeping rows and ends an open subagent in a stub after its last row, or on its branch row', async () => {
+  const open = detail()
+  open.agents = [open.agents[0], { ...open.agents[1], merged_at: null }] as AgentItem[]
+  const noise = [
+    L(8, 'main', 1, { type: 'attachment', attachment: { type: 'hook' } }),
+    L(9, 'main', 1, { type: 'system', subtype: 'turn_duration', durationMs: 5 }),
+  ]
+  get.mockResolvedValueOnce({ lines: [...LINES.slice(0, 3), ...noise, LINES[4]], next: null, prev: null })
+  const first = renderApp(<SessionGraph detail={open} />)
+  await screen.findByText('all done')
+  const rows = () => [...document.querySelectorAll('ol.grows > li')]
+  expect(rows().map((li) => li.className)).toEqual([
+    'grow grow--prompt',
+    'grow grow--branch',
+    'grow grow--reply grow--ends',
+    'grow grow--reply',
+  ])
+  const lane1 = (li: Element) => [...li.querySelectorAll('line')].filter((l) => l.getAttribute('x1') === '24')
+  const [, branch, sub, after] = rows() as [Element, Element, Element, Element]
+  expect(branch.querySelector('path')).not.toBeNull() // the curve leaves the main line
+  expect(lane1(sub).map((l) => l.getAttribute('class'))).toEqual([null, 'gstub'])
+  expect(lane1(after)).toEqual([])
+  await userEvent.click(screen.getByRole('button', { name: /Subagent Explore/ }))
+  expect(lane1(rows()[1] as Element).map((l) => l.getAttribute('class'))).toEqual(['gstub'])
+  first.unmount()
+})
+
 it('marks the focused row', async () => {
   renderApp(<SessionGraph detail={detail()} focusLine={3} />)
   const row = (await screen.findByText('grepping inside the subagent')).closest('li')

@@ -198,6 +198,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
   )
   const rows = useMemo(() => buildRows(lines, agents, lanes, collapsed), [lines, agents, lanes, collapsed])
   const lineTs = useMemo(() => new Map(lines.map((l) => [l.id, l.ts])), [lines])
+  const atOf = (r: Row) => (r.kind === 'entry' ? (r.entry.at ?? lineTs.get(r.entry.lineId) ?? null) : r.at)
   const subs = useMemo(() => agents.filter((a) => a.agent_id !== 'main').map((a) => a.agent_id), [agents])
 
   // A deep link opens the branch it points into (and the branches above it).
@@ -260,8 +261,9 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
         continue
       if (a.merged_at && !(Date.parse(a.merged_at) > t0)) continue
       running.set(a.agent_id, lanes.get(a.agent_id) ?? 0)
-      const end = lastEntry.get(a.agent_id)
-      if (!a.merged_at && end !== undefined) ends.set(end, [...(ends.get(end) ?? []), a.agent_id])
+      // an open agent from above ends at its last loaded row, or at once when none is loaded: never a lane to the bottom
+      const end = lastEntry.get(a.agent_id) ?? 0
+      if (!a.merged_at) ends.set(end, [...(ends.get(end) ?? []), a.agent_id])
     }
     let lastDot = -1
     rows.forEach((r, i) => {
@@ -271,9 +273,12 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
       const through = [...running].filter(([a]) => r.kind !== 'merge' || a !== r.agentId).map(([, l]) => l)
       if (r.kind === 'branch') running.set(r.agentId, r.lane)
       if (r.kind === 'merge') running.delete(r.agentId)
+      const ended = (ends.get(i) ?? []).map((a) => running.get(a) ?? r.lane)
       for (const a of ends.get(i) ?? []) running.delete(a)
+      const still = new Set(running.values())
       return {
         through,
+        stubs: ended.filter((l) => !still.has(l)),
         last: i === rows.length - 1 && running.size === 0,
         pulse: session.is_live && next === null && i === lastDot,
       }
@@ -341,14 +346,28 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
       <ol className="grows" ref={root}>
         {rows.map((r, i) => {
           const c = cells[i]
-          const at = r.kind === 'entry' ? (r.entry.at ?? lineTs.get(r.entry.lineId) ?? null) : r.at
+          const at = atOf(r)
+          const prevAt = i > 0 ? atOf(rows[i - 1] as Row) : null
+          // the time only where it changes or a prompt starts a turn, so the column stays quiet
+          const showTime = hhmm(at) !== hhmm(prevAt) || (r.kind === 'entry' && r.entry.kind === 'prompt')
           const focus = r.key === focusKey
           return (
-            <li key={r.key} className={`grow ${r.kind}`} tabIndex={-1} aria-current={focus ? 'true' : undefined}>
+            <li
+              key={r.key}
+              className={`grow grow--${r.kind === 'entry' ? r.entry.kind : r.kind}${c?.stubs.length ? ' grow--ends' : ''}`}
+              tabIndex={-1}
+              aria-current={focus ? 'true' : undefined}
+            >
               <time dateTime={at ?? undefined} title={at ? fmtDateTime(at, tz) : undefined}>
-                {hhmm(at)}
+                {showTime ? hhmm(at) : ''}
               </time>
-              <GraphCell row={r} through={c?.through ?? []} last={c?.last ?? false} pulse={c?.pulse ?? false} />
+              <GraphCell
+                row={r}
+                through={c?.through ?? []}
+                stubs={c?.stubs ?? []}
+                last={c?.last ?? false}
+                pulse={c?.pulse ?? false}
+              />
               <div className="gbody">{render(r)}</div>
             </li>
           )

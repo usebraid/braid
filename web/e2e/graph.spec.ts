@@ -23,8 +23,8 @@ test.describe('graph views as alice', () => {
   test('session graph: branch and merge rows, collapsing, deep link into a subagent', async ({ page }) => {
     await page.goto(`/sessions/g1?${RANGE}`)
     const chat = page.getByRole('region', { name: 'Session chat' })
-    await expect(chat.locator('.grow.branch').first()).toBeVisible()
-    await expect(chat.locator('.grow.merge').first()).toBeVisible()
+    await expect(chat.locator('.grow--branch').first()).toBeVisible()
+    await expect(chat.locator('.grow--merge').first()).toBeVisible()
     await expect(chat.getByText('sub task')).toBeVisible()
 
     await chat.getByRole('button', { name: 'Collapse subagents' }).click()

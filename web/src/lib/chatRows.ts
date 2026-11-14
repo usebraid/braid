@@ -28,6 +28,18 @@ export type Row =
 
 const SUMMARY_MAX = 200
 
+// The graph shows the conversation; bookkeeping lines (events, system subtypes) stay in the List view.
+const shown = (e: Entry) => (e.kind !== 'event' && e.kind !== 'system') || e.isError === true
+
+// An API error line has no content blocks, so transcript.ts gives it no entry; the graph shows it as a failure.
+function withFailure(l: ChatLine, entries: Entry[]): Entry[] {
+  const m = l.line as { isApiErrorMessage?: unknown; error?: unknown; timestamp?: unknown } | null
+  if (entries.length > 0 || typeof m !== 'object' || m === null || m.isApiErrorMessage !== true) return entries
+  const at = typeof m.timestamp === 'string' ? m.timestamp : null
+  const text = `API error${typeof m.error === 'string' ? `: ${m.error}` : ''}`
+  return [{ key: `${l.id}:err`, lineId: l.id, at, kind: 'system', text, truncated: false, isError: true }]
+}
+
 export function buildRows(
   lines: ChatLine[],
   agents: AgentItem[],
@@ -38,9 +50,10 @@ export function buildRows(
   const bySpawn = new Map<string, AgentItem>()
   for (const a of agents) if (a.spawn_tool_use_id) bySpawn.set(a.spawn_tool_use_id, a)
 
-  const perLine = lines.map((l) => ({ l, entries: entriesOf(l) }))
+  const perLine = lines.map((l) => ({ l, entries: withFailure(l, entriesOf(l)) }))
   const steps = new Map<string, number>()
-  for (const { l, entries } of perLine) steps.set(l.agent_id, (steps.get(l.agent_id) ?? 0) + entries.length)
+  for (const { l, entries } of perLine)
+    steps.set(l.agent_id, (steps.get(l.agent_id) ?? 0) + entries.filter(shown).length)
 
   // A background agent returns with its task notification; its tool result is only the launch ack.
   const returns = (e: Entry, a: AgentItem | undefined) => e.kind === (a?.background ? 'event' : 'tool_result')
@@ -80,7 +93,7 @@ export function buildRows(
           at: entry.at ?? l.ts,
           summary: collapsed.has(agent.agent_id) ? stepsOf(agent.agent_id) : entry.text.slice(0, SUMMARY_MAX),
         })
-      } else {
+      } else if (shown(entry)) {
         rows.push({ kind: 'entry', key: entry.key, lane: lane(l.agent_id), agentId: l.agent_id, entry })
       }
     }

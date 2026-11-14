@@ -6,28 +6,27 @@ import { Pill } from '../ui'
 
 // Text only, never markup; same rule as the transcript panel.
 export function ChatEntry({ e, tag }: { e: Entry; tag?: string }) {
+  const lead = tag ? <span className="gtag">{tag}</span> : null
+  const more = e.truncated ? '\n… truncated' : ''
   const text = (
     <pre className="entry-text">
       {e.text}
-      {e.truncated ? '\n… truncated' : ''}
+      {more}
     </pre>
   )
-  const lead = tag ? <span className="gtag">{tag}</span> : null
+  // prompts and replies read as prose in the body font, keeping their line breaks
+  const prose = (
+    <p className="g-text">
+      {lead}
+      {e.text}
+      {more}
+    </p>
+  )
   switch (e.kind) {
     case 'prompt':
-      return (
-        <div className="g-prompt">
-          {lead}
-          {text}
-        </div>
-      )
+      return <div className="g-prompt">{prose}</div>
     case 'reply':
-      return (
-        <div className="g-reply">
-          {lead}
-          {text}
-        </div>
-      )
+      return <div className="g-reply">{prose}</div>
     case 'tool_call':
       return (
         <div className="g-tool">
@@ -52,7 +51,7 @@ export function ChatEntry({ e, tag }: { e: Entry; tag?: string }) {
       return (
         <div className="g-note">
           {lead}
-          {e.text}
+          {e.isError ? <Pill kind="bad">failed</Pill> : null} {e.text}
         </div>
       )
   }

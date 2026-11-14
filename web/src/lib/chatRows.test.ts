@@ -101,4 +101,26 @@ describe('buildRows', () => {
     expect(done[0]).toMatchObject({ open: false })
     expect(done[4]).toMatchObject({ lane: 1, into: 0, key: 'merge:5:0' })
   })
+  it('hides bookkeeping lines and shows an API error as a failure', () => {
+    const at = (id: number, line: unknown): ChatLine => ({ id, agent_id: 'main', ts: null, offset: id, line: L(line) })
+    const r = buildRows(
+      [
+        at(1, { type: 'attachment', attachment: { type: 'hook' } }),
+        at(2, { type: 'system', subtype: 'turn_duration' }),
+        at(3, { type: 'system', subtype: 'stop_hook_summary' }),
+        at(4, { type: 'queue-operation', operation: 'dequeue' }),
+        at(5, { type: 'bridge-session' }),
+        at(6, { type: 'file-history-snapshot' }),
+        say(7, 'main'),
+        at(8, { type: 'assistant', isApiErrorMessage: true, error: 'rate_limit', message: { content: [] } }),
+      ],
+      [],
+      lanes,
+      new Set(),
+    )
+    expect(r.map((x) => (x.kind === 'entry' ? [x.entry.kind, x.entry.text] : x.kind))).toEqual([
+      ['reply', 'hi'],
+      ['system', 'API error: rate_limit'],
+    ])
+  })
 })

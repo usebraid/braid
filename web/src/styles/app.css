@@ -1519,27 +1519,37 @@ td.empty {
   padding: 0;
 }
 .grow {
+  position: relative; /* the containing block of the absolutely placed graph cell */
   display: grid;
   grid-template-columns: 44px 90px minmax(0, 1fr);
-  align-items: stretch;
-  min-height: 30px;
+  align-items: start;
+  min-height: 24px;
   content-visibility: auto;
-  contain-intrinsic-size: auto 40px;
+  contain-intrinsic-size: auto 24px;
   font-size: var(--t-xs);
-  border-radius: 6px;
+  line-height: 1.5;
 }
 .grow[aria-current="true"] {
-  outline: 2px solid var(--focus);
+  /* inset, so the outline does not cover the lanes of the rows around it */
+  box-shadow: inset 0 0 0 2px var(--focus);
+  border-radius: 6px;
+}
+.grow:focus {
+  outline-offset: -2px;
 }
 .grow time {
+  grid-column: 1;
   color: var(--faint);
   font-family: var(--font-mono);
-  padding-top: 6px;
+  padding-top: 3px;
 }
+/* An absolute grid child fills its grid area, so the svg is exactly as tall as the row and lanes run on unbroken */
 .gcell {
-  display: block;
+  position: absolute;
+  grid-column: 2;
+  top: 0;
   height: 100%;
-  min-height: 30px;
+  overflow: visible;
 }
 .gcell line,
 .gcell path {
@@ -1547,6 +1557,10 @@ td.empty {
 }
 .gdot {
   stroke-width: 1.5;
+}
+.gstub {
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
 }
 .gdot.pulse {
   animation: gpulse 1.6s ease-in-out infinite;
@@ -1557,17 +1571,30 @@ td.empty {
   }
 }
 .gbody {
-  padding: 4px 0;
+  grid-column: 3;
+  padding: 3px 0;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 .gbody .entry-text {
   margin: 0;
 }
+.g-text {
+  margin: 0;
+  white-space: pre-wrap;
+}
 .g-prompt {
-  background: var(--segOn);
+  /* tinted like the prompt dot, visible on both themes */
+  background: color-mix(in srgb, var(--focus) 14%, transparent);
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 3px 10px; /* with the row padding below, the first line centres on the dot */
+}
+.grow--prompt .gbody {
+  padding: 0 0 2px;
+}
+/* room for the stub of an open lane: rows paint-contain (content-visibility), so it must fit inside the row */
+.grow--ends .gbody {
+  padding-bottom: 20px;
 }
 .g-tool,
 .g-note,
@@ -1605,8 +1632,13 @@ td.empty {
   color: var(--muted);
 }
 .g-branch .btn {
+  /* a 24px target that takes only one text line of the row */
+  height: 24px;
+  min-width: 24px;
   padding: 0 6px;
-  margin-right: 6px;
+  margin: -3px 4px -3px -6px;
+  vertical-align: top;
+  font-size: inherit;
 }
 @media (max-width: 640px) {
   .grow {
