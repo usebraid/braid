@@ -8,6 +8,7 @@ import { loginAs, RANGE } from './helpers'
 const pages = [
   '/',
   '/timeline',
+  '/timeline?view=list',
   '/live',
   '/failures',
   '/search',
@@ -17,6 +18,7 @@ const pages = [
   '/settings',
   '/sessions/g1',
   '/sessions/big1',
+  '/sessions/big1?view=canvas',
   '/sessions/big1?view=list',
 ]
 
@@ -38,7 +40,7 @@ for (const theme of ['dark', 'light'] as const) {
 
 test('keyboard: skip link, focus ring and canvas agent list', async ({ page, request }) => {
   await loginAs(page, request, 'alice')
-  await page.goto(`/sessions/g1?${RANGE}`)
+  await page.goto(`/sessions/g1?${RANGE}&view=list`)
   await page.getByRole('main').waitFor() // Tab before the app has rendered goes nowhere
   await page.keyboard.press('Tab')
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused()
@@ -63,4 +65,16 @@ test('charts are reachable by keyboard and reduced motion removes transitions', 
     .getByRole('main')
     .evaluate((el) => getComputedStyle(el.querySelector('.card') ?? el).transitionDuration)
   expect(dur === '0s' || dur === '').toBe(true)
+})
+
+test('keyboard: graph rows are reachable with Tab', async ({ page, request }) => {
+  await loginAs(page, request, 'alice')
+  await page.goto(`/sessions/g1?${RANGE}`)
+  const toggle = page.getByRole('button', { name: /^Subagent Explore: d1/ })
+  await toggle.waitFor()
+  for (let i = 0; i < 40 && !(await toggle.evaluate((el) => el === document.activeElement)); i++)
+    await page.keyboard.press('Tab')
+  await expect(toggle).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
 })

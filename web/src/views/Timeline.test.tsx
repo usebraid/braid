@@ -43,7 +43,7 @@ vi.mock('../api/client', async (orig) => ({
 }))
 
 it('lists sessions with badges, links to the canvas and loads the next page', async () => {
-  renderApp(<Timeline />)
+  renderApp(<Timeline />, { route: '/timeline?view=list' })
   const link = await screen.findByRole('link', { name: 'Title s1' })
   expect(link).toHaveAttribute('href', '/sessions/s1')
   expect(screen.getByText('2 failures')).toBeInTheDocument()

@@ -1,6 +1,6 @@
 ---
 title: Operations
-order: 6
+order: 7
 group: Run the server
 description: Back up, upgrade, rebuild derived data and manage devices.
 ---
@@ -34,6 +34,8 @@ docker compose run --rm braid reindex --user <user uuid>
 ```
 
 `reindex` rebuilds sessions, usage, failures and search from the raw lines, for all users or one, and prints one line per user (`<user id> <rows>`). It needs the same `BRAID_*` environment as the server.
+
+A session that continues on a second device is numbered as its files arrive; run `reindex --user <user uuid>` once both devices have synced to number its resumes exactly.
 
 ## Source offer
 

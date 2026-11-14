@@ -32,10 +32,14 @@ func TestUserBSeesNothingOfUserA(t *testing.T) {
 	if x.getAs(t, cB, "/api/v1/stats/sessions?"+rng, &sp); len(sp.Items) != 0 {
 		t.Fatalf("sessions leak: %+v", sp)
 	}
-	for _, p := range []string{"/api/v1/stats/sessions/s1", "/api/v1/stats/sessions/s2/lines?agent=main", "/api/v1/stats/sessions/s1/lines?agent=a1"} {
+	for _, p := range []string{"/api/v1/stats/sessions/s1", "/api/v1/stats/sessions/s2/lines?agent=main", "/api/v1/stats/sessions/s1/lines?agent=a1", "/api/v1/stats/sessions/s1/chat"} {
 		if st := x.getAs(t, cB, p, nil); st != 404 {
 			t.Errorf("%s: %d", p, st)
 		}
+	}
+	var tp stats.TimelinePage
+	if x.getAs(t, cB, "/api/v1/stats/timeline?"+rng, &tp); len(tp.Events) != 0 {
+		t.Fatalf("timeline leaks: %+v", tp)
 	}
 	var fp stats.FailurePage
 	if x.getAs(t, cB, "/api/v1/stats/failures?"+rng, &fp); len(fp.Items) != 0 || len(fp.ByCategory) != 0 {
@@ -59,7 +63,7 @@ func TestUserBSeesNothingOfUserA(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.Contains(string(body), `"session":null`) || !strings.Contains(string(body), `"sessions":0`) {
 		t.Fatalf("self leaks: %d %s", resp.StatusCode, body)
 	}
-	for _, table := range []string{"projects", "sessions", "session_devices", "agents", "tool_calls", "skill_phases", "usage", "failures", "search_docs", "derive_cursor", "derive_errors"} {
+	for _, table := range []string{"projects", "sessions", "session_devices", "agents", "tool_calls", "skill_phases", "usage", "failures", "search_docs", "session_events", "line_order", "derive_cursor", "derive_errors"} {
 		err := x.dt.DB.WithUser(context.Background(), meB.ID, func(tx pgx.Tx) error {
 			var n int
 			if err := tx.QueryRow(context.Background(), "SELECT count(*) FROM "+table).Scan(&n); err != nil {

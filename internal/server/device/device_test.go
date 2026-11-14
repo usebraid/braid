@@ -274,3 +274,54 @@ func TestUserCodeSurvivesLoginRedirect(t *testing.T) {
 		t.Fatalf("not on confirmation page for the code: %d %s", resp.StatusCode, html)
 	}
 }
+
+func TestPagesRenderShell(t *testing.T) {
+	e := servertest.Start(t)
+	c := e.Login(t, "u1")
+	r, r2 := codeReq(t, e), codeReq(t, e)
+	pageAt := func(path string) string {
+		resp, err := c.Get(e.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b)
+	}
+	post := func(path string, v url.Values) string {
+		resp := form(t, e, c, path, v)
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b)
+	}
+	getForm := pageAt("/device")
+	conf := pageAt("/device?user_code=" + r.UserCode)
+	bad := pageAt("/device?user_code=BCDF-GHJK")
+	appr := post("/device/approve", url.Values{"user_code": {r.UserCode}, "name": {"laptop"}})
+	den := post("/device/deny", url.Values{"user_code": {r2.UserCode}})
+	for _, tc := range []struct {
+		page string
+		want []string
+	}{
+		{getForm, []string{"Connect a device"}},
+		{conf, []string{"Approve this device?"}},
+		{bad, []string{"Code not found or expired."}},
+		{appr, []string{"Device approved", "close this tab"}},
+		{den, []string{"Denied", "The device was not connected."}},
+	} {
+		page := tc.page
+		for _, w := range append(tc.want, "<svg", ">Braid<") {
+			if !strings.Contains(page, w) {
+				t.Errorf("missing %q in page %q", w, tc.want[0])
+			}
+		}
+		if strings.Contains(page, "favicon.svg") {
+			t.Errorf("favicon.svg referenced in page %q", tc.want[0])
+		}
+		for _, ext := range []string{"http://", "https://", "//cdn"} {
+			if strings.Contains(page, ext) {
+				t.Errorf("external URL %q in page %q", ext, tc.want[0])
+			}
+		}
+	}
+}

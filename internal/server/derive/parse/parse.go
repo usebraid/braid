@@ -113,6 +113,7 @@ type Event struct {
 	Usage                                   *Usage
 	ToolUseID, Tool, Summary, Skill, Idents string
 	IsError                                 bool
+	Background                              bool // KindToolUse: run_in_background, so its tool result is only the launch ack
 	DurationMs, AgentTotalMs                *int64
 	Failure                                 *Failure
 	Meta                                    *AgentMeta
@@ -325,6 +326,7 @@ func parseAssistant(m obj, add func(Event)) {
 			tool := str(blk, "name")
 			e := Event{Kind: KindToolUse, ToolUseID: str(blk, "id"), Tool: tool}
 			e.Summary, e.Idents = Summarize(tool, in)
+			e.Background, _ = in["run_in_background"].(bool)
 			if tool == "Skill" {
 				e.Skill = str(in, "skill")
 			}

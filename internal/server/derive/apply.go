@@ -18,7 +18,8 @@ type projAcc struct{ first, last time.Time }
 type toolAcc struct {
 	name, skill, summary string
 	started, ended       time.Time
-	isErr                bool
+	isErr, background    bool
+	noteAt               time.Time // the <task-notification> line's time
 	resultMs, totalMs    *int64
 }
 
@@ -32,6 +33,18 @@ type docAcc struct {
 	role, text, tools, idents string
 	at                        time.Time
 	offset                    int64
+}
+
+// eventAcc is a session event (start or resume) found in this batch.
+type eventAcc struct {
+	kind, device, model string
+	at                  time.Time
+	offset              int64
+}
+
+type orderRow struct {
+	id int64
+	ts *time.Time // nil: no timestamp known yet (stored as -infinity until the file's first one shows up)
 }
 
 type usageAcc struct {
@@ -64,6 +77,16 @@ type batch struct {
 	activeMs, activeTurns int64       // deltas of this batch
 	at                    activeState // running state, seeded from the agent row
 	prevTS                time.Time   // newest Touch so far, seeded from the cursor (failure timestamps)
+	// graph (main file only: events; main and subagent files: line order)
+	start             *eventAcc
+	resumes, open     []*eventAcc // open: events still waiting for the model of the next assistant line
+	turnDevice        string      // device of the last turn start, seeded from agents.last_turn_device
+	asstModel         string      // model of the first assistant line of this batch
+	asstOffset        int64
+	order             []orderRow
+	lineTS, lineFirst *time.Time // lineTS: ts carried to lines without one, seeded from line_order; lineFirst: first ts of a file that had none
+	lineSeeded        bool
+	lineOrphans       bool // a line of this file got stored as -infinity: in this batch, or in an earlier one (seeded)
 }
 
 // activeState is the open turn of an agent (see agents.work_prev, pending_ms, turn_asst).
@@ -110,6 +133,39 @@ func (b *batch) activeTime(e parse.Event) {
 	}
 }
 
+// graphEvent records the start and resume events of one Touch line of the main transcript.
+// It must run before activeTime, which resets the work_prev it reads.
+func (b *batch) graphEvent(e parse.Event, row rawRow) {
+	if b.start == nil || e.TS.Before(b.start.at) {
+		s := &eventAcc{kind: "start", at: e.TS, device: row.device, offset: row.offset}
+		b.start, b.open = s, append(b.open, s) // its model is the first reply after its line, not that of the start it replaces
+	}
+	if !e.TurnStart || e.Sidechain {
+		return
+	}
+	if (!b.at.prev.IsZero() && e.TS.Sub(b.at.prev) > maxGap) || (b.turnDevice != "" && b.turnDevice != row.device) {
+		r := &eventAcc{kind: "resume", at: e.TS, device: row.device, offset: row.offset}
+		b.resumes, b.open = append(b.resumes, r), append(b.open, r)
+	}
+	b.turnDevice = row.device
+}
+
+// lineOrder adds the line_order row of a raw line; evs is nil for a line that did not parse.
+func (b *batch) lineOrder(id int64, evs []parse.Event) {
+	if !b.main && !b.sub {
+		return
+	}
+	if len(evs) > 0 && !evs[0].TS.IsZero() { // every event of a line carries the line's timestamp
+		ts := evs[0].TS
+		b.lineTS = &ts
+		if !b.lineSeeded && b.lineFirst == nil {
+			b.lineFirst = &ts
+		}
+	}
+	b.lineOrphans = b.lineOrphans || b.lineTS == nil
+	b.order = append(b.order, orderRow{id, b.lineTS})
+}
+
 func newBatch(userID string, fileID int64, fi parse.FileInfo) *batch {
 	return &batch{userID: userID, fileID: fileID, session: fi.SessionID, agent: fi.AgentID, main: fi.Kind == parse.FileMain, sub: fi.Kind == parse.FileSubagent, metaFile: fi.Kind == parse.FileAgentMeta,
 		devices: map[string]int64{}, projects: map[string]*projAcc{}, tools: map[string]*toolAcc{}, usage: map[string]*usageAcc{}, models: map[string]bool{}, failures: map[int64]*failureAcc{}, docs: map[int64]*docAcc{}}
@@ -134,7 +190,8 @@ func (b *batch) tool(id string) *toolAcc {
 	return t
 }
 
-func (b *batch) add(evs []parse.Event, offset int64) {
+func (b *batch) add(evs []parse.Event, row rawRow) {
+	offset := row.offset
 	doc := &docAcc{offset: offset} // snapshots yield no prompt/assistant events, so they never produce a doc
 	defer func() {
 		if doc.text != "" || doc.tools != "" {
@@ -147,6 +204,9 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 		}
 		switch e.Kind {
 		case parse.KindTouch:
+			if b.main {
+				b.graphEvent(e, row)
+			}
 			b.activeTime(e)
 			if later(b.prevTS, e.TS) {
 				b.prevTS = e.TS
@@ -206,6 +266,14 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 			b.meta = e.Meta
 		case parse.KindAssistant:
 			doc.role, doc.text, doc.at = "assistant", e.Text, e.TS
+			if m := NormalizeModel(e.Model); b.main && !e.Sidechain && e.Model != "" && e.Model != "<synthetic>" { // a synthetic line is no reply of a model
+				for _, ev := range b.open {
+					ev.model = m
+				}
+				if b.open = b.open[:0]; b.asstModel == "" {
+					b.asstModel, b.asstOffset = m, offset
+				}
+			}
 			if e.Usage == nil || e.TS.IsZero() {
 				break
 			}
@@ -219,12 +287,16 @@ func (b *batch) add(evs []parse.Event, offset int64) {
 			}
 			doc.tools, doc.idents = strings.TrimSpace(doc.tools+" "+e.Tool), strings.TrimSpace(doc.idents+" "+e.Idents)
 			t := b.tool(e.ToolUseID)
-			t.name, t.skill, t.summary = e.Tool, e.Skill, e.Summary
+			t.name, t.skill, t.summary, t.background = e.Tool, e.Skill, e.Summary, e.Background
 			if !e.TS.IsZero() && earlier(t.started, e.TS) {
 				t.started = e.TS
 			}
 		case parse.KindTaskNote:
-			b.tool(e.ToolUseID).totalMs = e.AgentTotalMs
+			t := b.tool(e.ToolUseID)
+			t.totalMs, t.background = e.AgentTotalMs, true // only a background task reports back this way
+			if !e.TS.IsZero() && earlier(t.noteAt, e.TS) {
+				t.noteAt = e.TS
+			}
 		case parse.KindToolResult:
 			t := b.tool(e.ToolUseID)
 			if later(t.ended, e.TS) && !e.TS.IsZero() {
@@ -328,8 +400,8 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 				m = &parse.AgentMeta{}
 			}
 			if err := exec(`INSERT INTO agents(user_id, session_id, agent_id, agent_type, description, parent_hint, spawn_tool_use_id, spawn_depth, finished, started_at, ended_at,
-			    active_ms, turn_count, work_prev, pending_ms, turn_asst)
-			  VALUES ($1, $2, $3, coalesce(nullif($4::text, ''), $12::text), nullif($5, ''), nullif($6, ''), nullif($7, ''), $8, $9, $10, $11, $14, $15, $16, $17, $18)
+			    active_ms, turn_count, work_prev, pending_ms, turn_asst, last_turn_device)
+			  VALUES ($1, $2, $3, coalesce(nullif($4::text, ''), $12::text), nullif($5, ''), nullif($6, ''), nullif($7, ''), $8, $9, $10, $11, $14, $15, $16, $17, $18, nullif($20, '')::uuid)
 			  ON CONFLICT (user_id, session_id, agent_id) DO UPDATE SET
 			    agent_type = coalesce(EXCLUDED.agent_type, agents.agent_type), description = coalesce(EXCLUDED.description, agents.description),
 			    parent_hint = coalesce(EXCLUDED.parent_hint, agents.parent_hint), spawn_tool_use_id = coalesce(EXCLUDED.spawn_tool_use_id, agents.spawn_tool_use_id),
@@ -337,26 +409,32 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 			    started_at = least(agents.started_at, EXCLUDED.started_at), ended_at = greatest(agents.ended_at, EXCLUDED.ended_at),
 			    active_ms = agents.active_ms + EXCLUDED.active_ms, turn_count = agents.turn_count + EXCLUDED.turn_count,
 			    work_prev = CASE WHEN $19 THEN EXCLUDED.work_prev ELSE agents.work_prev END, pending_ms = CASE WHEN $19 THEN EXCLUDED.pending_ms ELSE agents.pending_ms END,
-			    turn_asst = CASE WHEN $19 THEN EXCLUDED.turn_asst ELSE agents.turn_asst END`,
+			    turn_asst = CASE WHEN $19 THEN EXCLUDED.turn_asst ELSE agents.turn_asst END,
+			    last_turn_device = CASE WHEN $19 THEN EXCLUDED.last_turn_device ELSE agents.last_turn_device END`,
 				b.session, b.agent, m.AgentType, m.Description, m.ParentAgentID, m.ToolUseID, m.SpawnDepth, m.Finished,
-				nullTime(b.started), nullTime(b.ended), agentType, b.meta != nil, b.activeMs, b.activeTurns, nullTime(b.at.prev), b.at.pending, b.at.asst, b.main || b.sub); err != nil {
+				nullTime(b.started), nullTime(b.ended), agentType, b.meta != nil, b.activeMs, b.activeTurns, nullTime(b.at.prev), b.at.pending, b.at.asst, b.main || b.sub, b.turnDevice); err != nil {
 				return err
 			}
 		}
 	}
 
+	if err := b.flushGraph(ctx, tx); err != nil {
+		return err
+	}
+
 	if len(b.tools) > 0 {
 		var ids, names, skills, sums []string
-		var started, ended []*time.Time
-		var errs []bool
+		var started, ended, notes []*time.Time
+		var errs, bg []bool
 		var res, tot []*int64
 		for id, t := range b.tools {
 			ids, names, skills, sums = append(ids, id), append(names, t.name), append(skills, t.skill), append(sums, t.summary)
+			bg, notes = append(bg, t.background), append(notes, nullTime(t.noteAt))
 			started, ended, errs, res, tot = append(started, nullTime(t.started)), append(ended, nullTime(t.ended)), append(errs, t.isErr), append(res, t.resultMs), append(tot, t.totalMs)
 		}
-		if err := exec(`INSERT INTO tool_calls(user_id, session_id, tool_use_id, agent_id, tool_name, skill, input_summary, started_at, ended_at, is_error, result_ms, agent_total_ms)
-		  SELECT $1, $2, i, $3, n, nullif(k, ''), s, st, en, e, r, t FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::timestamptz[], $9::timestamptz[], $10::bool[], $11::bigint[], $12::bigint[])
-		    AS x(i, n, k, s, st, en, e, r, t)
+		if err := exec(`INSERT INTO tool_calls(user_id, session_id, tool_use_id, agent_id, tool_name, skill, input_summary, started_at, ended_at, is_error, result_ms, agent_total_ms, background, note_at)
+		  SELECT $1, $2, i, $3, n, nullif(k, ''), s, st, en, e, r, t, g, na FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::timestamptz[], $9::timestamptz[], $10::bool[], $11::bigint[], $12::bigint[], $13::bool[], $14::timestamptz[])
+		    AS x(i, n, k, s, st, en, e, r, t, g, na)
 		  ON CONFLICT (user_id, session_id, tool_use_id) DO UPDATE SET
 		    tool_name = CASE WHEN EXCLUDED.tool_name <> '' THEN EXCLUDED.tool_name ELSE tool_calls.tool_name END,
 		    skill = CASE WHEN EXCLUDED.tool_name <> '' THEN EXCLUDED.skill ELSE tool_calls.skill END,
@@ -364,8 +442,9 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 		    agent_id = CASE WHEN EXCLUDED.tool_name <> '' THEN EXCLUDED.agent_id ELSE tool_calls.agent_id END,
 		    started_at = least(tool_calls.started_at, EXCLUDED.started_at), ended_at = greatest(tool_calls.ended_at, EXCLUDED.ended_at),
 		    is_error = tool_calls.is_error OR EXCLUDED.is_error,
-		    result_ms = coalesce(EXCLUDED.result_ms, tool_calls.result_ms), agent_total_ms = coalesce(EXCLUDED.agent_total_ms, tool_calls.agent_total_ms)`,
-			b.session, b.agent, ids, names, skills, sums, started, ended, errs, res, tot); err != nil {
+		    result_ms = coalesce(EXCLUDED.result_ms, tool_calls.result_ms), agent_total_ms = coalesce(EXCLUDED.agent_total_ms, tool_calls.agent_total_ms),
+		    background = tool_calls.background OR EXCLUDED.background, note_at = least(tool_calls.note_at, EXCLUDED.note_at)`,
+			b.session, b.agent, ids, names, skills, sums, started, ended, errs, res, tot, bg, notes); err != nil {
 			return err
 		}
 	}
@@ -453,6 +532,50 @@ func (b *batch) flush(ctx context.Context, tx pgx.Tx) error {
 	return nil
 }
 
+func (b *batch) flushGraph(ctx context.Context, tx pgx.Tx) error {
+	u := b.userID
+	if b.session != "" && b.main {
+		if s := b.start; s != nil {
+			// one start per session: an earlier one replaces the stored one, an equal one keeps it (the first row wins, as in a reindex)
+			if _, err := tx.Exec(ctx, `DELETE FROM session_events WHERE user_id = $1 AND session_id = $2 AND kind = 'start' AND at > $3`, u, b.session, s.at); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO session_events(user_id, session_id, kind, at, device_id, model, source_file_id, "offset")
+			  SELECT $1, $2, 'start', $3, nullif($4, '')::uuid, nullif($5, ''), $6, $7
+			   WHERE NOT EXISTS (SELECT 1 FROM session_events WHERE user_id = $1 AND session_id = $2 AND kind = 'start' AND at <= $3)
+			  ON CONFLICT DO NOTHING`, u, b.session, s.at, s.device, stripNUL(s.model), b.fileID, s.offset); err != nil {
+				return err
+			}
+		}
+		for _, r := range b.resumes {
+			if _, err := tx.Exec(ctx, `INSERT INTO session_events(user_id, session_id, kind, at, device_id, model, source_file_id, "offset")
+			  VALUES ($1, $2, 'resume', $3, nullif($4, '')::uuid, nullif($5, ''), $6, $7) ON CONFLICT DO NOTHING`,
+				u, b.session, r.at, r.device, stripNUL(r.model), b.fileID, r.offset); err != nil {
+				return err
+			}
+		}
+	}
+	if b.session == "" || len(b.order) == 0 {
+		return nil
+	}
+	ids, ts := make([]int64, len(b.order)), make([]*time.Time, len(b.order))
+	for i, o := range b.order {
+		ids[i], ts[i] = o.id, o.ts
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO line_order(user_id, raw_line_id, session_id, agent_id, ts)
+	  SELECT $1, i, $2, $3, coalesce(t, '-infinity') FROM unnest($4::bigint[], $5::timestamptz[]) AS x(i, t)
+	  ON CONFLICT (user_id, raw_line_id) DO UPDATE SET session_id = EXCLUDED.session_id, agent_id = EXCLUDED.agent_id, ts = EXCLUDED.ts`,
+		u, b.session, stripNUL(b.agent), ids, ts); err != nil {
+		return err
+	}
+	if b.lineFirst != nil && b.lineOrphans { // the leading lines of the file without a timestamp take the file's first one
+		_, err := tx.Exec(ctx, `UPDATE line_order o SET ts = $3 FROM raw_lines l
+		  WHERE o.user_id = $1 AND o.session_id = $4 AND o.ts = '-infinity' AND l.id = o.raw_line_id AND l.source_file_id = $2`, u, b.fileID, *b.lineFirst, b.session)
+		return err
+	}
+	return nil
+}
+
 // fixups recomputes everything that links rows of different files; idempotent and independent of arrival order.
 func (b *batch) fixups(ctx context.Context, tx pgx.Tx) error {
 	for _, q := range []string{
@@ -475,7 +598,13 @@ func (b *batch) fixups(ctx context.Context, tx pgx.Tx) error {
 			return err
 		}
 	}
-	return nil
+	if b.asstModel == "" {
+		return nil
+	}
+	// events of earlier batches that were still waiting for a reply
+	_, err := tx.Exec(ctx, `UPDATE session_events SET model = $3
+	  WHERE user_id = $1 AND session_id = $2 AND model IS NULL AND source_file_id = $4 AND "offset" < $5`, b.userID, b.session, stripNUL(b.asstModel), b.fileID, b.asstOffset)
+	return err
 }
 
 // stripNUL removes U+0000, which Postgres text cannot hold; used for every text value derive writes.

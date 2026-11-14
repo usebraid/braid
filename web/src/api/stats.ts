@@ -3,6 +3,7 @@
 
 import { get, type Query } from './client'
 import type {
+  ChatPage,
   Device,
   FailurePage,
   FilterOptions,
@@ -12,6 +13,7 @@ import type {
   SearchResult,
   SessionDetail,
   SessionPage,
+  TimelinePage,
 } from './types'
 
 export const listDevices = (signal?: AbortSignal) => get<Device[]>('/api/v1/devices', undefined, signal)
@@ -27,3 +29,6 @@ export const statsSessionLines = (id: string, q: Query, signal?: AbortSignal) =>
 export const statsLive = (signal?: AbortSignal) => get<LivePage>('/api/v1/stats/live', undefined, signal)
 export const statsFailures = (q: Query, signal?: AbortSignal) => get<FailurePage>('/api/v1/stats/failures', q, signal)
 export const statsSearch = (q: Query, signal?: AbortSignal) => get<SearchResult>('/api/v1/stats/search', q, signal)
+export const statsSessionChat = (id: string, q: Query, signal?: AbortSignal) =>
+  get<ChatPage>(`/api/v1/stats/sessions/${enc(id)}/chat`, q, signal)
+export const statsTimeline = (q: Query, signal?: AbortSignal) => get<TimelinePage>('/api/v1/stats/timeline', q, signal)

@@ -24,7 +24,7 @@ func Scenario() []File {
 			Reply(At(21), "g-m1", opus, Usage(1000, 150, 500, 200, 300)), // same message, streamed further
 			Result(At(30), "tuA", false, map[string]any{"agentId": "a1", "status": "completed", "totalDurationMs": 9000}),
 			Reply(At(40), "g-m2", sonnet, Usage(2000, 200, 0, 0, 0),
-				Tool("tuB", "Agent", map[string]any{"description": "async"}), Tool("t1", "Bash", map[string]any{"command": "go test"})),
+				Tool("tuB", "Agent", map[string]any{"description": "async", "run_in_background": true}), Tool("t1", "Bash", map[string]any{"command": "go test"})),
 			Result(At(41), "tuB", false, map[string]any{"agentId": "a2", "status": "async_launched"}),
 			Result(At(45), "t1", true, map[string]any{"durationMs": 50}),
 			Reply(At(60), "g-m3", "claude-fable-5-2", Usage(100, 10, 0, 0, 0)), // model without a price

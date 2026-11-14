@@ -13,8 +13,8 @@ vi.mock('../api/client', async (orig) => ({
     path === '/api/v1/stats/filters'
       ? {
           projects: [
-            { path: '/work/alpha', name: 'alpha', sessions: 3 },
-            { path: '/work/beta', name: 'beta', sessions: 2 },
+            { path: '/work/alpha', name: 'alpha', sessions: 3, last_active: '2026-11-01T00:00:00Z' },
+            { path: '/work/beta', name: 'beta', sessions: 2, last_active: '2026-11-02T00:00:00Z' },
           ],
           models: [],
           skills: [],
@@ -80,4 +80,45 @@ it('says how the numbers are measured in the footer', () => {
   expect(
     screen.getByText(/Measured from Claude Code transcripts. Cost is priced at API rates, not a bill./),
   ).toBeInTheDocument()
+})
+
+it('shows only the ten most recently active projects but keeps a selected older one', async () => {
+  const { get } = await import('../api/client')
+  const many = Array.from({ length: 12 }, (_, i) => ({
+    path: `/w/p${i}`,
+    name: `p${i}`,
+    sessions: 1,
+    last_active: `2026-11-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+  }))
+  vi.mocked(get).mockImplementation((async () => ({ projects: many, models: [], skills: [] })) as never)
+  renderApp(<Shell />, { route: '/?project=/w/p0' })
+  const nav = screen.getByRole('navigation', { name: 'Projects' })
+  await within(nav).findByRole('button', { name: 'p11, 1 session' })
+  expect(within(nav).getAllByRole('button')).toHaveLength(12) // All + 10 newest + the selected p0
+  expect(within(nav).queryByRole('button', { name: 'p1, 1 session' })).toBeNull()
+  expect(within(nav).getByRole('button', { name: 'p0, 1 session' })).toHaveAttribute('aria-pressed', 'true')
+  expect(within(nav).getByRole('button', { name: 'All projects, 12 sessions' })).toBeInTheDocument()
+})
+
+it('orders projects by instant, whatever their fractional digits', async () => {
+  const { get } = await import('../api/client')
+  const projects = [
+    { path: '/w/x', name: 'x', sessions: 1, last_active: '2026-11-01T00:00:00Z' },
+    { path: '/w/y', name: 'y', sessions: 1, last_active: '2026-11-01T00:00:00.5Z' },
+    { path: '/w/z', name: 'z', sessions: 1, last_active: '2026-10-31T23:59:59.999999Z' },
+  ]
+  vi.mocked(get).mockImplementation((async () => ({ projects, models: [], skills: [] })) as never)
+  renderApp(<Shell />)
+  const nav = screen.getByRole('navigation', { name: 'Projects' })
+  await within(nav).findByRole('button', { name: 'x, 1 session' })
+  expect(
+    within(nav)
+      .getAllByRole('button')
+      .map((b) => b.textContent),
+  ).toEqual([
+    expect.stringContaining('All projects'),
+    expect.stringContaining('y'),
+    expect.stringContaining('x'),
+    expect.stringContaining('z'),
+  ])
 })

@@ -46,6 +46,8 @@ type ProjectOption struct {
 	Path     string `json:"path"`
 	Name     string `json:"name"`
 	Sessions int64  `json:"sessions"`
+	// LastActive is the newest session end (start if none ended) of the project in range.
+	LastActive time.Time `json:"last_active"`
 }
 
 // FilterOptions is the response of GET /api/v1/stats/filters.
@@ -123,10 +125,10 @@ func (h *Handler) filters(w http.ResponseWriter, r *http.Request) {
 	out := FilterOptions{Projects: []ProjectOption{}, Models: []string{}, Skills: []string{}}
 	err = h.db.WithUser(r.Context(), p.UserID, func(tx pgx.Tx) error {
 		ctx := r.Context()
-		if err := collect(ctx, tx, `SELECT s.project_path, coalesce(max(p.name), ''), count(*) FROM sessions s LEFT JOIN projects p ON p.path = s.project_path
+		if err := collect(ctx, tx, `SELECT s.project_path, coalesce(max(p.name), ''), count(*), coalesce(max(s.ended_at), max(s.started_at)) FROM sessions s LEFT JOIN projects p ON p.path = s.project_path
 		  WHERE s.project_path IS NOT NULL AND `+setPred+` GROUP BY 1 ORDER BY 1`, f.args(), func(rows pgx.Rows) error {
 			var o ProjectOption
-			err := rows.Scan(&o.Path, &o.Name, &o.Sessions)
+			err := rows.Scan(&o.Path, &o.Name, &o.Sessions, &o.LastActive)
 			out.Projects = append(out.Projects, o)
 			return err
 		}); err != nil {

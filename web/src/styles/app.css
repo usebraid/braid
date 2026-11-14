@@ -311,6 +311,12 @@ select.ctl {
   background-image: none;
   cursor: pointer;
 }
+/* Native option lists ignore the select's transparent background on Windows; set colors explicitly. */
+select option,
+select optgroup {
+  background-color: var(--panel);
+  color: var(--text);
+}
 .select {
   position: relative;
   display: inline-flex;
@@ -1504,4 +1510,292 @@ td.empty {
     /* biome-ignore lint/complexity/noImportantStyles: the reduced-motion reset must beat component rules */
     scroll-behavior: auto !important;
   }
+}
+
+/* Session graph and chat: one row = time | graph | chat entry */
+.graph .grows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.grow {
+  position: relative; /* the containing block of the absolutely placed graph cell */
+  display: grid;
+  grid-template-columns: 44px 90px minmax(0, 1fr);
+  align-items: start;
+  min-height: 24px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 24px;
+  font-size: var(--t-xs);
+  line-height: 1.5;
+}
+.grow[aria-current="true"] {
+  /* inset, so the outline does not cover the lanes of the rows around it */
+  box-shadow: inset 0 0 0 2px var(--focus);
+  border-radius: 6px;
+}
+.grow:focus {
+  outline-offset: -2px;
+}
+.grow time {
+  grid-column: 1;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  padding-top: 3px;
+}
+/* An absolute grid child fills its grid area, so the svg is exactly as tall as the row and lanes run on unbroken */
+.gcell {
+  position: absolute;
+  grid-column: 2;
+  top: 0;
+  height: 100%;
+  overflow: visible;
+}
+.gcell line,
+.gcell path {
+  stroke-width: 2;
+}
+.gdot {
+  stroke-width: 1.5;
+}
+.gstub {
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
+}
+.gdot.pulse {
+  animation: gpulse 1.6s ease-in-out infinite;
+}
+@keyframes gpulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.gbody {
+  grid-column: 3;
+  padding: 3px 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gbody .entry-text {
+  margin: 0;
+}
+.g-text {
+  display: flex;
+  align-items: baseline;
+}
+.md {
+  flex: 1;
+  min-width: 0;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md pre,
+.md .md-scroll {
+  margin: 0 0 6px;
+}
+.md pre,
+.md .md-scroll {
+  overflow-x: auto;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 8px 0 4px;
+}
+.md h1 {
+  font-size: 1.15em;
+}
+.md h2 {
+  font-size: 1.07em;
+}
+.md ul,
+.md ol {
+  padding-left: 20px;
+}
+.md blockquote {
+  border-left: 3px solid var(--line2);
+  color: var(--muted);
+  padding-left: 10px;
+}
+.md code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.md pre {
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.md pre code {
+  background: none;
+  padding: 0;
+  white-space: pre;
+}
+.md a {
+  color: var(--focus);
+}
+.md table {
+  border-collapse: collapse;
+  width: auto;
+}
+.md .md-scroll :is(th, td) {
+  border: 1px solid var(--line2);
+  padding: 2px 8px;
+  text-align: left;
+}
+.g-brief {
+  /* an indented task brief in the lane colour, unlike the user's tinted prompt */
+  border-left: 3px solid var(--line2);
+  margin-left: 6px;
+  padding: 1px 0 1px 10px;
+}
+.g-prompt {
+  /* tinted like the prompt dot, visible on both themes */
+  background: color-mix(in srgb, var(--focus) 14%, transparent);
+  border-radius: 8px;
+  padding: 3px 10px; /* with the row padding below, the first line centres on the dot */
+}
+.grow--prompt .gbody {
+  padding: 0 0 2px;
+}
+/* room for the stub of an open lane: rows paint-contain (content-visibility), so it must fit inside the row */
+.grow--ends .gbody {
+  padding-bottom: 20px;
+}
+.g-tool,
+.g-note,
+.g-fold summary {
+  color: var(--muted);
+}
+.g-tool {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.graph .g-tool b {
+  color: var(--text);
+  font-weight: 500;
+}
+.g-fold summary {
+  cursor: pointer;
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.g-peek {
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gtag {
+  font-weight: 600; /* the palette colour fails contrast on the light theme */
+  margin-right: 6px;
+}
+.g-branch,
+.g-merge {
+  color: var(--muted);
+}
+.g-branch .btn {
+  /* a 24px target that takes only one text line of the row */
+  height: 24px;
+  min-width: 24px;
+  padding: 0 6px;
+  margin: -3px 4px -3px -6px;
+  vertical-align: top;
+  font-size: inherit;
+}
+@media (max-width: 640px) {
+  .grow {
+    grid-template-columns: 40px 36px minmax(0, 1fr);
+  }
+  .gcell {
+    width: 36px;
+    overflow: hidden;
+  }
+}
+
+/* Timeline graph: one line, a dot per start (filled) or resume (ring) */
+.tl-graph {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 8px 16px;
+}
+/* one line through all rows and day separators: padding + time column + half the dot column */
+.tl-graph::before {
+  content: "";
+  position: absolute;
+  left: calc(16px + 48px + 13px);
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--line2);
+}
+.tl-day {
+  color: var(--faint);
+  font-size: var(--t-xs);
+  padding: 14px 0 4px 76px;
+}
+.tl-row {
+  display: grid;
+  grid-template-columns: 48px 28px minmax(0, 1fr);
+  color: inherit;
+  text-decoration: none;
+  border-radius: 6px;
+}
+.tl-row:hover {
+  background: var(--track);
+}
+.tl-row time {
+  color: var(--faint);
+  font: var(--t-xs) var(--font-mono);
+  padding-top: 10px;
+}
+.tl-dot {
+  position: relative;
+}
+.tl-dot::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 11px;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: currentcolor;
+  border: 2px solid currentcolor;
+}
+.tl-dot.ring::after {
+  background: var(--card-solid);
+}
+.tl-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 7px 0;
+  min-width: 0;
+}
+.tl-sub {
+  flex-basis: 100%;
+  color: var(--faint);
+  font-size: var(--t-xs);
 }

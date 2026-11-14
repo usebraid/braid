@@ -41,6 +41,8 @@ func (h *Handler) Register(mux *http.ServeMux, auth *webauth.Auth, devLim *httpx
 	mux.Handle("GET /api/v1/stats/search", auth.Require(http.HandlerFunc(h.search)))
 	mux.Handle("GET /api/v1/stats/sessions", auth.Require(http.HandlerFunc(h.sessions)))
 	mux.Handle("GET /api/v1/stats/sessions/{id}", auth.Require(http.HandlerFunc(h.sessionDetail)))
+	mux.Handle("GET /api/v1/stats/timeline", auth.Require(http.HandlerFunc(h.timeline)))
+	mux.Handle("GET /api/v1/stats/sessions/{id}/chat", auth.Require(http.HandlerFunc(h.sessionChat)))
 	mux.Handle("GET /api/v1/stats/sessions/{id}/lines", auth.Require(http.HandlerFunc(h.sessionLines)))
 }
 

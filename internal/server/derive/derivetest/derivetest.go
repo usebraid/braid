@@ -210,9 +210,9 @@ func (e *Env) Row(t testing.TB, q string, args ...any) string {
 func (e *Env) Dump(t testing.TB, userID string, repl map[string]string) string {
 	t.Helper()
 	var sb strings.Builder
-	for _, tbl := range []string{"projects", "sessions", "session_devices", "agents", "tool_calls", "skill_phases", "usage", "failures", "search_docs", "derive_errors"} {
+	for _, tbl := range []string{"projects", "sessions", "session_devices", "agents", "tool_calls", "skill_phases", "usage", "failures", "search_docs", "session_events", "line_order", "derive_errors"} {
 		var s string
-		e.scan(t, `SELECT coalesce(string_agg(r, E'\n' ORDER BY r), '') FROM (SELECT (to_jsonb(x) - 'user_id' - 'source_file_id')::text AS r FROM `+tbl+` x WHERE user_id = $1) q`, []any{userID}, &s)
+		e.scan(t, `SELECT coalesce(string_agg(r, E'\n' ORDER BY r), '') FROM (SELECT (to_jsonb(x) - 'user_id' - 'source_file_id' - 'raw_line_id')::text AS r FROM `+tbl+` x WHERE user_id = $1) q`, []any{userID}, &s)
 		sb.WriteString("== " + tbl + "\n" + s + "\n")
 	}
 	out := sb.String()

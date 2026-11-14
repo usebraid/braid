@@ -7,6 +7,7 @@ import { useApi } from '../api/hooks'
 import { listDevices, statsSession } from '../api/stats'
 import type { AgentItem } from '../api/types'
 import { SessionCanvas } from '../components/canvas/SessionCanvas'
+import { SessionGraph } from '../components/graph/SessionGraph'
 import { TranscriptPanel } from '../components/TranscriptPanel'
 import { Card, Empty, ErrorNote, Pill, Segmented } from '../components/ui'
 import { COST_NOTE, fmtCost, fmtDuration, modelName } from '../lib/format'
@@ -50,13 +51,14 @@ export function Session() {
     for (const a of agents) walk(a.agent_id, 0) // agents caught in a parent cycle
     return out
   }, [data])
-  const view = sp.get('view') === 'list' ? 'list' : 'canvas'
-  const setView = (v: 'canvas' | 'list') =>
+  const v = sp.get('view')
+  const view = v === 'list' || v === 'canvas' ? v : 'graph'
+  const setView = (next: 'graph' | 'canvas' | 'list') =>
     setSp(
       (prev) => {
         const n = new URLSearchParams(prev)
-        if (v === 'list') n.set('view', 'list')
-        else n.delete('view')
+        if (next === 'graph') n.delete('view')
+        else n.set('view', next)
         return n
       },
       { replace: true },
@@ -107,13 +109,14 @@ export function Session() {
           label="Agent view"
           value={view}
           options={[
+            { value: 'graph', label: 'Graph' },
             { value: 'canvas', label: 'Canvas' },
             { value: 'list', label: 'List' },
           ]}
           onChange={setView}
         />
       </div>
-      <div className={selected ? 'sess-body with-panel' : 'sess-body'}>
+      <div className={selected && view !== 'graph' ? 'sess-body with-panel' : 'sess-body'}>
         {view === 'list' ? (
           <Card className="tree-card">
             <ul className="agent-tree" aria-label="Agents">
@@ -137,10 +140,12 @@ export function Session() {
               ))}
             </ul>
           </Card>
-        ) : (
+        ) : view === 'canvas' ? (
           <SessionCanvas detail={data} liveAgentIds={live} />
+        ) : (
+          <SessionGraph detail={data} focusLine={focusLine} />
         )}
-        {selected ? (
+        {selected && view !== 'graph' ? (
           <TranscriptPanel key={selected} sessionId={id} agentId={selected} focusLine={focusLine} liveTick={data} />
         ) : null}
       </div>

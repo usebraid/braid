@@ -5,18 +5,18 @@
 == session_devices
 {"device_id": "DEVICE", "line_count": 35, "session_id": "g1"}
 == agents
-{"est_ms": 0, "turn_ms": 0, "agent_id": "a1", "ended_at": "2026-11-01T10:00:25+00:00", "finished": true, "active_ms": 3000, "result_ms": 9000, "turn_asst": true, "work_prev": "2026-11-01T10:00:25+00:00", "agent_type": "Explore", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:22+00:00", "turn_count": 1, "description": "d1", "duration_ms": 3000, "parent_hint": null, "spawn_depth": 1, "parent_agent_id": "main", "spawn_tool_use_id": "tuA", "duration_estimated": false}
-{"est_ms": 0, "turn_ms": 0, "agent_id": "a2", "ended_at": "2026-11-01T10:00:50+00:00", "finished": true, "active_ms": 8000, "result_ms": 12000, "turn_asst": true, "work_prev": "2026-11-01T10:00:50+00:00", "agent_type": "general-purpose", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:42+00:00", "turn_count": 1, "description": "d2", "duration_ms": 8000, "parent_hint": null, "spawn_depth": 1, "parent_agent_id": "main", "spawn_tool_use_id": "tuB", "duration_estimated": false}
-{"est_ms": 0, "turn_ms": 0, "agent_id": "a3", "ended_at": "2026-11-01T10:00:35+00:00", "finished": null, "active_ms": 8000, "result_ms": null, "turn_asst": true, "work_prev": "2026-11-01T10:00:35+00:00", "agent_type": "Explore", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:27+00:00", "turn_count": 1, "description": "d3", "duration_ms": 8000, "parent_hint": null, "spawn_depth": 2, "parent_agent_id": "a1", "spawn_tool_use_id": "tuC", "duration_estimated": false}
-{"est_ms": 0, "turn_ms": 0, "agent_id": "main", "ended_at": "2026-11-01T10:16:00+00:00", "finished": null, "active_ms": 940000, "result_ms": null, "turn_asst": true, "work_prev": "2026-11-01T10:15:50+00:00", "agent_type": "main", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:01+00:00", "turn_count": 1, "description": null, "duration_ms": 940000, "parent_hint": null, "spawn_depth": 0, "parent_agent_id": null, "spawn_tool_use_id": null, "duration_estimated": false}
+{"est_ms": 0, "turn_ms": 0, "agent_id": "a1", "ended_at": "2026-11-01T10:00:25+00:00", "finished": true, "active_ms": 3000, "result_ms": 9000, "turn_asst": true, "work_prev": "2026-11-01T10:00:25+00:00", "agent_type": "Explore", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:22+00:00", "turn_count": 1, "description": "d1", "duration_ms": 3000, "parent_hint": null, "spawn_depth": 1, "parent_agent_id": "main", "last_turn_device": null, "spawn_tool_use_id": "tuA", "duration_estimated": false}
+{"est_ms": 0, "turn_ms": 0, "agent_id": "a2", "ended_at": "2026-11-01T10:00:50+00:00", "finished": true, "active_ms": 8000, "result_ms": 12000, "turn_asst": true, "work_prev": "2026-11-01T10:00:50+00:00", "agent_type": "general-purpose", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:42+00:00", "turn_count": 1, "description": "d2", "duration_ms": 8000, "parent_hint": null, "spawn_depth": 1, "parent_agent_id": "main", "last_turn_device": null, "spawn_tool_use_id": "tuB", "duration_estimated": false}
+{"est_ms": 0, "turn_ms": 0, "agent_id": "a3", "ended_at": "2026-11-01T10:00:35+00:00", "finished": null, "active_ms": 8000, "result_ms": null, "turn_asst": true, "work_prev": "2026-11-01T10:00:35+00:00", "agent_type": "Explore", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:27+00:00", "turn_count": 1, "description": "d3", "duration_ms": 8000, "parent_hint": null, "spawn_depth": 2, "parent_agent_id": "a1", "last_turn_device": null, "spawn_tool_use_id": "tuC", "duration_estimated": false}
+{"est_ms": 0, "turn_ms": 0, "agent_id": "main", "ended_at": "2026-11-01T10:16:00+00:00", "finished": null, "active_ms": 940000, "result_ms": null, "turn_asst": true, "work_prev": "2026-11-01T10:15:50+00:00", "agent_type": "main", "pending_ms": 0, "session_id": "g1", "started_at": "2026-11-01T10:00:01+00:00", "turn_count": 1, "description": null, "duration_ms": 940000, "parent_hint": null, "spawn_depth": 0, "parent_agent_id": null, "last_turn_device": "DEVICE", "spawn_tool_use_id": null, "duration_estimated": false}
 == tool_calls
-{"skill": "superpowers:brainstorming", "agent_id": "main", "ended_at": null, "is_error": false, "result_ms": null, "tool_name": "Skill", "session_id": "g1", "started_at": "2026-11-01T10:00:20+00:00", "duration_ms": null, "tool_use_id": "sk1", "input_summary": "superpowers:brainstorming", "agent_total_ms": null}
-{"skill": "superpowers:writing-plans", "agent_id": "main", "ended_at": null, "is_error": false, "result_ms": null, "tool_name": "Skill", "session_id": "g1", "started_at": "2026-11-01T10:15:50+00:00", "duration_ms": null, "tool_use_id": "sk2", "input_summary": "superpowers:writing-plans", "agent_total_ms": null}
-{"skill": "x:debug", "agent_id": "a1", "ended_at": null, "is_error": false, "result_ms": null, "tool_name": "Skill", "session_id": "g1", "started_at": "2026-11-01T10:00:25+00:00", "duration_ms": null, "tool_use_id": "ssk", "input_summary": "x:debug", "agent_total_ms": null}
-{"skill": null, "agent_id": "a1", "ended_at": null, "is_error": false, "result_ms": null, "tool_name": "Agent", "session_id": "g1", "started_at": "2026-11-01T10:00:25+00:00", "duration_ms": null, "tool_use_id": "tuC", "input_summary": "nested", "agent_total_ms": null}
-{"skill": null, "agent_id": "main", "ended_at": "2026-11-01T10:00:30+00:00", "is_error": false, "result_ms": null, "tool_name": "Agent", "session_id": "g1", "started_at": "2026-11-01T10:00:20+00:00", "duration_ms": 10000, "tool_use_id": "tuA", "input_summary": "explore", "agent_total_ms": 9000}
-{"skill": null, "agent_id": "main", "ended_at": "2026-11-01T10:00:41+00:00", "is_error": false, "result_ms": null, "tool_name": "Agent", "session_id": "g1", "started_at": "2026-11-01T10:00:40+00:00", "duration_ms": 1000, "tool_use_id": "tuB", "input_summary": "async", "agent_total_ms": 12000}
-{"skill": null, "agent_id": "main", "ended_at": "2026-11-01T10:00:45+00:00", "is_error": true, "result_ms": 50, "tool_name": "Bash", "session_id": "g1", "started_at": "2026-11-01T10:00:40+00:00", "duration_ms": 50, "tool_use_id": "t1", "input_summary": "go test", "agent_total_ms": null}
+{"skill": "superpowers:brainstorming", "note_at": null, "agent_id": "main", "ended_at": null, "is_error": false, "result_ms": null, "tool_name": "Skill", "background": false, "session_id": "g1", "started_at": "2026-11-01T10:00:20+00:00", "duration_ms": null, "tool_use_id": "sk1", "input_summary": "superpowers:brainstorming", "agent_total_ms": null}
+{"skill": "superpowers:writing-plans", "note_at": null, "agent_id": "main", "ended_at": null, "is_error": false, "result_ms": null, "tool_name": "Skill", "background": false, "session_id": "g1", "started_at": "2026-11-01T10:15:50+00:00", "duration_ms": null, "tool_use_id": "sk2", "input_summary": "superpowers:writing-plans", "agent_total_ms": null}
+{"skill": "x:debug", "note_at": null, "agent_id": "a1", "ended_at": null, "is_error": false, "result_ms": null, "tool_name": "Skill", "background": false, "session_id": "g1", "started_at": "2026-11-01T10:00:25+00:00", "duration_ms": null, "tool_use_id": "ssk", "input_summary": "x:debug", "agent_total_ms": null}
+{"skill": null, "note_at": "2026-11-01T10:01:30+00:00", "agent_id": "main", "ended_at": "2026-11-01T10:00:41+00:00", "is_error": false, "result_ms": null, "tool_name": "Agent", "background": true, "session_id": "g1", "started_at": "2026-11-01T10:00:40+00:00", "duration_ms": 1000, "tool_use_id": "tuB", "input_summary": "async", "agent_total_ms": 12000}
+{"skill": null, "note_at": null, "agent_id": "a1", "ended_at": null, "is_error": false, "result_ms": null, "tool_name": "Agent", "background": false, "session_id": "g1", "started_at": "2026-11-01T10:00:25+00:00", "duration_ms": null, "tool_use_id": "tuC", "input_summary": "nested", "agent_total_ms": null}
+{"skill": null, "note_at": null, "agent_id": "main", "ended_at": "2026-11-01T10:00:30+00:00", "is_error": false, "result_ms": null, "tool_name": "Agent", "background": false, "session_id": "g1", "started_at": "2026-11-01T10:00:20+00:00", "duration_ms": 10000, "tool_use_id": "tuA", "input_summary": "explore", "agent_total_ms": 9000}
+{"skill": null, "note_at": null, "agent_id": "main", "ended_at": "2026-11-01T10:00:45+00:00", "is_error": true, "result_ms": 50, "tool_name": "Bash", "background": false, "session_id": "g1", "started_at": "2026-11-01T10:00:40+00:00", "duration_ms": 50, "tool_use_id": "t1", "input_summary": "go test", "agent_total_ms": null}
 == skill_phases
 {"seq": 1, "skill": "superpowers:brainstorming", "agent_id": "main", "ended_at": "2026-11-01T10:15:50+00:00", "session_id": "g1", "started_at": "2026-11-01T10:00:20+00:00", "tool_use_id": "sk1"}
 {"seq": 1, "skill": "x:debug", "agent_id": "a1", "ended_at": "2026-11-01T10:00:25+00:00", "session_id": "g1", "started_at": "2026-11-01T10:00:25+00:00", "tool_use_id": "ssk"}
@@ -27,24 +27,62 @@
 {"at": "2026-11-01T10:00:35+00:00", "model": "claude-sonnet-5-5", "speed": "standard", "offset": 214, "agent_id": "a3", "cost_usd": 0.000300, "message_id": "g-s3", "session_id": "g1", "input_tokens": 100, "output_tokens": 10, "price_unknown": false, "price_estimated": false, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
 {"at": "2026-11-01T10:00:40+00:00", "model": "claude-sonnet-5-5", "speed": "standard", "offset": 2511, "agent_id": "main", "cost_usd": 0.006000, "message_id": "g-m2", "session_id": "g1", "input_tokens": 2000, "output_tokens": 200, "price_unknown": false, "price_estimated": false, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
 {"at": "2026-11-01T10:00:50+00:00", "model": "claude-sonnet-5-5", "speed": "standard", "offset": 213, "agent_id": "a2", "cost_usd": 0.000900, "message_id": "g-s2", "session_id": "g1", "input_tokens": 300, "output_tokens": 30, "price_unknown": false, "price_estimated": false, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
-{"at": "2026-11-01T10:01:00+00:00", "model": "claude-fable-5-2", "speed": "standard", "offset": 3726, "agent_id": "main", "cost_usd": 0.001500, "message_id": "g-m3", "session_id": "g1", "input_tokens": 100, "output_tokens": 10, "price_unknown": false, "price_estimated": true, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
-{"at": "2026-11-01T10:01:10+00:00", "model": "claude-opus-5-5", "speed": "fast", "offset": 4170, "agent_id": "main", "cost_usd": 0.000240, "message_id": "g-m4", "session_id": "g1", "input_tokens": 10, "output_tokens": 10, "price_unknown": false, "price_estimated": true, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
-{"at": "2026-11-01T10:01:20+00:00", "model": "claude-opus-5-5", "speed": "standard", "offset": 4608, "agent_id": "main", "cost_usd": 0.020000, "message_id": "g-m5", "session_id": "g1", "input_tokens": 0, "output_tokens": 0, "price_unknown": false, "price_estimated": false, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 2, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
-{"at": "2026-11-01T10:15:00+00:00", "model": "claude-opus-5-5", "speed": "standard", "offset": 6261, "agent_id": "main", "cost_usd": 0.000024, "message_id": "g-m6", "session_id": "g1", "input_tokens": 1, "output_tokens": 1, "price_unknown": false, "price_estimated": false, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
-{"at": "2026-11-01T10:15:50+00:00", "model": "claude-opus-5-5", "speed": "standard", "offset": 8199, "agent_id": "main", "cost_usd": 0.000024, "message_id": "g-m7", "session_id": "g1", "input_tokens": 1, "output_tokens": 1, "price_unknown": false, "price_estimated": false, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
+{"at": "2026-11-01T10:01:00+00:00", "model": "claude-fable-5-2", "speed": "standard", "offset": 3751, "agent_id": "main", "cost_usd": 0.001500, "message_id": "g-m3", "session_id": "g1", "input_tokens": 100, "output_tokens": 10, "price_unknown": false, "price_estimated": true, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
+{"at": "2026-11-01T10:01:10+00:00", "model": "claude-opus-5-5", "speed": "fast", "offset": 4195, "agent_id": "main", "cost_usd": 0.000240, "message_id": "g-m4", "session_id": "g1", "input_tokens": 10, "output_tokens": 10, "price_unknown": false, "price_estimated": true, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
+{"at": "2026-11-01T10:01:20+00:00", "model": "claude-opus-5-5", "speed": "standard", "offset": 4633, "agent_id": "main", "cost_usd": 0.020000, "message_id": "g-m5", "session_id": "g1", "input_tokens": 0, "output_tokens": 0, "price_unknown": false, "price_estimated": false, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 2, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
+{"at": "2026-11-01T10:15:00+00:00", "model": "claude-opus-5-5", "speed": "standard", "offset": 6286, "agent_id": "main", "cost_usd": 0.000024, "message_id": "g-m6", "session_id": "g1", "input_tokens": 1, "output_tokens": 1, "price_unknown": false, "price_estimated": false, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
+{"at": "2026-11-01T10:15:50+00:00", "model": "claude-opus-5-5", "speed": "standard", "offset": 8224, "agent_id": "main", "cost_usd": 0.000024, "message_id": "g-m7", "session_id": "g1", "input_tokens": 1, "output_tokens": 1, "price_unknown": false, "price_estimated": false, "thinking_tokens": 0, "cache_read_tokens": 0, "web_fetch_requests": 0, "web_search_requests": 0, "cache_write_1h_tokens": 0, "cache_write_5m_tokens": 0}
 == failures
-{"detail": "error", "offset": 3431, "agent_id": "main", "category": "tool_error", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:00:45+00:00"}
-{"detail": "invalid_request", "offset": 7780, "agent_id": "main", "category": "other_api_error", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:15:40+00:00"}
-{"detail": "model_refusal_fallback/cyber", "offset": 7008, "agent_id": "main", "category": "refusal", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:15:20+00:00"}
-{"detail": "rate_limit", "offset": 7224, "agent_id": "main", "category": "rate_limit", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:15:30+00:00"}
-{"detail": "rate_limit/usage_limit_reached/429", "offset": 5864, "agent_id": "main", "category": "usage_limit", "resets_at": "2026-11-01T11:05:00+00:00", "limit_type": "five_hour", "session_id": "g1", "occurred_at": "2026-11-01T10:05:00+00:00"}
-{"detail": "server_error", "offset": 7501, "agent_id": "main", "category": "server_error", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:15:35+00:00"}
-{"detail": "server_error/computer_slept", "offset": 6701, "agent_id": "main", "category": "network", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:15:10+00:00"}
+{"detail": "error", "offset": 3456, "agent_id": "main", "category": "tool_error", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:00:45+00:00"}
+{"detail": "invalid_request", "offset": 7805, "agent_id": "main", "category": "other_api_error", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:15:40+00:00"}
+{"detail": "model_refusal_fallback/cyber", "offset": 7033, "agent_id": "main", "category": "refusal", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:15:20+00:00"}
+{"detail": "rate_limit", "offset": 7249, "agent_id": "main", "category": "rate_limit", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:15:30+00:00"}
+{"detail": "rate_limit/usage_limit_reached/429", "offset": 5889, "agent_id": "main", "category": "usage_limit", "resets_at": "2026-11-01T11:05:00+00:00", "limit_type": "five_hour", "session_id": "g1", "occurred_at": "2026-11-01T10:05:00+00:00"}
+{"detail": "server_error", "offset": 7526, "agent_id": "main", "category": "server_error", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:15:35+00:00"}
+{"detail": "server_error/computer_slept", "offset": 6726, "agent_id": "main", "category": "network", "resets_at": null, "limit_type": null, "session_id": "g1", "occurred_at": "2026-11-01T10:15:10+00:00"}
 == search_docs
 {"at": "2026-11-01T10:00:10+00:00", "tsv": "'golden':1 'prompt':2", "role": "user", "idents": "", "offset": 816, "agent_id": "main", "session_id": "g1"}
 {"at": "2026-11-01T10:00:20+00:00", "tsv": "'a':1 'agent':3 'skill':2", "role": "assistant", "idents": "Skill Agent", "offset": 1067, "agent_id": "main", "session_id": "g1"}
 {"at": "2026-11-01T10:00:25+00:00", "tsv": "'agent':2 'skill':1", "role": "assistant", "idents": "Skill Agent", "offset": 211, "agent_id": "a1", "session_id": "g1"}
 {"at": "2026-11-01T10:00:40+00:00", "tsv": "'agent':1 'bash':2", "role": "assistant", "idents": "Agent Bash", "offset": 2511, "agent_id": "main", "session_id": "g1"}
-{"at": "2026-11-01T10:15:50+00:00", "tsv": "'skill':1", "role": "assistant", "idents": "Skill", "offset": 8199, "agent_id": "main", "session_id": "g1"}
+{"at": "2026-11-01T10:15:50+00:00", "tsv": "'skill':1", "role": "assistant", "idents": "Skill", "offset": 8224, "agent_id": "main", "session_id": "g1"}
+== session_events
+{"at": "2026-11-01T10:00:01+00:00", "kind": "start", "model": "claude-opus-5-5", "offset": 125, "device_id": "DEVICE", "session_id": "g1"}
+== line_order
+{"ts": "2026-11-01T10:00:01+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:01+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:02+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:03+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:03+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:10+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:20+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:21+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:22+00:00", "agent_id": "a1", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:25+00:00", "agent_id": "a1", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:27+00:00", "agent_id": "a3", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:30+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:35+00:00", "agent_id": "a3", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:40+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:41+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:42+00:00", "agent_id": "a2", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:45+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:00:50+00:00", "agent_id": "a2", "session_id": "g1"}
+{"ts": "2026-11-01T10:01:00+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:01:10+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:01:20+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:01:30+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:01:40+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:03:20+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:05:00+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:00+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:10+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:20+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:30+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:35+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:40+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:40+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:15:50+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:16:00+00:00", "agent_id": "main", "session_id": "g1"}
+{"ts": "2026-11-01T10:16:00+00:00", "agent_id": "main", "session_id": "g1"}
 == derive_errors
-{"errors": 1, "last_offset": 8896}
+{"errors": 1, "last_offset": 8921}

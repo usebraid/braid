@@ -16,6 +16,7 @@ const body = (path: string): unknown => {
   if (path === '/api/v1/stats/failures')
     return { by_category: [], by_limit_type: [], by_day: [], time_lost_s: 0, items: [], next: null }
   if (path === '/api/v1/stats/filters') return { projects: [], models: [], skills: [] }
+  if (path === '/api/v1/stats/timeline') return { events: [], next: null }
   if (path === '/api/v1/stats/sessions') return { items: [], next: null }
   if (path === '/api/v1/stats/overview')
     return {

@@ -60,7 +60,7 @@ vi.mock('../api/client', async (orig) => ({
 }))
 
 it('draws main plus nested subagents, phase bands and failure markers, and selects an agent from its node', async () => {
-  renderApp(<Session />, { route: '/sessions/g1' })
+  renderApp(<Session />, { route: '/sessions/g1?view=canvas' })
   expect(await screen.findByRole('heading', { name: 'Golden custom' })).toBeInTheDocument()
   for (const id of ['main', 'a1', 'a2', 'a3']) expect(await screen.findByTestId(`agent-node-${id}`)).toBeInTheDocument()
   expect(screen.getByTestId('agent-node-main')).toHaveAttribute('title', expect.stringContaining('brainstorming'))
@@ -71,7 +71,7 @@ it('draws main plus nested subagents, phase bands and failure markers, and selec
 })
 
 it('explains in a tooltip that the session cost can be below /cost', async () => {
-  renderApp(<Session />, { route: '/sessions/g1' })
+  renderApp(<Session />, { route: '/sessions/g1?view=canvas' })
   expect(await screen.findByTitle(/Priced at API rates from the transcripts/)).toBeInTheDocument()
 })
 
