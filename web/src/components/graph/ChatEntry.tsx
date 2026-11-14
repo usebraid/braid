@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
 
+import { memo } from 'react'
 import { toolSummary } from '../../lib/toolSummary'
 import type { Entry } from '../../lib/transcript'
 import { Pill } from '../ui'
@@ -8,7 +9,25 @@ import { color } from './GraphCell'
 import { Markdown } from './Markdown'
 
 // Text only, never markup; same rule as the transcript panel.
-export function ChatEntry({ e, tag, lane = 0 }: { e: Entry; tag?: string; lane?: number }) {
+type Props = { e: Entry; tag?: string; lane?: number }
+
+// buildRows makes new Entry objects on every page load; an entry's content never changes, so compare by value and
+// skip re-parsing the markdown of every row already shown.
+export const ChatEntry = memo(ChatEntryView, (a: Props, b: Props) => {
+  const x = a.e
+  const y = b.e
+  return (
+    a.tag === b.tag &&
+    a.lane === b.lane &&
+    x.lineId === y.lineId &&
+    x.kind === y.kind &&
+    x.text === y.text &&
+    x.truncated === y.truncated &&
+    x.isError === y.isError
+  )
+})
+
+function ChatEntryView({ e, tag, lane = 0 }: Props) {
   const lead = tag ? <span className="gtag">{tag}</span> : null
   const more = e.truncated ? '\n… truncated' : ''
   const text = (

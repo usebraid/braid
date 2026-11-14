@@ -22,6 +22,7 @@ const mergeLines = (a: ChatLine[], b: ChatLine[]) => {
 }
 const TAIL = 200 // a live tick that expects late subagent lines refetches this many of the newest loaded lines
 const PAGE = 500
+const STEP = 25 // lines per scroll-driven page: a render of all of them must stay a short task
 const MAX_PAGES = 10 // per tick; the "Load more" sentinel takes over beyond
 
 // The `after` cursor of a loaded line (api/openapi.yaml, statsSessionChat).
@@ -140,7 +141,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
   }, [lines])
 
   const load = (
-    q: { after?: string; before?: string },
+    q: { after?: string; before?: string; limit?: number },
     apply: (pg: Awaited<ReturnType<typeof statsSessionChat>>) => void,
   ) => {
     const mine = epoch.current
@@ -161,13 +162,13 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
   }
   const later = () =>
     next !== null &&
-    load({ after: next }, (pg) => {
+    load({ after: next, limit: STEP }, (pg) => {
       setLines((old) => mergeLines(old, pg.lines ?? []))
       setNext(pg.next ?? null)
     })
   const earlier = () =>
     prev !== null &&
-    load({ before: prev }, (pg) => {
+    load({ before: prev, limit: STEP }, (pg) => {
       setLines((old) => mergeLines(old, pg.lines ?? []))
       setPrev(pg.prev ?? null)
     })

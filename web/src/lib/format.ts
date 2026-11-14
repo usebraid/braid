@@ -55,16 +55,23 @@ export function dayKey(iso: string, timeZone: string): string {
   return new Date(iso).toLocaleDateString('en-CA', { timeZone })
 }
 
+// Building an Intl.DateTimeFormat is slow (the session graph formats one per row), so keep one per zone.
+const dateTimeFormats = new Map<string, Intl.DateTimeFormat>()
 export function fmtDateTime(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(new Date(iso))
+  let f = dateTimeFormats.get(timeZone)
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+    dateTimeFormats.set(timeZone, f)
+  }
+  return f.format(new Date(iso))
 }
 
 // "Nov 2, 14:05" in the user's zone, for dense rows.
