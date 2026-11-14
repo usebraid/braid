@@ -66,3 +66,15 @@ test('charts are reachable by keyboard and reduced motion removes transitions', 
     .evaluate((el) => getComputedStyle(el.querySelector('.card') ?? el).transitionDuration)
   expect(dur === '0s' || dur === '').toBe(true)
 })
+
+test('keyboard: graph rows are reachable with Tab', async ({ page, request }) => {
+  await loginAs(page, request, 'alice')
+  await page.goto(`/sessions/g1?${RANGE}`)
+  const toggle = page.getByRole('button', { name: /^Subagent Explore: d1/ })
+  await toggle.waitFor()
+  for (let i = 0; i < 40 && !(await toggle.evaluate((el) => el === document.activeElement)); i++)
+    await page.keyboard.press('Tab')
+  await expect(toggle).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+})

@@ -191,6 +191,26 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     el.focus()
   }, [rows, p.focusLine])
 
+  // A deep link to a line without a row (an empty API-error reply, a collapsed branch) marks the nearest row at or after
+  // it in line order, else the nearest before.
+  const focusKey = useMemo(() => {
+    if (!p.focusLine) return undefined
+    const at = new Map(lines.map((l, i) => [l.id, i]))
+    const f = at.get(p.focusLine)
+    if (f === undefined) return undefined
+    let after: [number, string] | undefined
+    let before: [number, string] | undefined
+    for (const r of rows) {
+      const i = r.kind === 'entry' ? at.get(r.entry.lineId) : undefined
+      if (i === undefined) continue
+      if (i >= f ? !after || i < after[0] : !before || i >= before[0]) {
+        if (i >= f) after = [i, r.key]
+        else before = [i, r.key]
+      }
+    }
+    return (after ?? before)?.[1]
+  }, [rows, lines, p.focusLine])
+
   // Which lanes run through each row, including branches opened above the loaded window.
   const cells = useMemo(() => {
     const lastEntry = new Map<string, number>()
@@ -292,7 +312,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
         {rows.map((r, i) => {
           const c = cells[i]
           const at = r.kind === 'entry' ? (r.entry.at ?? lineTs.get(r.entry.lineId) ?? null) : r.at
-          const focus = r.kind === 'entry' && r.entry.lineId === p.focusLine
+          const focus = r.key === focusKey
           return (
             <li key={r.key} className={`grow ${r.kind}`} tabIndex={-1} aria-current={focus ? 'true' : undefined}>
               <time dateTime={at ?? undefined} title={at ? fmtDateTime(at, tz) : undefined}>

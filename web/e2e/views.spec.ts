@@ -49,8 +49,8 @@ test.describe('views as alice', () => {
       .first()
       .click()
     await expect(page).toHaveURL(/\/sessions\/g1\?agent=.*&line=\d+/)
-    // the failing line (an API error reply) has no text, so the graph has no row to mark; only the view is asserted
-    await expect(page.getByRole('region', { name: 'Session chat' })).toBeVisible()
+    await expect(page.locator('[aria-current="true"]').first()).toBeVisible()
+    await expect(page.locator('[aria-current="true"]').first()).toBeFocused()
   })
 
   test('search: snippet jumps to the line', async ({ page }) => {

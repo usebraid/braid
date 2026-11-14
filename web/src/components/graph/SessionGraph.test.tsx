@@ -115,6 +115,20 @@ it('marks the focused row', async () => {
   expect(get.mock.calls[0]?.[1]).toMatchObject({ at: 3 })
 })
 
+it('marks the nearest row at or after a focused line without a row, else the one before', async () => {
+  const empty = (id: number, minute: number) => L(id, 'main', minute, asst([]))
+  get.mockResolvedValueOnce({ lines: [...LINES, empty(6, 4)], next: null, prev: null })
+  const first = renderApp(<SessionGraph detail={detail()} focusLine={6} />)
+  const after = (await screen.findByText('all done')).closest('li')
+  await waitFor(() => expect(after).toHaveAttribute('aria-current', 'true'))
+  expect(after).toHaveFocus()
+  first.unmount()
+  get.mockResolvedValueOnce({ lines: [...LINES, empty(7, 5)], next: null, prev: null })
+  renderApp(<SessionGraph detail={detail()} focusLine={7} />)
+  const before = (await screen.findByText('all done')).closest('li')
+  await waitFor(() => expect(before).toHaveAttribute('aria-current', 'true'))
+})
+
 it('pages forward through the next cursor', async () => {
   get.mockResolvedValueOnce({ lines: LINES.slice(0, 1), next: 'c1', prev: null })
   get.mockResolvedValueOnce({ lines: LINES.slice(4), next: null, prev: null })

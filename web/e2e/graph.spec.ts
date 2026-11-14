@@ -77,7 +77,6 @@ test.describe('graph views as alice', () => {
     }
     await expect(page.getByRole('button', { name: 'Load more' })).toHaveCount(0)
     const long = await page.evaluate(() => (window as unknown as { __long: number[] }).__long)
-    console.log(`perf: ${await rows.count()} rows, long tasks: ${JSON.stringify(long)}`)
     expect(long.filter((d) => d > 50)).toEqual([])
   })
 })
