@@ -2,13 +2,26 @@
 
 <h1 align="center">Braid</h1>
 
+<p align="center">
+  <a href="https://github.com/usebraid/braid/releases/latest"><img src="https://img.shields.io/github/v/release/usebraid/braid?label=release" alt="Latest release"></a>
+  <a href="https://github.com/usebraid/braid/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/usebraid/braid/ci.yml?branch=main&label=ci" alt="CI status"></a>
+  <a href="https://github.com/usebraid/braid/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/usebraid/braid/release.yml?branch=main&label=release%20build" alt="Release build status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/usebraid/braid" alt="License: AGPL-3.0-or-later"></a>
+  <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/usebraid/braid" alt="Go version"></a>
+  <a href="https://github.com/usebraid/braid/pkgs/container/braid-server"><img src="https://img.shields.io/badge/image-ghcr.io%2Fusebraid%2Fbraid--server-blue?logo=docker&logoColor=white" alt="Container image on GHCR"></a>
+  <a href="https://github.com/usebraid/homebrew-tap"><img src="https://img.shields.io/badge/homebrew-usebraid%2Ftap-orange?logo=homebrew&logoColor=white" alt="Homebrew tap"></a>
+  <a href="https://usebraid.dev/docs/"><img src="https://img.shields.io/badge/docs-usebraid.dev-informational" alt="Documentation"></a>
+  <a href="https://www.conventionalcommits.org"><img src="https://img.shields.io/badge/commits-conventional-fe5196?logo=conventionalcommits&logoColor=white" alt="Conventional Commits"></a>
+</p>
+
 Braid is a self-hosted daemon and server that syncs Claude Code transcripts from your machines into one place, so sessions, subagents, costs and failures can be browsed and replayed.
 
 ## What it does
 
 - Syncs Claude Code transcripts from every device to your own server, resuming after offline periods.
 - Shows sessions, costs and tokens on a board, per project, model and device.
-- Replays a session as a canvas of the main session and its subagents.
+- Replays a session as a chat with a git-style graph of its subagents (or as a canvas), live while it runs.
+- Shows a timeline of when sessions started and were resumed, across devices.
 - Lists failures: what went wrong, how often and how much time it cost.
 - Supports several users on one server, each seeing only their own data; login through your OpenID Connect provider.
 
