@@ -21,7 +21,7 @@ services:
     # To build locally instead, replace the next line with:
     #   build:
     #     context: ..
-    image: ghcr.io/usebraid/braid-server:${BRAID_VERSION:-0.3.0} # x-release-please-version
+    image: ghcr.io/usebraid/braid-server:${BRAID_VERSION:-0.4.0} # x-release-please-version
     environment:
       BRAID_PUBLIC_URL: ${BRAID_PUBLIC_URL:-http://localhost:8080}
       BRAID_DATABASE_URL: postgres://braid_app:${BRAID_DB_APP_PASSWORD}@postgres:5432/braid?sslmode=disable

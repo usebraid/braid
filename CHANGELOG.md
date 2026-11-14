@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.0](https://github.com/usebraid/braid/compare/v0.3.0...v0.4.0) (2026-11-14)
+
+
+### Features
+
+* **release:** publish a Scoop manifest for Windows ([#12](https://github.com/usebraid/braid/issues/12)) ([6982075](https://github.com/usebraid/braid/commit/6982075df2c5792ba80efde794c3f8c1e3efded9))
+
+
+### Bug Fixes
+
+* **daemon:** run the Windows task without a console window ([#14](https://github.com/usebraid/braid/issues/14)) ([8ec62a0](https://github.com/usebraid/braid/commit/8ec62a0ae0019dd5c9c23bdb6a09bbf01f4b0685))
+
+
+### Documentation
+
+* **readme:** add badges and describe the graph and timeline views ([#11](https://github.com/usebraid/braid/issues/11)) ([ef80650](https://github.com/usebraid/braid/commit/ef80650c74add34870954c3c9b3d7b1e5951da16))
+
 ## [0.3.0](https://github.com/usebraid/braid/compare/v0.2.0...v0.3.0) (2026-11-14)
 
 

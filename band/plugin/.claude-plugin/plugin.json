@@ -1,6 +1,6 @@
 {
   "name": "braid",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Shows session cost, today's usage and Braid sync state above the Claude Code prompt. Costs no tokens.",
   "author": {
     "name": "Braid Authors"
