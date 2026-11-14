@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Braid Authors
-# Local end-to-end setup. Copy .env.example to .env first. TLS is not included.
+# Local setup: postgres + braid. Needs an existing OIDC provider. Copy .env.example to .env first. TLS is not included.
 name: braid
 services:
   postgres:
@@ -17,35 +17,24 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
-  pocket-id:
-    image: ghcr.io/pocket-id/pocket-id:v1.16.0@sha256:f8cde808e8e840acda25683fc2168e0206e3f3fb1a48cca89d211aafd87eaeef
-    environment:
-      APP_URL: ${POCKET_ID_URL:-http://pocket-id:1411}
-      ENCRYPTION_KEY: ${POCKET_ID_ENCRYPTION_KEY:?}
-      TRUST_PROXY: "false"
-    ports:
-      - "127.0.0.1:1411:1411"
-    volumes:
-      - pocketid:/app/data
   braid:
-    build:
-      context: ..
+    # To build locally instead, replace the next line with:
+    #   build:
+    #     context: ..
+    image: ghcr.io/usebraid/braid-server:${BRAID_VERSION:-0.2.0} # x-release-please-version
     environment:
       BRAID_PUBLIC_URL: ${BRAID_PUBLIC_URL:-http://localhost:8080}
       BRAID_DATABASE_URL: postgres://braid_app:${BRAID_DB_APP_PASSWORD}@postgres:5432/braid?sslmode=disable
       BRAID_DATABASE_OWNER_URL: postgres://braid_owner:${BRAID_DB_OWNER_PASSWORD}@postgres:5432/braid?sslmode=disable
-      BRAID_OIDC_ISSUER: ${POCKET_ID_URL:-http://pocket-id:1411}
+      BRAID_OIDC_ISSUER: ${BRAID_OIDC_ISSUER:?}
       BRAID_OIDC_CLIENT_ID: ${BRAID_OIDC_CLIENT_ID:?}
       BRAID_OIDC_CLIENT_SECRET: ${BRAID_OIDC_CLIENT_SECRET:?}
       BRAID_OIDC_ADMIN_GROUP: ${BRAID_OIDC_ADMIN_GROUP:-braid-admins}
     depends_on:
       postgres:
         condition: service_healthy
-      pocket-id:
-        condition: service_started
     ports:
       - "127.0.0.1:8080:8080"
     restart: unless-stopped
 volumes:
   pgdata:
-  pocketid:

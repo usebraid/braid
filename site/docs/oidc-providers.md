@@ -7,7 +7,7 @@ description: Sign in with Pocket ID, Authentik, Keycloak, Authelia, Zitadel or a
 
 # OIDC providers
 
-Braid logs users in with any OpenID Connect provider that supports the authorization code flow with PKCE and a confidential client. Pocket ID is bundled in the Compose file; the others work the same way.
+Braid logs users in with any OpenID Connect provider that supports the authorization code flow with PKCE and a confidential client. Braid does not ship a provider: run one yourself and point `BRAID_OIDC_ISSUER` at it. The providers below work the same way.
 
 ## Settings that are the same everywhere
 

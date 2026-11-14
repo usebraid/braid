@@ -9,7 +9,7 @@ description: Back up, upgrade, rebuild derived data and manage devices.
 
 ## Backups
 
-All state is in Postgres (the Pocket ID data lives in its own volume). Back up the `braid` database as the owner:
+All Braid state is in Postgres (your OIDC provider has its own backups). Back up the `braid` database as the owner:
 
 ```
 docker compose exec -T postgres pg_dump -U braid_owner --format=custom --no-owner braid > braid.dump
