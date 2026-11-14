@@ -48,9 +48,10 @@ signs:
 brews:
   - ids: [braid]
     name: braid
-    # No tap token (no tap repo yet): skip the formula. With a token, prereleases still do not touch the tap.
+    # No tap token: skip the formula. With a token, prereleases still do not touch the tap.
     skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}auto{{ else }}true{{ end }}'
     repository: { owner: usebraid, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
+    directory: Formula # brew reads only Formula/ once the tap has that folder
     homepage: https://usebraid.dev
     description: Sync Claude Code sessions from all your devices into one Braid server
     license: AGPL-3.0-or-later
