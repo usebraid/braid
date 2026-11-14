@@ -67,3 +67,5 @@ Common cases:
 - **backlog does not shrink**: check the server with `curl -fsS <server-url>/healthz`, then run `braid import` to see the error in the foreground.
 - **server URL must use https**: `braid` only accepts `http` for localhost.
 - **another braid process is syncing**: only one `braid run` can own the state directory; `braid import` then follows the running service.
+
+To see sync state and usage inside Claude Code itself, install the [Claude Code band](/docs/band/).

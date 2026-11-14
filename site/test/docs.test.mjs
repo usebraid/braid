@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 
 const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const docsDir = path.join(site, 'docs')
-const pages = ['quick-start', 'daemon', 'oidc-providers', 'reverse-proxy', 'external-postgres', 'operations']
+const pages = ['quick-start', 'daemon', 'band', 'oidc-providers', 'reverse-proxy', 'external-postgres', 'operations']
 const read = (p) => readFileSync(p, 'utf8')
 const doc = (n) => read(path.join(docsDir, `${n}.md`))
 

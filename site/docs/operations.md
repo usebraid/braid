@@ -1,6 +1,6 @@
 ---
 title: Operations
-order: 6
+order: 7
 group: Run the server
 description: Back up, upgrade, rebuild derived data and manage devices.
 ---

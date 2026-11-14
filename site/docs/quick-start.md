@@ -61,7 +61,7 @@ braid login http://localhost:8080
 braid install
 ```
 
-`braid login` prints a code and a link; approve the device in the browser. `braid install` registers the background service and starts syncing. `braid status` shows the login and the backlog.
+`braid login` prints a code and a link; approve the device in the browser. `braid install` registers the background service and starts syncing. `braid status` shows the login and the backlog. Optionally, add the [Claude Code band](/docs/band/) to see cost and sync state above the prompt.
 
 ## Verify a release
 
