@@ -230,3 +230,44 @@ Branch row: emitted at the parent's tool_call entry whose `tool.id === agent.spa
 **Verify:** `cd web && npx playwright test` (with the harness as in `site/scripts/screenshots.mjs`) → all pass
 
 **Steps:** fixtures, specs, run, `scripts/check.sh`, commit `test(web): cover the graph and chat views end to end`. Then regenerate `site/assets/shots` with `node site/scripts/screenshots.mjs` if the session screenshot changed, commit `docs(site): refresh screenshots`.
+
+---
+
+### Task 7: Sidebar shows the 10 most recently active projects
+
+**Goal:** The project list in the sidebar shows only the 10 projects with the most recent activity (owner request 2026-11-14: "Die Projektliste in der Sidebar sollte auch nur die letzten 10 … anzeigen und nicht alle").
+
+**Files:**
+- Modify: `api/openapi.yaml` (`ProjectOption.last_active: date-time`), `internal/server/stats/live.go` (`filters` handler fills it from `projects.last_seen` or the newest session end of the project), `web/src/components/Shell.tsx` (`ProjectNav`), regenerated `web/src/api/schema.d.ts`
+- Test: `internal/server/stats/live_test.go` (or the existing filters test), `web/src/components/Shell.test.tsx`
+
+**Acceptance Criteria:**
+- [ ] `GET /api/v1/stats/filters` returns `last_active` per project.
+- [ ] The sidebar lists "All projects" plus at most 10 projects, newest `last_active` first; "All projects" keeps the total of all projects.
+- [ ] A selected project outside the 10 still appears (appended, marked selected), so the current filter is always visible.
+- [ ] Project colours do not change (`projectColor` still uses the full list).
+
+**Verify:** `go test ./internal/server/stats/...` and `cd web && npx vitest run src/components/Shell.test.tsx` → pass
+
+**Steps:** tests first, implementation, `scripts/check.sh`, commit `feat(web): show the ten most recently active projects in the sidebar`.
+
+---
+
+### Task 8: Device login pages in the dashboard look
+
+**Goal:** The server-rendered device pages (`/device` code form, confirm, approved/denied result) look like the dashboard (owner request 2026-11-14: "die Device login und Approved seite nicht im einheitlichen style").
+
+**Files:**
+- Modify: `internal/server/device/templates/device.html`, `internal/server/device/device.go` (only if the result view needs data), plus serving of a font/logo only through existing static routes
+- Test: `internal/server/device/device_test.go`
+
+**Acceptance Criteria:**
+- [ ] Colours, radii, spacing and type come from the dashboard's ponytail tokens (`web/src/theme/tokens.css`), copied as CSS custom properties into the template; light and dark follow `prefers-color-scheme` like the dashboard.
+- [ ] Layout: centred card with the Braid logo and wordmark as in the dashboard sidebar, title, body; buttons and inputs styled like the dashboard's (primary / secondary); code input in JetBrains Mono, upper-case, letter-spaced.
+- [ ] Every view (form, confirm, approved, denied, error) uses the same shell; the approved view says the terminal will continue and the tab can be closed.
+- [ ] CSP unchanged (style only via the nonce'd `<style>`; fonts/images only from same origin — use the dashboard's existing built asset URLs or inline SVG for the logo).
+- [ ] Existing device tests still pass; a test asserts each view renders the shell (logo + title) and no external URL.
+
+**Verify:** `go test ./internal/server/device/...` → ok
+
+**Steps:** test first, template, `scripts/check.sh`, commit `feat(server): style the device login pages like the dashboard`.
