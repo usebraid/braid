@@ -15,7 +15,7 @@ This gets a Braid server, a login provider and your first device running on one 
 curl -fsSL https://get.usebraid.dev | sh
 ```
 
-The script verifies a SHA-256 sum before it installs anything and puts `braid` in `~/.local/bin`. You can read it first at <https://usebraid.dev/install.sh>. On Windows see [the daemon page](/docs/daemon/#windows).
+The script verifies a SHA-256 sum before it installs anything and puts `braid` in `~/.local/bin`. You can read it first at <https://usebraid.dev/install.sh>. On Windows, install with Scoop as shown on [the daemon page](/docs/daemon/#windows).
 
 With Homebrew (macOS, Linux) instead:
 

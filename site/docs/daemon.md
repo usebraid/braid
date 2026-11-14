@@ -28,7 +28,18 @@ braid install
 
 ## Windows
 
-There is no install script for Windows. Manual steps:
+Install with [Scoop](https://scoop.sh):
+
+```
+scoop bucket add usebraid https://github.com/usebraid/scoop-bucket
+scoop install braid
+braid login <server-url>
+braid install
+```
+
+`braid install` creates a scheduled task named `Braid` that runs at logon and starts it. After `scoop update braid`, run `braid uninstall` and `braid install` so the task restarts on the new version.
+
+Without Scoop, manual steps:
 
 1. Download the `braid_*_windows_*.zip` for your CPU from the release page (verify it, see [Quick start](/docs/quick-start/)).
 2. Unzip it and put `braid.exe` in a folder on your `PATH`.
