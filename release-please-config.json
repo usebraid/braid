@@ -66,6 +66,10 @@
           "type": "json",
           "path": "band/plugin/.claude-plugin/plugin.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "generic",
+          "path": "deploy/docker-compose.yml"
         }
       ],
       "initial-version": "0.1.0"

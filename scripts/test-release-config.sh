@@ -10,6 +10,7 @@ const cfg = JSON.parse(fs.readFileSync("release-please-config.json", "utf8"))
 const files = cfg.packages["."]["extra-files"]
 if (!files || !files.length) throw new Error("no extra-files")
 for (const f of files) {
+  if (f.type !== "json") { fs.accessSync(f.path); continue }
   const doc = JSON.parse(fs.readFileSync(f.path, "utf8"))
   // only the two jsonpath shapes we use: $.a.b and $.packages[""].version
   const keys = [...f.jsonpath.matchAll(/\.([A-Za-z_]+)|\[\x27([^\x27]*)\x27\]/g)].map((m) => m[1] ?? m[2])

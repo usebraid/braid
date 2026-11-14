@@ -25,7 +25,11 @@ brew install usebraid/tap/braid
 
 Homebrew asks you to trust the tap once: `brew trust usebraid/tap`. Update later with `brew upgrade braid`.
 
-## 2. Run the server
+## 2. Have an OIDC provider
+
+Braid does not ship a login provider; it assumes you already run one (Pocket ID, Authentik, Keycloak and others). In it, create a confidential client with the redirect URI `<BRAID_PUBLIC_URL>/auth/callback` (locally `http://localhost:8080/auth/callback`), a `groups` claim, and a group `braid-admins` that contains you. Details per provider: [OIDC providers](/docs/oidc-providers/).
+
+## 3. Run the server
 
 You need Docker with Compose. The Compose file and its helpers are in the `deploy/` directory of the repository:
 
@@ -35,34 +39,21 @@ cd braid/deploy
 cp .env.example .env
 ```
 
-Fill in the passwords and the encryption key in `.env` (the commands are in the file; use hex passwords, they end up in URLs). Browser and server must reach Pocket ID under the same name, so locally:
+Fill in the passwords in `.env` (the commands are in the file; use hex passwords, they end up in URLs) and set `BRAID_OIDC_ISSUER`, `BRAID_OIDC_CLIENT_ID` and `BRAID_OIDC_CLIENT_SECRET` from your provider (see below). Then start Postgres and Braid:
 
 ```
-echo "127.0.0.1 pocket-id" | sudo tee -a /etc/hosts
-docker compose up -d postgres pocket-id
+docker compose up -d
 ```
 
-Open <http://pocket-id:1411> and create the admin account. In Pocket ID:
+To build the image yourself instead of pulling `ghcr.io/usebraid/braid-server`, follow the comment on the `image:` line of the `braid` service and run `docker compose up -d --build`.
 
-1. Create a user group `braid-admins` and add yourself.
-2. Create an OIDC client with the callback URL `<BRAID_PUBLIC_URL>/auth/callback` (locally `http://localhost:8080/auth/callback`).
-3. Put the client ID and secret into `.env` as `BRAID_OIDC_CLIENT_ID` and `BRAID_OIDC_CLIENT_SECRET`.
+A Postgres you already run is covered in [External Postgres](/docs/external-postgres/).
 
-Then start Braid:
+## 4. First login
 
-```
-docker compose up -d --build
-```
+Open <http://localhost:8080> and sign in with your provider. The first sign-in creates your user; members of `braid-admins` are admins.
 
-To use the published image instead of building it, replace the `build:` block of the `braid` service with `image: ghcr.io/usebraid/braid-server:<version>` and run `docker compose up -d`.
-
-Other login providers are covered in [OIDC providers](/docs/oidc-providers/); a Postgres you already run in [External Postgres](/docs/external-postgres/).
-
-## 3. First login
-
-Open <http://localhost:8080> and sign in with Pocket ID. The first sign-in creates your user; members of `braid-admins` are admins.
-
-## 4. Connect a device
+## 5. Connect a device
 
 ```
 braid login http://localhost:8080
