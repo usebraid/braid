@@ -15,5 +15,5 @@
     "types": ["node"],
     "paths": { "claude-code": ["./tests/claude-code.fake.ts"] }
   },
-  "include": ["hooks", "tests"]
+  "include": ["plugin", "tests"]
 }

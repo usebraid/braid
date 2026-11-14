@@ -7,27 +7,30 @@ import { describe, expect, test } from 'vitest'
 const band = join(import.meta.dirname, '..')
 const json = (...p: string[]) => JSON.parse(readFileSync(join(band, ...p), 'utf8'))
 
+const plugin = join(band, 'plugin')
+const pjson = (...p: string[]) => JSON.parse(readFileSync(join(plugin, ...p), 'utf8'))
+
 describe('zero token cost', () => {
-  test('claude-band.json has empty hooks and exactly one module', () => {
-    const c = json('hooks', 'claude-band.json')
-    expect(c.hooks).toEqual({})
-    expect(c.modules).toEqual(['./band/register.tsx'])
-    expect(existsSync(join(band, 'hooks', 'band', 'register.tsx'))).toBe(true)
+  test('hooks.json holds exactly one module', () => {
+    const c = pjson('hooks', 'hooks.json')
+    expect(c).toEqual({ modules: ['./register.tsx'] })
+    expect(existsSync(join(plugin, 'hooks', 'register.tsx'))).toBe(true)
   })
   test('the plugin declares no model-facing surface', () => {
-    const p = json('.claude-plugin', 'plugin.json')
+    const p = pjson('.claude-plugin', 'plugin.json')
     expect(p.name).toBe('braid')
-    expect(p.hooks).toEqual(['./hooks/claude-band.json'])
-    for (const k of ['skills', 'commands', 'agents', 'mcpServers', 'userConfig', 'lspServers'])
+    expect(p.types).toBe('./types/index.d.ts')
+    for (const k of ['hooks', 'skills', 'commands', 'agents', 'mcpServers', 'userConfig', 'lspServers'])
       expect(p).not.toHaveProperty(k)
   })
-  test('the plugin directory ships no skills, commands, agents or extra hook files', () => {
-    for (const d of ['skills', 'commands', 'agents']) expect(existsSync(join(band, d))).toBe(false)
-    expect(readdirSync(join(band, 'hooks')).filter((f) => f.endsWith('.json'))).toEqual(['claude-band.json'])
-    expect(existsSync(join(band, '.mcp.json'))).toBe(false)
+  test('the plugin directory ships no dev tooling, skills, commands, agents or extra hook files', () => {
+    for (const d of ['skills', 'commands', 'agents', 'node_modules', 'tests'])
+      expect(existsSync(join(plugin, d))).toBe(false)
+    for (const f of ['package.json', 'package-lock.json', '.mcp.json']) expect(existsSync(join(plugin, f))).toBe(false)
+    expect(readdirSync(join(plugin, 'hooks')).filter((f) => f.endsWith('.json'))).toEqual(['hooks.json'])
   })
-  test('the marketplace points at ./band', () => {
+  test('the marketplace points at ./band/plugin', () => {
     const m = json('..', '.claude-plugin', 'marketplace.json')
-    expect(m.plugins).toEqual([expect.objectContaining({ name: 'braid', source: './band' })])
+    expect(m.plugins).toEqual([expect.objectContaining({ name: 'braid', source: './band/plugin' })])
   })
 })

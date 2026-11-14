@@ -6,8 +6,5 @@
     "name": "Braid Authors"
   },
   "license": "AGPL-3.0-or-later",
-  "hooks": [
-    "./hooks/claude-band.json"
-  ],
-  "types": "./hooks/band/types.d.ts"
+  "types": "./types/index.d.ts"
 }

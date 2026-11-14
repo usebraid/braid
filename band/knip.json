@@ -1,5 +1,5 @@
 {
-  "entry": ["hooks/band/register.tsx", "tests/**/*.test.{ts,tsx}"],
-  "project": ["hooks/**", "tests/**"],
-  "ignoreIssues": { "hooks/band/stats.ts": ["exports", "types"] }
+  "entry": ["plugin/hooks/register.tsx", "tests/**/*.test.{ts,tsx}"],
+  "project": ["plugin/**", "tests/**"],
+  "ignoreIssues": { "plugin/hooks/stats.ts": ["exports", "types"] }
 }
