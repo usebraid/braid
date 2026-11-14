@@ -4,7 +4,12 @@
 // atom/read/update keep their values in `$.state`, as the engine does per session.
 export type Atom<T> = { ref: { plugin: string; key: string }; initial: T }
 export type EngineInterface = any
-export type Register = (on: any, options: { readonly [field: string]: unknown }) => void
+type Hook = ($: any, e: any, next: any) => any
+type On = {
+  (event: string, hook: Hook): unknown
+  (event: string, matcher: object, hook: Hook): unknown
+}
+export type Register = (on: On, options: { readonly [field: string]: unknown }) => void
 export interface PluginState {
   [plugin: string]: any
 }

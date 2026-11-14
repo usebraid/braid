@@ -17,6 +17,14 @@ curl -fsSL https://get.usebraid.dev | sh
 
 The script verifies a SHA-256 sum before it installs anything and puts `braid` in `~/.local/bin`. You can read it first at <https://usebraid.dev/install.sh>. On Windows see [the daemon page](/docs/daemon/#windows).
 
+With Homebrew (macOS, Linux) instead:
+
+```
+brew install usebraid/tap/braid
+```
+
+Homebrew asks you to trust the tap once: `brew trust usebraid/tap`. Update later with `brew upgrade braid`.
+
 ## 2. Run the server
 
 You need Docker with Compose. The Compose file and its helpers are in the `deploy/` directory of the repository:

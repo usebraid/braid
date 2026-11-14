@@ -1,16 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
-// Adapted from ponytail's band (hooks/band/register.tsx, MIT, Copyright (c) 2026 DietrichGebert): the palette names
+// Adapted from ponytail's band (hooks/register.tsx, MIT, Copyright (c) 2026 DietrichGebert): the palette names
 // (success, warning, error, inactive, suggestion, dim) and the "one row of Text segments" idea. See THIRD_PARTY_NOTICES.md.
 
-export type SyncState = 'ok' | 'backlog' | 'blocked' | 'offline' | 'logged_out'
-export type Stats = {
-  version: 1
-  sync: { state: SyncState; backlog_bytes: number; last_ack?: string }
-  today: { cost_usd: number; tokens: number; sessions: number; agent_time_s: number; failures: number }
-  session?: { cost_usd: number; tokens: number; failures: number }
-  limit?: { type: string; resets_at: string }
-}
+import type { Stats, SyncState } from '../types'
+
 // The engine's $.session.usage() has no token total, so the module passes the cost only.
 export type Local = { cost: number; tokens?: number } | undefined
 export type Color = 'success' | 'warning' | 'error' | 'inactive'

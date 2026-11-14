@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import Ajv2020 from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 import { describe, expect, test } from 'vitest'
-import { countdown, dotColor, due, fmtMoney, fmtTokens, parseStats, type SyncState, view } from '../hooks/band/stats'
+import { countdown, dotColor, due, fmtMoney, fmtTokens, parseStats, view } from '../plugin/hooks/stats'
+import type { SyncState } from '../plugin/types'
 
 const dir = join(import.meta.dirname, '..')
 const read = (...p: string[]) => readFileSync(join(dir, ...p), 'utf8')

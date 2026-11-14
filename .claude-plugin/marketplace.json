@@ -6,7 +6,7 @@
     {
       "name": "braid",
       "description": "Shows session cost, today's usage and Braid sync state above the prompt. Costs no tokens.",
-      "source": "./band",
+      "source": "./band/plugin",
       "category": "monitoring"
     }
   ]
