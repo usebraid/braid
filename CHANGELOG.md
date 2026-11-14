@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0](https://github.com/usebraid/braid/compare/v0.2.0...v0.3.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deploy:** Compose no longer starts Pocket ID and POCKET_ID_* variables are gone. Operators must run their own OIDC provider and set BRAID_OIDC_ISSUER in .env.
+
+### Features
+
+* **deploy:** stop bundling an identity provider ([#9](https://github.com/usebraid/braid/issues/9)) ([16259a5](https://github.com/usebraid/braid/commit/16259a585a78975576cdb308e340238f1d7359a2))
+
+
+### Bug Fixes
+
+* load the band as a Claude Code mod and publish the brew formula into Formula/ ([#7](https://github.com/usebraid/braid/issues/7)) ([25e314c](https://github.com/usebraid/braid/commit/25e314cf26d1f081512b3b14a8bf76aa2bf093db))
+* snapshot formula path and session graph paging long task ([#10](https://github.com/usebraid/braid/issues/10)) ([cb0b8d9](https://github.com/usebraid/braid/commit/cb0b8d9a1ac0d3bf4457157d5c8396a37761cca4))
+
 ## [0.2.0](https://github.com/usebraid/braid/compare/v0.1.0...v0.2.0) (2026-11-13)
 
 
