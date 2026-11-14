@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Braid Authors
 
+import { toolSummary } from '../../lib/toolSummary'
 import type { Entry } from '../../lib/transcript'
 import { Pill } from '../ui'
+import { color } from './GraphCell'
+import { Markdown } from './Markdown'
 
 // Text only, never markup; same rule as the transcript panel.
-export function ChatEntry({ e, tag }: { e: Entry; tag?: string }) {
+export function ChatEntry({ e, tag, lane = 0 }: { e: Entry; tag?: string; lane?: number }) {
   const lead = tag ? <span className="gtag">{tag}</span> : null
   const more = e.truncated ? '\n… truncated' : ''
   const text = (
@@ -14,24 +17,30 @@ export function ChatEntry({ e, tag }: { e: Entry; tag?: string }) {
       {more}
     </pre>
   )
-  // prompts and replies read as prose in the body font, keeping their line breaks
   const prose = (
-    <p className="g-text">
+    <div className="g-text">
       {lead}
-      {e.text}
-      {more}
-    </p>
+      <Markdown text={e.text + more} />
+    </div>
   )
   switch (e.kind) {
     case 'prompt':
-      return <div className="g-prompt">{prose}</div>
+      // the first prompt of a subagent lane is the parent's task brief, not the user speaking
+      return tag ? (
+        <div className="g-brief" style={{ borderLeftColor: color(lane) }}>
+          {prose}
+        </div>
+      ) : (
+        <div className="g-prompt">{prose}</div>
+      )
     case 'reply':
       return <div className="g-reply">{prose}</div>
     case 'tool_call':
       return (
         <div className="g-tool">
           {lead}
-          <b>{e.tool?.name || 'Tool'}</b> <span>{e.text}</span>
+          <b>{e.tool?.name || 'Tool'}</b>{' '}
+          <span>{(e.tool?.input !== undefined ? toolSummary(e.tool.name, e.tool.input) : '') || e.text}</span>
         </div>
       )
     case 'thinking':

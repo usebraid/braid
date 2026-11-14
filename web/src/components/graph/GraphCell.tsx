@@ -13,7 +13,7 @@ const STUB = 18
 const GRAPH_W = PAD * 2 + (MAX_LANES - 1) * STEP
 const COLORS = ['--p1', '--p4', '--p2', '--p3', '--p5', '--p7']
 const x = (lane: number) => PAD + lane * STEP
-const color = (lane: number) => `var(${COLORS[lane % COLORS.length]})`
+export const color = (lane: number) => `var(${COLORS[lane % COLORS.length]})`
 const curve = (x0: number, y0: number, x1: number, y1: number) =>
   `M${x0} ${y0} C ${x0} ${(y0 + y1) / 2 + 4}, ${x1} ${(y0 + y1) / 2 - 4}, ${x1} ${y1}`
 

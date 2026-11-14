@@ -295,7 +295,9 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
   const render = (r: Row) => {
     if (r.kind === 'entry') {
       const a = byId.get(r.agentId)
-      return <ChatEntry e={r.entry} tag={r.agentId === 'main' ? undefined : (a?.agent_type ?? r.agentId)} />
+      return (
+        <ChatEntry e={r.entry} lane={r.lane} tag={r.agentId === 'main' ? undefined : (a?.agent_type ?? r.agentId)} />
+      )
     }
     const a = byId.get(r.agentId)
     if (r.kind === 'branch')

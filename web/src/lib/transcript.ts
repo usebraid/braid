@@ -10,7 +10,7 @@ export type Entry = {
   kind: 'prompt' | 'reply' | 'thinking' | 'tool_call' | 'tool_result' | 'system' | 'event'
   text: string
   truncated: boolean
-  tool?: { id: string; name: string }
+  tool?: { id: string; name: string; input?: unknown }
   isError?: boolean
 }
 
@@ -73,7 +73,7 @@ export function entriesOf(item: LineItem): Entry[] {
         if (b.type === 'text') add('reply', str(b.text))
         else if (b.type === 'thinking') add('thinking', str(b.thinking))
         else if (b.type === 'tool_use')
-          add('tool_call', toolText(b.input), { tool: { id: str(b.id), name: str(b.name) } })
+          add('tool_call', toolText(b.input), { tool: { id: str(b.id), name: str(b.name), input: b.input } })
       }
       break
     case 'system':
