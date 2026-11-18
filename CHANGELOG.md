@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/usebraid/braid/compare/v0.5.0...v0.5.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **web:** draw background agents like any subagent ([#18](https://github.com/usebraid/braid/issues/18)) ([1be843c](https://github.com/usebraid/braid/commit/1be843c97fd2c8304c64edb61f0652a384c1d006))
+
 ## [0.5.0](https://github.com/usebraid/braid/compare/v0.4.0...v0.5.0) (2026-11-18)
 
 
