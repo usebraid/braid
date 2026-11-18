@@ -2,7 +2,7 @@
 // Copyright (C) 2026 The Braid Authors
 
 import { describe, expect, it } from 'vitest'
-import { assignLanes, type LaneAgent, MAX_LANES } from './lanes'
+import { assignLanes, type LaneAgent, laneEnd, MAX_LANES } from './lanes'
 
 const iso = (sec: string) => new Date(Date.UTC(2026, 10, 1) + Number(sec) * 1000).toISOString()
 const ag = (id: string, parent: string | null, from: string, to: string | null): LaneAgent => ({
@@ -36,5 +36,23 @@ describe('assignLanes', () => {
   it('never exceeds MAX_LANES', () => {
     const many = Array.from({ length: 102 }, (_, i) => ag(`x${i}`, 'main', String(i).padStart(3, '0'), null))
     expect(Math.max(...assignLanes(many).values())).toBe(MAX_LANES - 1)
+  })
+})
+
+describe('laneEnd', () => {
+  it('keeps a lane until the later of merge and last activity (an agent resumed by SendMessage after reporting back)', () => {
+    expect(laneEnd({ merged_at: iso('10'), ended_at: iso('30') })).toBe(iso('30'))
+    expect(laneEnd({ merged_at: iso('10'), ended_at: iso('05') })).toBe(iso('10'))
+    expect(laneEnd({ merged_at: iso('10'), ended_at: null })).toBe(iso('10'))
+    expect(laneEnd({ merged_at: null, ended_at: iso('30') })).toBeNull() // still open
+  })
+  it('gives an agent spawned while another is resumed its own lane', () => {
+    const resumed = { merged_at: iso('10'), ended_at: iso('30') }
+    const l = assignLanes(
+      [ag('a', 'main', '01', null), ag('b', 'main', '15', '20')].map((x) =>
+        x.id === 'a' ? { ...x, to: laneEnd(resumed) } : x,
+      ),
+    )
+    expect([l.get('a'), l.get('b')]).toEqual([1, 2])
   })
 })

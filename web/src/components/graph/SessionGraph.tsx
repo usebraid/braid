@@ -7,7 +7,7 @@ import { statsSessionChat } from '../../api/stats'
 import type { ChatLine, SessionDetail } from '../../api/types'
 import { buildRows, type Row } from '../../lib/chatRows'
 import { fmtDateTime, fmtDuration } from '../../lib/format'
-import { assignLanes } from '../../lib/lanes'
+import { assignLanes, laneEnd } from '../../lib/lanes'
 import { graphLegend } from '../../lib/legend'
 import { Legend } from '../Legend'
 import { ErrorNote } from '../ui'
@@ -194,7 +194,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
           id: a.agent_id,
           parent: a.parent_agent_id,
           from: a.spawned_at ?? a.started_at,
-          to: a.merged_at,
+          to: laneEnd(a),
         })),
       ),
     [agents],
@@ -262,12 +262,13 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     for (const a of agents) {
       if (a.agent_id === 'main' || collapsed.has(a.agent_id) || !a.spawned_at || !(Date.parse(a.spawned_at) < t0))
         continue
-      const closed = a.merged_at
+      const closed = laneEnd(a)
       if (closed && !(Date.parse(closed) > t0)) continue
       running.set(a.agent_id, lanes.get(a.agent_id) ?? 0)
-      // an open agent from above ends at its last loaded row, or at once when none is loaded: never a lane to the bottom
+      // an agent from above without a merge row here ends at its last loaded row, or at once when none is loaded
       const end = lastEntry.get(a.agent_id) ?? 0
-      if (!closed) ends.set(end, [...(ends.get(end) ?? []), a.agent_id])
+      if (!rows.some((r) => r.kind === 'merge' && r.agentId === a.agent_id))
+        ends.set(end, [...(ends.get(end) ?? []), a.agent_id])
     }
     let lastDot = -1
     rows.forEach((r, i) => {

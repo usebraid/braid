@@ -27,6 +27,13 @@ export function assignLanes(agents: LaneAgent[]): Map<string, number> {
   return lanes
 }
 
+// An agent holds its lane until the later of its merge and its last line: one resumed by SendMessage after reporting
+// back works on past merged_at. Null while open.
+export function laneEnd(a: { merged_at: string | null; ended_at: string | null }): string | null {
+  if (!a.merged_at) return null
+  return a.ended_at && ms(a.ended_at, 0) > ms(a.merged_at, 0) ? a.ended_at : a.merged_at
+}
+
 // The API's `background` (run_in_background, or an async_launched result) and `merged_at` (the task notification for
 // such an agent) are the whole truth; no guessing from the lines.
 export const isBackground = (a: { background: boolean }) => a.background
