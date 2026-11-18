@@ -15,6 +15,7 @@ golangci-lint run
 govulncheck ./...
 scripts/check-spdx.sh
 scripts/test-pins.sh
+scripts/test-npm-audit-high.sh
 scripts/check-pins.sh
 scripts/check-readme.sh
 gitleaks detect --no-banner
