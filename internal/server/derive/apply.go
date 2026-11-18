@@ -287,7 +287,8 @@ func (b *batch) add(evs []parse.Event, row rawRow) {
 			}
 			doc.tools, doc.idents = strings.TrimSpace(doc.tools+" "+e.Tool), strings.TrimSpace(doc.idents+" "+e.Idents)
 			t := b.tool(e.ToolUseID)
-			t.name, t.skill, t.summary, t.background = e.Tool, e.Skill, e.Summary, e.Background
+			t.name, t.skill, t.summary = e.Tool, e.Skill, e.Summary
+			t.background = t.background || e.Background
 			if !e.TS.IsZero() && earlier(t.started, e.TS) {
 				t.started = e.TS
 			}
@@ -303,6 +304,7 @@ func (b *batch) add(evs []parse.Event, row rawRow) {
 				t.ended = e.TS
 			}
 			t.isErr = t.isErr || e.IsError
+			t.background = t.background || e.Background
 			if e.DurationMs != nil {
 				t.resultMs = e.DurationMs
 			}
