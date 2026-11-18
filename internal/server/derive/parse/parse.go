@@ -113,7 +113,7 @@ type Event struct {
 	Usage                                   *Usage
 	ToolUseID, Tool, Summary, Skill, Idents string
 	IsError                                 bool
-	Background                              bool // KindToolUse: run_in_background, so its tool result is only the launch ack
+	Background                              bool // KindToolUse: run_in_background; KindToolResult: status async_launched. Either way the result is only a launch ack
 	DurationMs, AgentTotalMs                *int64
 	Failure                                 *Failure
 	Meta                                    *AgentMeta
@@ -269,6 +269,12 @@ func parseUser(m obj, add func(Event)) {
 	blocks, _ := content.([]any)
 	tur := sub(m, "toolUseResult")
 	hasResult, anyErr := false, false
+	nResults := 0
+	for _, b := range blocks {
+		if blk, _ := b.(obj); str(blk, "type") == "tool_result" {
+			nResults++
+		}
+	}
 	var text []string
 	for _, b := range blocks {
 		blk, _ := b.(obj)
@@ -278,6 +284,9 @@ func parseUser(m obj, add func(Event)) {
 			e := Event{Kind: KindToolResult, ToolUseID: str(blk, "tool_use_id"), IsError: boolean(blk, "is_error")}
 			if tur != nil {
 				e.DurationMs, e.AgentTotalMs = num(tur, "durationMs"), num(tur, "totalDurationMs")
+				// the harness can run an Agent call in the background without run_in_background; the result is then a launch ack
+				// the line-level toolUseResult belongs to a result only when it is the line's one result
+				e.Background = nResults == 1 && str(tur, "status") == "async_launched"
 			}
 			anyErr = anyErr || e.IsError
 			add(e)

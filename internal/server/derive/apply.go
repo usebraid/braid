@@ -287,7 +287,8 @@ func (b *batch) add(evs []parse.Event, row rawRow) {
 			}
 			doc.tools, doc.idents = strings.TrimSpace(doc.tools+" "+e.Tool), strings.TrimSpace(doc.idents+" "+e.Idents)
 			t := b.tool(e.ToolUseID)
-			t.name, t.skill, t.summary, t.background = e.Tool, e.Skill, e.Summary, e.Background
+			t.name, t.skill, t.summary = e.Tool, e.Skill, e.Summary
+			t.background = t.background || e.Background
 			if !e.TS.IsZero() && earlier(t.started, e.TS) {
 				t.started = e.TS
 			}
@@ -299,6 +300,8 @@ func (b *batch) add(evs []parse.Event, row rawRow) {
 			}
 		case parse.KindToolResult:
 			t := b.tool(e.ToolUseID)
+			// only the first result can be a launch ack; a later one must not turn a finished call into a background one
+			t.background = t.background || (e.Background && t.ended.IsZero())
 			if later(t.ended, e.TS) && !e.TS.IsZero() {
 				t.ended = e.TS
 			}

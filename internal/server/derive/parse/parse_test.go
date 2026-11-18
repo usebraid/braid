@@ -262,3 +262,21 @@ func TestSummarize(t *testing.T) {
 		t.Fatalf("%q %q", s, id)
 	}
 }
+
+// The line-level toolUseResult belongs to a result only when the line has one; a line with several results
+// must not flag them all as launch acks.
+func TestAsyncLaunchedNeedsASingleResult(t *testing.T) {
+	line := func(blocks string) string {
+		return `{"type":"user","timestamp":"2026-11-01T10:00:00Z","toolUseResult":{"status":"async_launched"},"message":{"role":"user","content":[` + blocks + `]}}`
+	}
+	one := `{"type":"tool_result","tool_use_id":"a","content":"x"}`
+	two := one + `,{"type":"tool_result","tool_use_id":"b","content":"x"}`
+	if e := find(parse(t, line(one)), KindToolResult); e == nil || !e.Background {
+		t.Fatalf("single result: %+v", e)
+	}
+	for _, e := range parse(t, line(two)) {
+		if e.Kind == KindToolResult && e.Background {
+			t.Fatalf("one of two results flagged: %+v", e)
+		}
+	}
+}

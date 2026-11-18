@@ -47,6 +47,51 @@ test.describe('graph views as alice', () => {
     await expect(target).toBeFocused()
   })
 
+  test('background session: dotted agent lane, reported-back merge, background command, dot types, legend', async ({
+    page,
+  }) => {
+    await page.goto(`/sessions/bg1?${RANGE}`)
+    const chat = page.getByRole('region', { name: 'Session chat' })
+    await expect(chat.getByText('researching in background')).toBeVisible()
+    // the background agent's branch says so, the foreground agent's does not
+    await expect(chat.locator('.g-branch', { hasText: 'background agent' })).toHaveCount(1)
+    await expect(chat.locator('.g-branch')).toHaveCount(2)
+    const inside = chat.locator('li', { hasText: 'researching in background' })
+    await expect(inside.locator('svg.gcell line.gdotted').first()).toBeAttached()
+    await expect(chat.locator('.g-merge', { hasText: 'reported back after' })).toHaveCount(1)
+    await expect(chat.locator('.g-merge', { hasText: 'back after' })).toHaveCount(2)
+    // the hand-back or notification is never a user prompt
+    await expect(chat.locator('.g-prompt')).toHaveCount(1)
+    // the background command: tag on its row, own dot on the call and on its notification
+    await expect(chat.locator('li', { hasText: 'sleep 300' }).locator('.gtag--bg')).toHaveText('background')
+    await expect(chat.locator('svg[data-dot="bgcmd"]')).toHaveCount(2)
+    await expect(chat.getByText('Background command finished')).toBeVisible()
+    await expect(chat.getByText(/task notification/)).toHaveCount(0)
+    await expect(chat.locator('svg[data-dot="fail"]')).toHaveCount(1)
+    await expect(chat.locator('svg[data-dot="skill"]')).toHaveCount(1)
+    await expect(chat.locator('svg[data-dot="interrupt"]')).toHaveCount(1)
+    await expect(chat.locator('li.grow--compaction')).toContainText('compacted')
+
+    const legend = page.getByRole('region', { name: 'Legend' })
+    for (const name of [
+      'Failed tool call',
+      'Skill',
+      'Background command',
+      'Interrupted by user',
+      'Compaction',
+      'Subagent',
+      'Background agent',
+    ])
+      await expect(legend.getByText(name, { exact: true })).toBeVisible()
+    await legend.getByRole('button', { name: /Legend/ }).click()
+    await expect(legend.getByText('Compaction')).toHaveCount(0)
+    await page.reload()
+    await expect(page.getByRole('region', { name: 'Legend' }).getByText('Compaction')).toHaveCount(0)
+    // a session without background parts lists none of them
+    await page.goto(`/sessions/g1?${RANGE}`)
+    await expect(page.getByRole('region', { name: 'Legend' }).getByText('Background command')).toHaveCount(0)
+  })
+
   test('live: an appended line shows as a new row at the bottom', async ({ page, request }) => {
     await page.goto('/sessions/l1')
     const rows = page.locator('ol.grows > li.grow')

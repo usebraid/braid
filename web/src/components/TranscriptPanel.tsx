@@ -28,6 +28,9 @@ const LABEL: Record<Entry['kind'], string> = {
   tool_result: 'Tool result',
   system: 'System',
   event: 'Event',
+  notification: 'Notification',
+  compaction: 'Compaction',
+  interrupt: 'Interrupt',
 }
 
 function Body({ e }: { e: Entry }) {

@@ -326,3 +326,63 @@ func TestSameSessionIDTwoUsers(t *testing.T) {
 		}
 	}
 }
+
+// The harness can run an Agent call in the background without run_in_background: only the result's status
+// "async_launched" says so. The agent then merges at its task note, not at the launch ack; a peer hand-back line
+// (a user line) next to the note changes nothing.
+func TestAsyncLaunchedAgentMergesAtTaskNote(t *testing.T) {
+	x := newEnv(t)
+	plain := map[string]any{"description": "plain"}
+	handBack := dt.Line("user", dt.At(day(5)+99), "origin", map[string]any{"kind": "peer", "handback": true, "senderTaskId": "h1"},
+		"message", map[string]any{"role": "user", "content": "[Subagent hand-back] report"})
+	x.dt.Put(t, x.uid, x.dev,
+		dt.File{Rel: "-work-al/h1.jsonl", Lines: []string{
+			dt.Prompt(dt.At(day(5)), "go"),
+			dt.Reply(dt.At(day(5)+10), "h-m1", opus, dt.Usage(1, 1, 0, 0, 0), dt.Tool("tuH1", "Agent", plain), dt.Tool("tuH2", "Agent", plain)),
+			dt.Result(dt.At(day(5)+11), "tuH1", false, map[string]any{"agentId": "h1", "status": "async_launched", "isAsync": true}),
+			dt.Result(dt.At(day(5)+11), "tuH2", false, map[string]any{"agentId": "h2", "status": "async_launched", "isAsync": true}),
+			handBack,
+			dt.Notify(dt.At(day(5)+100), "tuH1", 90000),
+			dt.Reply(dt.At(day(5)+110), "h-m2", opus, dt.Usage(1, 1, 0, 0, 0), dt.Text("done")),
+		}},
+		dt.File{Rel: "-work-al/h1/subagents/agent-h1.meta.json", JSON: `{"agentType":"Explore","description":"one","toolUseId":"tuH1","spawnDepth":1}`},
+		dt.File{Rel: "-work-al/h1/subagents/agent-h1.jsonl", Lines: []string{dt.Side(dt.SidePrompt(dt.At(day(5)+12), "s"), "h1")}},
+		dt.File{Rel: "-work-al/h1/subagents/agent-h2.meta.json", JSON: `{"agentType":"Explore","description":"two","toolUseId":"tuH2","spawnDepth":1}`},
+		dt.File{Rel: "-work-al/h1/subagents/agent-h2.jsonl", Lines: []string{dt.Side(dt.SidePrompt(dt.At(day(5)+12), "s"), "h2")}})
+	x.dt.Derive(t, x.uid, 0)
+	at := func(sec int) time.Time { v, _ := time.Parse("2006-01-02T15:04:05.000Z", dt.At(sec)); return v }
+	var det stats.SessionDetail
+	x.get(t, "/api/v1/stats/sessions/h1", &det)
+	by := map[string]stats.AgentItem{}
+	for _, a := range det.Agents {
+		by[a.AgentID] = a
+	}
+	if a := by["h1"]; !a.Background || a.MergedAt == nil || !a.MergedAt.Equal(at(day(5)+100)) {
+		t.Fatalf("h1 merges at its task note: %+v", a)
+	}
+	if a := by["h2"]; !a.Background || a.MergedAt != nil { // launched, no note yet: still open
+		t.Fatalf("h2: %+v", a)
+	}
+}
+
+// A later async_launched result must not turn a call that already finished in the foreground into an open background one.
+func TestAsyncLaunchedLateResultDoesNotFlip(t *testing.T) {
+	x := newEnv(t)
+	x.dt.Put(t, x.uid, x.dev,
+		dt.File{Rel: "-work-lf/lf1.jsonl", Lines: []string{
+			dt.Prompt(dt.At(day(5)), "go"),
+			dt.Reply(dt.At(day(5)+10), "l-m1", opus, dt.Usage(1, 1, 0, 0, 0), dt.Tool("tuL", "Agent", map[string]any{"description": "plain"})),
+			dt.Result(dt.At(day(5)+50), "tuL", false, map[string]any{"agentId": "l1", "status": "completed"}),
+			dt.Result(dt.At(day(5)+60), "tuL", false, map[string]any{"status": "async_launched"}),
+		}},
+		dt.File{Rel: "-work-lf/lf1/subagents/agent-l1.meta.json", JSON: `{"agentType":"Explore","description":"one","toolUseId":"tuL","spawnDepth":1}`},
+		dt.File{Rel: "-work-lf/lf1/subagents/agent-l1.jsonl", Lines: []string{dt.Side(dt.SidePrompt(dt.At(day(5)+12), "s"), "l1")}})
+	x.dt.Derive(t, x.uid, 0)
+	var det stats.SessionDetail
+	x.get(t, "/api/v1/stats/sessions/lf1", &det)
+	for _, a := range det.Agents {
+		if a.AgentID == "l1" && (a.Background || a.MergedAt == nil) {
+			t.Fatalf("flipped by a late result: %+v", a)
+		}
+	}
+}

@@ -3,8 +3,8 @@
 
 import type { CSSProperties } from 'react'
 import type { Row } from '../../lib/chatRows'
+import { skillColor } from '../../lib/graph'
 import { MAX_LANES } from '../../lib/lanes'
-import type { Entry } from '../../lib/transcript'
 
 const STEP = 14
 const PAD = 10
@@ -19,51 +19,114 @@ const curve = (x0: number, y0: number, x1: number, y1: number) =>
 
 // Decoration only: every row reads without it, so it is hidden from assistive tech. The svg spans its row's full
 // height (positioned by CSS), so lanes drawn from 0 to 100% join the rows above and below without a gap.
-export function GraphCell(p: { row: Row; through: number[]; stubs: number[]; last: boolean; pulse: boolean }) {
+export function GraphCell(p: {
+  row: Row
+  through: number[]
+  stubs: number[]
+  dotted: number[] // lanes of background agents, drawn dotted (dashed already means "open")
+  last: boolean
+  pulse: boolean
+}) {
   const { row } = p
   const stroke = (lane: number): CSSProperties => ({ stroke: color(lane) })
+  const dotted = new Set(p.dotted)
+  const cls = (lane: number) => (dotted.has(lane) ? 'gdotted' : undefined)
   const stubs = new Set(p.stubs)
   const lanes = new Set(p.through)
   lanes.add(0)
   const dotLane = row.kind === 'entry' ? row.lane : row.kind === 'branch' ? row.from : row.into
-  const kind: Entry['kind'] | 'branch' | 'merge' = row.kind === 'entry' ? row.entry.kind : row.kind
-  const big = kind === 'prompt'
-  const filled = kind === 'prompt' || kind === 'reply' || kind === 'branch' || kind === 'merge'
-  const dotColor = kind === 'prompt' ? 'var(--focus)' : kind === 'system' ? 'var(--bad)' : color(row.lane)
-  const r = big ? 5 : filled ? 4 : 3
+  const dot = row.kind === 'entry' ? row.dot : 'merge-branch'
+  const filled = dot === 'prompt' || dot === 'reply' || dot === 'skill' || dot === 'bgcmd' || dot === 'merge-branch'
+  const dotColor =
+    dot === 'prompt'
+      ? 'var(--focus)'
+      : dot === 'fail'
+        ? 'var(--bad)'
+        : dot === 'bgcmd'
+          ? 'var(--bgcmd)'
+          : dot === 'skill' && row.kind === 'entry'
+            ? skillColor(row.skill ?? '')
+            : color(row.lane)
+  const r = dot === 'prompt' ? 5 : dot === 'notice' ? 2.5 : filled || dot === 'fail' ? 4 : 3
   // an open lane that ends here: drawn to its dot level, then a short dashed stub that ends in nothing
   const stub = (l: number, y: number) => (
     <line key={`s${l}`} className="gstub" x1={x(l)} x2={x(l)} y1={y} y2={y + STUB} style={stroke(l)} />
   )
   return (
-    <svg className="gcell" width={GRAPH_W} height="100%" aria-hidden="true" focusable="false">
+    <svg className="gcell" data-dot={dot} width={GRAPH_W} height="100%" aria-hidden="true" focusable="false">
       {[...lanes].map((l) =>
         stubs.has(l) ? (
-          [<line key={l} x1={x(l)} x2={x(l)} y1={0} y2={DOT_Y} style={stroke(l)} />, stub(l, DOT_Y + 6)]
+          [
+            <line key={l} className={cls(l)} x1={x(l)} x2={x(l)} y1={0} y2={DOT_Y} style={stroke(l)} />,
+            stub(l, DOT_Y + 6),
+          ]
         ) : (
-          <line key={l} x1={x(l)} x2={x(l)} y1={0} y2={l === 0 && p.last ? DOT_Y : '100%'} style={stroke(l)} />
+          <line
+            key={l}
+            className={cls(l)}
+            x1={x(l)}
+            x2={x(l)}
+            y1={0}
+            y2={l === 0 && p.last ? DOT_Y : '100%'}
+            style={stroke(l)}
+          />
         ),
       )}
       {row.kind === 'branch' ? (
         <>
-          <path d={curve(x(row.from), DOT_Y, x(row.lane), DOT_Y + 10)} fill="none" style={stroke(row.lane)} />
+          <path
+            className={row.background ? 'gdotted' : undefined}
+            d={curve(x(row.from), DOT_Y, x(row.lane), DOT_Y + 10)}
+            fill="none"
+            style={stroke(row.lane)}
+          />
           {stubs.has(row.lane) ? (
             stub(row.lane, DOT_Y + 10)
           ) : (
-            <line x1={x(row.lane)} x2={x(row.lane)} y1={DOT_Y + 10} y2="100%" style={stroke(row.lane)} />
+            <line
+              className={row.background ? 'gdotted' : undefined}
+              x1={x(row.lane)}
+              x2={x(row.lane)}
+              y1={DOT_Y + 10}
+              y2="100%"
+              style={stroke(row.lane)}
+            />
           )}
         </>
       ) : null}
       {row.kind === 'merge' ? (
-        <path d={curve(x(row.lane), 0, x(row.into), DOT_Y)} fill="none" style={stroke(row.lane)} />
+        <path
+          className={row.background ? 'gdotted' : undefined}
+          d={curve(x(row.lane), 0, x(row.into), DOT_Y)}
+          fill="none"
+          style={stroke(row.lane)}
+        />
       ) : null}
-      <circle
-        className={p.pulse ? 'gdot pulse' : 'gdot'}
-        cx={x(dotLane)}
-        cy={DOT_Y}
-        r={r}
-        style={filled ? { fill: dotColor, stroke: dotColor } : { fill: 'var(--card-solid)', stroke: dotColor }}
-      />
+      {dot === 'compaction' ? null : dot === 'interrupt' ? (
+        <rect
+          className="gdot"
+          x={x(dotLane) - 4}
+          y={DOT_Y - 4}
+          width={8}
+          height={8}
+          rx={1}
+          style={{ fill: 'var(--warn)', stroke: 'var(--warn)' }}
+        />
+      ) : dot === 'bgcmd' ? (
+        <polygon
+          className="gdot"
+          points={`${x(dotLane)},${DOT_Y - 5.5} ${x(dotLane) + 5.5},${DOT_Y} ${x(dotLane)},${DOT_Y + 5.5} ${x(dotLane) - 5.5},${DOT_Y}`}
+          style={{ fill: dotColor, stroke: dotColor }}
+        />
+      ) : (
+        <circle
+          className={p.pulse ? 'gdot pulse' : 'gdot'}
+          cx={x(dotLane)}
+          cy={DOT_Y}
+          r={r}
+          style={filled ? { fill: dotColor, stroke: dotColor } : { fill: 'var(--card-solid)', stroke: dotColor }}
+        />
+      )}
     </svg>
   )
 }

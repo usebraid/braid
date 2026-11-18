@@ -24,7 +24,7 @@ test.describe('views as alice', () => {
       .getByRole('button', { name: /^All projects/ })
       .click()
     await expect(page.getByRole('heading', { level: 1, name: 'All projects' })).toBeVisible()
-    await expect(page.getByTestId('kpi-sessions')).toContainText('5') // g1, b1, big1, r1 and the live session
+    await expect(page.getByTestId('kpi-sessions')).toContainText('6') // g1, b1, big1, bg1, r1 and the live session
     expect(csp).toEqual([])
   })
 

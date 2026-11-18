@@ -26,6 +26,7 @@
   --warn: #f1c96b;
   --warnbg: #2a2412;
   --focus: #7c8cff;
+  --bgcmd: #f3f2ee;
   --nonebg: #161615;
   --empty: #151514;
   --tint: 0.2;
@@ -72,6 +73,7 @@
   --warn: #946200;
   --warnbg: #fbf2d7;
   --focus: #3b4bd6;
+  --bgcmd: #1d1c1a;
   --nonebg: #f2f1ed;
   --empty: #eeede9;
   --tint: 0.12;
@@ -103,6 +105,7 @@
     --warn: #946200;
     --warnbg: #fbf2d7;
     --focus: #3b4bd6;
+    --bgcmd: #1d1c1a;
     --nonebg: #f2f1ed;
     --empty: #eeede9;
     --tint: 0.12;

@@ -73,4 +73,78 @@ describe('entriesOf', () => {
     expect(e?.text).toHaveLength(MAX_TEXT)
     expect(e?.truncated).toBe(true)
   })
+  it('reads a subagent hand-back and a task notification as notifications, not prompts', () => {
+    const peer = {
+      type: 'user',
+      message: { role: 'user', content: 'framed report' },
+      origin: { kind: 'peer', senderTaskId: 'a9', handback: true, handbackReportText: 'the report' },
+    }
+    expect(entriesOf(li(11, peer))).toMatchObject([{ kind: 'notification', text: 'the report', from: 'a9' }])
+    const note = '<task-notification><tool-use-id>t7</tool-use-id><summary>did it</summary></task-notification>'
+    expect(entriesOf(li(12, { type: 'user', message: { role: 'user', content: note } }))).toMatchObject([
+      { kind: 'notification', text: 'did it', tool: { id: 't7' } },
+    ])
+    expect(entriesOf(li(13, { type: 'queue-operation', operation: 'enqueue', content: note }))).toMatchObject([
+      { kind: 'notification', text: 'did it', tool: { id: 't7' } },
+    ])
+    expect(
+      entriesOf(li(14, { type: 'user', message: { role: 'user', content: 'plain' }, origin: { kind: 'human' } })),
+    ).toMatchObject([{ kind: 'prompt' }])
+  })
+  it('marks compaction, interrupts and background shell calls, and hides the compact summary', () => {
+    expect(entriesOf(li(20, { type: 'system', subtype: 'compact_boundary' }))).toMatchObject([{ kind: 'compaction' }])
+    const user = (content: unknown, extra = {}) =>
+      li(21, { type: 'user', message: { role: 'user', content }, ...extra })
+    expect(entriesOf(user([{ type: 'text', text: '[Request interrupted by user for tool use]' }]))).toMatchObject([
+      { kind: 'interrupt' },
+    ])
+    expect(entriesOf(user('summary of before', { isCompactSummary: true }))).toMatchObject([{ kind: 'event' }])
+    const call = (name: string, input: unknown) =>
+      entriesOf(li(22, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'x', name, input }] } }))[0]
+    expect(call('Bash', { command: 'sleep 9', run_in_background: true })?.background).toBe(true)
+    expect(call('PowerShell', { command: 'sleep 9', run_in_background: true })?.background).toBe(true)
+    expect(call('Bash', { command: 'ls' })?.background).toBeUndefined()
+    expect(call('Read', { run_in_background: true })?.background).toBeUndefined()
+  })
+  describe('notification hardening', () => {
+    const user = (content: unknown, extra = {}) =>
+      li(30, { type: 'user', message: { role: 'user', content }, ...extra })
+    const note = (inner: string) => `<task-notification>${inner}</task-notification>`
+    it('keeps a prompt that merely quotes the tag a prompt', () => {
+      expect(entriesOf(user('why does <task-notification> show up?'))[0]).toMatchObject({ kind: 'prompt' })
+      expect(entriesOf(user(`look: ${note('<tool-use-id>t1</tool-use-id>')} and more`))[0]).toMatchObject({
+        kind: 'prompt',
+      })
+      expect(
+        entriesOf(
+          li(31, {
+            type: 'queue-operation',
+            operation: 'enqueue',
+            content: `x ${note('<tool-use-id>t1</tool-use-id>')}`,
+          }),
+        )[0],
+      ).toMatchObject({ kind: 'event' })
+      expect(
+        entriesOf(user(note('<summary>ok</summary>'), { origin: { kind: 'task-notification' } }))[0],
+      ).toMatchObject({ kind: 'notification' })
+    })
+    it('reads a summary that contains < and never shows tag names as text', () => {
+      expect(entriesOf(user(note('<tool-use-id>t</tool-use-id><summary>Fix Array<T> typing</summary>')))[0]?.text).toBe(
+        'Fix Array<T> typing',
+      )
+      expect(entriesOf(user(note('<tool-use-id>t</tool-use-id>')))[0]).toMatchObject({ kind: 'notification', text: '' })
+      expect(entriesOf(user(note('<tool-use-id>t</tool-use-id><status>completed</status>')))[0]?.text).toBe('completed')
+    })
+    it('treats a hand-back with array content as a notification', () => {
+      const e = entriesOf(
+        user([{ type: 'text', text: 'the report' }], { origin: { kind: 'peer', handback: true, senderTaskId: 'a1' } }),
+      )
+      expect(e).toMatchObject([{ kind: 'notification', text: 'the report', from: 'a1' }])
+    })
+    it('scans a huge unclosed tag run in bounded time', () => {
+      const t0 = performance.now()
+      entriesOf(user(note('<summary>'.repeat(400_000))))
+      expect(performance.now() - t0).toBeLessThan(500)
+    })
+  })
 })

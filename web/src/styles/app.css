@@ -1799,3 +1799,116 @@ td.empty {
   color: var(--faint);
   font-size: var(--t-xs);
 }
+
+/* Background agents and commands, dot types */
+.gcell .gdotted {
+  stroke-dasharray: 1 4;
+  stroke-linecap: round;
+}
+.gtag--bg {
+  color: var(--text);
+}
+.gtag--badge {
+  font-weight: 500;
+  color: var(--muted);
+  border: 1px dotted var(--faint);
+  border-radius: 6px;
+  padding: 0 5px;
+}
+.g-compact {
+  text-align: center;
+  color: var(--faint);
+  font-size: var(--t-xs);
+}
+.grow--compaction {
+  /* a separator across the whole row, graph column included */
+  align-items: center;
+}
+.grow--compaction::after {
+  content: "";
+  position: absolute;
+  left: 44px;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed var(--line2);
+  z-index: 0;
+}
+.grow--compaction .gbody {
+  position: relative;
+  z-index: 1;
+}
+.grow--compaction .g-compact {
+  display: inline-block;
+  padding: 0 10px;
+  background: var(--card-solid);
+}
+.grow--compaction .gbody {
+  text-align: center;
+}
+.g-interrupt {
+  color: var(--warn);
+}
+
+/* Legend above graph and canvas */
+.legend {
+  margin: 0 0 8px;
+  font-size: var(--t-xs);
+  color: var(--muted);
+}
+.legend > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.legend ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend svg {
+  flex: none;
+  overflow: visible;
+}
+.legend svg :is(line, path) {
+  stroke-width: 2;
+}
+.legend svg .gdotted {
+  stroke-dasharray: 1 4;
+  stroke-linecap: round;
+}
+.agent-node.bg {
+  border-style: dashed;
+}
+.agent-node .bgtag {
+  font-size: var(--t-xs);
+  color: var(--muted);
+  margin-left: 6px;
+}
+.canvas-wrap,
+.graph-wrap {
+  min-width: 0;
+}
+.canvas-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.canvas-tools .legend {
+  margin: 0;
+}

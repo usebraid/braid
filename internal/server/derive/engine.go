@@ -21,7 +21,7 @@ import (
 )
 
 // ParserVersion is bumped whenever a parser or engine change requires re-deriving from raw data.
-const ParserVersion = 3
+const ParserVersion = 5
 
 // Deriver derives the pending raw rows of users.
 type Deriver struct {

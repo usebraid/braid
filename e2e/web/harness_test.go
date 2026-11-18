@@ -131,6 +131,7 @@ func TestServe(t *testing.T) {
 	laptop, desktop := env.Device(t, aliceID, "laptop"), env.Device(t, aliceID, "desktop")
 	env.Put(t, aliceID, laptop, dt.Scenario()...)
 	env.Put(t, aliceID, laptop, bigSession()...)
+	env.Put(t, aliceID, laptop, bgSession()...)
 	beta := func(l string) string { return dt.Cwd(l, "/work/beta") }
 	env.Put(t, aliceID, desktop, dt.File{Rel: "-work-beta/b1.jsonl", Lines: []string{
 		beta(dt.Prompt(dt.At(10), "Beta prompt")),

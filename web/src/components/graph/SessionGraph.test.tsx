@@ -94,7 +94,7 @@ it('renders prompt, tool call, branch, merge with duration and result summary, a
   expect(await screen.findByText('build the export')).toBeInTheDocument()
   expect(screen.getByText('grepping inside the subagent')).toBeInTheDocument()
   expect(document.querySelector('.g-merge')).toHaveTextContent('Explore back after 2m 0s: pdfkit is already there')
-  expect(document.querySelectorAll('svg[aria-hidden="true"]').length).toBe(5)
+  expect(document.querySelectorAll('svg.gcell').length).toBe(5)
   const toggle = screen.getByRole('button', { name: /Subagent Explore: d-a1/ })
   expect(toggle).toHaveAttribute('aria-expanded', 'true')
   await userEvent.click(toggle)
@@ -318,4 +318,80 @@ it('stops auto-loading after an error and keeps the button as a manual retry', a
     get.mockReset()
     get.mockResolvedValue({ lines: LINES, next: null, prev: null })
   }
+})
+
+it('labels a subagent run once and keeps the label for screen readers on its other rows', async () => {
+  // regression: every row of an agent repeated its label visibly
+  const run = [
+    LINES[0],
+    LINES[1],
+    L(3, 'a1', 3, asst([{ type: 'text', text: 'first inside' }])),
+    L(6, 'a1', 3, asst([{ type: 'text', text: 'second inside' }])),
+    LINES[3],
+  ] as ChatLine[]
+  get.mockResolvedValueOnce({ lines: run, next: null, prev: null })
+  renderApp(<SessionGraph detail={detail()} />)
+  const first = (await screen.findByText('first inside')).closest('li') as HTMLElement
+  const second = screen.getByText('second inside').closest('li') as HTMLElement
+  expect(first.querySelector('.g-text .gtag')).toHaveTextContent('Explore')
+  expect(second.querySelector('.gtag')).toBeNull()
+  expect(second.querySelector('.sr-only')).toHaveTextContent('Explore')
+})
+
+it('draws a background agent lane dotted, says so on the branch row and merges at its notification', async () => {
+  const d = detail()
+  d.agents = [
+    ag('main'),
+    ag('a1', {
+      spawn_tool_use_id: 't1',
+      spawned_at: '2026-11-01T10:02:00Z',
+      merged_at: '2026-11-01T10:04:10Z',
+      background: true,
+    }),
+  ]
+  const note = `<task-notification><tool-use-id>t1</tool-use-id><summary>pdfkit found</summary></task-notification>`
+  get.mockResolvedValueOnce({
+    lines: [
+      LINES[0],
+      LINES[1],
+      L(3, 'a1', 3, asst([{ type: 'text', text: 'working in background' }])),
+      L(4, 'main', 4, { type: 'queue-operation', operation: 'enqueue', content: note }),
+      LINES[4],
+    ],
+    next: null,
+    prev: null,
+  })
+  renderApp(<SessionGraph detail={d} />)
+  await screen.findByText('working in background')
+  expect(document.querySelector('.g-branch')).toHaveTextContent('background agent')
+  expect(document.querySelector('.g-merge')).toHaveTextContent('Explore reported back after 2m 0s: pdfkit found')
+  const inside = (screen.getByText('working in background').closest('li') as HTMLElement).querySelector('.gcell')
+  expect(inside?.querySelector('line.gdotted')).not.toBeNull()
+  expect(screen.getByRole('region', { name: 'Legend' })).toHaveTextContent('Background agent')
+})
+
+it('words a background command notification and its branch badge readably, with no raw tag names', async () => {
+  const d = detail()
+  d.agents = [ag('main'), ag('a1', { spawn_tool_use_id: 't1', spawned_at: '2026-11-01T10:02:00Z', background: true })]
+  const bgCall = asst([
+    { type: 'tool_use', id: 'c1', name: 'Bash', input: { command: 'sleep 9', run_in_background: true } },
+  ])
+  const bare = '<task-notification><tool-use-id>c1</tool-use-id></task-notification>'
+  get.mockResolvedValueOnce({
+    lines: [
+      LINES[0],
+      LINES[1],
+      L(3, 'main', 3, bgCall),
+      L(4, 'main', 4, { type: 'queue-operation', operation: 'enqueue', content: bare }),
+    ],
+    next: null,
+    prev: null,
+  })
+  renderApp(<SessionGraph detail={d} />)
+  await screen.findByText('sleep 9')
+  expect(screen.getByText('Background command finished')).toBeInTheDocument()
+  expect(document.body.textContent).not.toMatch(/task notification|notification notification/)
+  const branch = document.querySelector('.g-branch') as HTMLElement
+  expect(branch.querySelectorAll('.gtag--badge')).toHaveLength(1)
+  expect(branch.textContent?.match(/background/g)).toHaveLength(1) // the badge only; the description is Explore's d-a1
 })

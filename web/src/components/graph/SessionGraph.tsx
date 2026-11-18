@@ -7,7 +7,9 @@ import { statsSessionChat } from '../../api/stats'
 import type { ChatLine, SessionDetail } from '../../api/types'
 import { buildRows, type Row } from '../../lib/chatRows'
 import { fmtDateTime, fmtDuration } from '../../lib/format'
-import { assignLanes } from '../../lib/lanes'
+import { assignLanes, isBackground } from '../../lib/lanes'
+import { graphLegend } from '../../lib/legend'
+import { Legend } from '../Legend'
 import { ErrorNote } from '../ui'
 import { ChatEntry } from './ChatEntry'
 import { GraphCell } from './GraphCell'
@@ -260,17 +262,20 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     for (const a of agents) {
       if (a.agent_id === 'main' || collapsed.has(a.agent_id) || !a.spawned_at || !(Date.parse(a.spawned_at) < t0))
         continue
-      if (a.merged_at && !(Date.parse(a.merged_at) > t0)) continue
+      const closed = a.merged_at
+      if (closed && !(Date.parse(closed) > t0)) continue
       running.set(a.agent_id, lanes.get(a.agent_id) ?? 0)
       // an open agent from above ends at its last loaded row, or at once when none is loaded: never a lane to the bottom
       const end = lastEntry.get(a.agent_id) ?? 0
-      if (!a.merged_at) ends.set(end, [...(ends.get(end) ?? []), a.agent_id])
+      if (!closed) ends.set(end, [...(ends.get(end) ?? []), a.agent_id])
     }
     let lastDot = -1
     rows.forEach((r, i) => {
       if (r.kind === 'entry') lastDot = i
     })
+    const bg = new Set(agents.filter(isBackground).map((a) => a.agent_id))
     return rows.map((r, i) => {
+      const dotted = [...running].filter(([a]) => bg.has(a)).map(([, l]) => l)
       const through = [...running].filter(([a]) => r.kind !== 'merge' || a !== r.agentId).map(([, l]) => l)
       if (r.kind === 'branch') running.set(r.agentId, r.lane)
       if (r.kind === 'merge') running.delete(r.agentId)
@@ -279,6 +284,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
       const still = new Set(running.values())
       return {
         through,
+        dotted,
         stubs: ended.filter((l) => !still.has(l)),
         last: i === rows.length - 1 && running.size === 0,
         pulse: session.is_live && next === null && i === lastDot,
@@ -293,11 +299,20 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
       if (!n.delete(a)) n.add(a)
       return n
     })
-  const render = (r: Row) => {
+  const render = (r: Row, i: number) => {
     if (r.kind === 'entry') {
       const a = byId.get(r.agentId)
+      // the agent label shows on the first row of a run in its lane; later rows keep it for screen readers only
+      const before = rows[i - 1]
+      const same = before?.kind === 'entry' && before.agentId === r.agentId
       return (
-        <ChatEntry e={r.entry} lane={r.lane} tag={r.agentId === 'main' ? undefined : (a?.agent_type ?? r.agentId)} />
+        <ChatEntry
+          e={r.entry}
+          lane={r.lane}
+          tag={r.agentId === 'main' ? undefined : (a?.agent_type ?? r.agentId)}
+          quiet={same}
+          bgCmd={r.dot === 'bgcmd'}
+        />
       )
     }
     const a = byId.get(r.agentId)
@@ -313,75 +328,87 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
           >
             {collapsed.has(r.agentId) ? '▸' : '▾'}
           </button>
-          <span className="gtag">{a?.agent_type ?? r.agentId}</span> {r.label}
+          <span className="gtag">{a?.agent_type ?? r.agentId}</span>{' '}
+          {r.background ? (
+            <span className="gtag gtag--badge">
+              background<span className="sr-only"> agent</span>
+            </span>
+          ) : null}
+          {r.label}
           {r.open ? <span className="g-peek"> still open</span> : null}
         </div>
       )
     const took = r.at && a?.spawned_at ? Date.parse(r.at) - Date.parse(a.spawned_at) : Number.NaN
     return (
       <div className="g-merge">
-        ↩ <span className="gtag">{a?.agent_type ?? r.agentId}</span> back
-        {Number.isFinite(took) && took >= 0 ? ` after ${fmtDuration(took)}` : ''}: {r.summary.split('\n')[0]}
+        ↩ <span className="gtag">{a?.agent_type ?? r.agentId}</span> {r.background ? 'reported back' : 'back'}
+        {Number.isFinite(took) && took >= 0 ? ` after ${fmtDuration(took)}` : ''}
+        {r.summary.trim() ? `: ${r.summary.split('\n')[0]}` : ''}
       </div>
     )
   }
 
+  const legend = useMemo(() => graphLegend(rows), [rows])
   return (
-    <section className="card graph" aria-label="Session chat">
-      <div className="list-head">
-        <h2>Chat</h2>
-        {subs.length > 0 ? (
-          <button
-            type="button"
-            className="btn ghost"
-            onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(subs))}
-          >
-            {allCollapsed ? 'Expand subagents' : 'Collapse subagents'}
+    <div className="graph-wrap">
+      <Legend items={legend} />
+      <section className="card graph" aria-label="Session chat">
+        <div className="list-head">
+          <h2>Chat</h2>
+          {subs.length > 0 ? (
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(subs))}
+            >
+              {allCollapsed ? 'Expand subagents' : 'Collapse subagents'}
+            </button>
+          ) : null}
+        </div>
+        {error ? <ErrorNote error={error} /> : null}
+        {prev !== null ? (
+          <button type="button" className="btn" disabled={loading} onClick={earlier}>
+            Load earlier
           </button>
         ) : null}
-      </div>
-      {error ? <ErrorNote error={error} /> : null}
-      {prev !== null ? (
-        <button type="button" className="btn" disabled={loading} onClick={earlier}>
-          Load earlier
-        </button>
-      ) : null}
-      <ol className="grows" ref={root}>
-        {rows.map((r, i) => {
-          const c = cells[i]
-          const at = atOf(r)
-          const prevAt = i > 0 ? atOf(rows[i - 1] as Row) : null
-          // the time only where it changes or a prompt starts a turn, so the column stays quiet
-          const showTime = hhmm(at) !== hhmm(prevAt) || (r.kind === 'entry' && r.entry.kind === 'prompt')
-          const focus = r.key === focusKey
-          return (
-            <li
-              key={r.key}
-              className={`grow grow--${r.kind === 'entry' ? r.entry.kind : r.kind}${c?.stubs.length ? ' grow--ends' : ''}`}
-              tabIndex={-1}
-              aria-current={focus ? 'true' : undefined}
-            >
-              <time dateTime={at ?? undefined} title={at ? fmtDateTime(at, tz) : undefined}>
-                {showTime ? hhmm(at) : ''}
-              </time>
-              <GraphCell
-                row={r}
-                through={c?.through ?? []}
-                stubs={c?.stubs ?? []}
-                last={c?.last ?? false}
-                pulse={c?.pulse ?? false}
-              />
-              <div className="gbody">{render(r)}</div>
-            </li>
-          )
-        })}
-      </ol>
-      {loading && rows.length === 0 ? <p>Loading…</p> : null}
-      {next !== null ? (
-        <button type="button" className="btn" ref={more} disabled={loading} onClick={later}>
-          Load more
-        </button>
-      ) : null}
-    </section>
+        <ol className="grows" ref={root}>
+          {rows.map((r, i) => {
+            const c = cells[i]
+            const at = atOf(r)
+            const prevAt = i > 0 ? atOf(rows[i - 1] as Row) : null
+            // the time only where it changes or a prompt starts a turn, so the column stays quiet
+            const showTime = hhmm(at) !== hhmm(prevAt) || (r.kind === 'entry' && r.entry.kind === 'prompt')
+            const focus = r.key === focusKey
+            return (
+              <li
+                key={r.key}
+                className={`grow grow--${r.kind === 'entry' ? r.entry.kind : r.kind}${c?.stubs.length ? ' grow--ends' : ''}`}
+                tabIndex={-1}
+                aria-current={focus ? 'true' : undefined}
+              >
+                <time dateTime={at ?? undefined} title={at ? fmtDateTime(at, tz) : undefined}>
+                  {showTime ? hhmm(at) : ''}
+                </time>
+                <GraphCell
+                  row={r}
+                  through={c?.through ?? []}
+                  stubs={c?.stubs ?? []}
+                  dotted={c?.dotted ?? []}
+                  last={c?.last ?? false}
+                  pulse={c?.pulse ?? false}
+                />
+                <div className="gbody">{render(r, i)}</div>
+              </li>
+            )
+          })}
+        </ol>
+        {loading && rows.length === 0 ? <p>Loading…</p> : null}
+        {next !== null ? (
+          <button type="button" className="btn" ref={more} disabled={loading} onClick={later}>
+            Load more
+          </button>
+        ) : null}
+      </section>
+    </div>
   )
 }

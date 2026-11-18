@@ -4,6 +4,7 @@
 import dagre from '@dagrejs/dagre'
 import type { Edge, Node } from '@xyflow/react'
 import type { AgentItem, FailureItem, PhaseItem, SessionDetail } from '../api/types'
+import { isBackground } from './lanes'
 
 // width and height are always set here, so they are required (the library types make them optional).
 export type GNode<D extends Record<string, unknown>> = Node<D, 'agent' | 'more'> & { width: number; height: number }
@@ -129,4 +130,27 @@ export function buildGraph(
   nodes.sort((a, b) => a.id.localeCompare(b.id))
   edges.sort((a, b) => a.id.localeCompare(b.id))
   return { nodes, edges }
+}
+
+// Background agents and everything they spawned.
+export function backgroundIds(d: SessionDetail): Set<string> {
+  const kids = new Map<string, string[]>()
+  for (const a of d.agents)
+    if (a.parent_agent_id) kids.set(a.parent_agent_id, [...(kids.get(a.parent_agent_id) ?? []), a.agent_id])
+  const hidden = new Set(d.agents.filter(isBackground).map((a) => a.agent_id))
+  for (const id of hidden) for (const k of kids.get(id) ?? []) hidden.add(k) // a Set iterates what is added meanwhile
+  return hidden
+}
+
+// The session without its background agents and, with them, everything they spawned.
+export function withoutBackground(d: SessionDetail): SessionDetail {
+  const hidden = backgroundIds(d)
+  return hidden.size === 0
+    ? d
+    : {
+        ...d,
+        agents: d.agents.filter((a) => !hidden.has(a.agent_id)),
+        skill_phases: d.skill_phases.filter((p) => !hidden.has(p.agent_id)),
+        failures: d.failures.filter((f) => !hidden.has(f.agent_id)),
+      }
 }
