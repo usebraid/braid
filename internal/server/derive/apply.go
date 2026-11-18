@@ -300,11 +300,12 @@ func (b *batch) add(evs []parse.Event, row rawRow) {
 			}
 		case parse.KindToolResult:
 			t := b.tool(e.ToolUseID)
+			// only the first result can be a launch ack; a later one must not turn a finished call into a background one
+			t.background = t.background || (e.Background && t.ended.IsZero())
 			if later(t.ended, e.TS) && !e.TS.IsZero() {
 				t.ended = e.TS
 			}
 			t.isErr = t.isErr || e.IsError
-			t.background = t.background || e.Background
 			if e.DurationMs != nil {
 				t.resultMs = e.DurationMs
 			}

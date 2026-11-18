@@ -364,3 +364,25 @@ func TestAsyncLaunchedAgentMergesAtTaskNote(t *testing.T) {
 		t.Fatalf("h2: %+v", a)
 	}
 }
+
+// A later async_launched result must not turn a call that already finished in the foreground into an open background one.
+func TestAsyncLaunchedLateResultDoesNotFlip(t *testing.T) {
+	x := newEnv(t)
+	x.dt.Put(t, x.uid, x.dev,
+		dt.File{Rel: "-work-lf/lf1.jsonl", Lines: []string{
+			dt.Prompt(dt.At(day(5)), "go"),
+			dt.Reply(dt.At(day(5)+10), "l-m1", opus, dt.Usage(1, 1, 0, 0, 0), dt.Tool("tuL", "Agent", map[string]any{"description": "plain"})),
+			dt.Result(dt.At(day(5)+50), "tuL", false, map[string]any{"agentId": "l1", "status": "completed"}),
+			dt.Result(dt.At(day(5)+60), "tuL", false, map[string]any{"status": "async_launched"}),
+		}},
+		dt.File{Rel: "-work-lf/lf1/subagents/agent-l1.meta.json", JSON: `{"agentType":"Explore","description":"one","toolUseId":"tuL","spawnDepth":1}`},
+		dt.File{Rel: "-work-lf/lf1/subagents/agent-l1.jsonl", Lines: []string{dt.Side(dt.SidePrompt(dt.At(day(5)+12), "s"), "l1")}})
+	x.dt.Derive(t, x.uid, 0)
+	var det stats.SessionDetail
+	x.get(t, "/api/v1/stats/sessions/lf1", &det)
+	for _, a := range det.Agents {
+		if a.AgentID == "l1" && (a.Background || a.MergedAt == nil) {
+			t.Fatalf("flipped by a late result: %+v", a)
+		}
+	}
+}
