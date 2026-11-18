@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/usebraid/braid/compare/v0.4.0...v0.5.0) (2026-11-18)
+
+
+### Features
+
+* tell background agents and commands apart, with a legend ([#16](https://github.com/usebraid/braid/issues/16)) ([9471760](https://github.com/usebraid/braid/commit/94717603d0994919e801f648f75f8c9bbefda1b8))
+
 ## [0.4.0](https://github.com/usebraid/braid/compare/v0.3.0...v0.4.0) (2026-11-14)
 
 
