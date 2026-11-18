@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/usebraid/braid/compare/v0.5.1...v0.6.0) (2026-11-18)
+
+
+### Features
+
+* **web:** run an agent's lane until its last hand-back, with arrows for messages in between ([#20](https://github.com/usebraid/braid/issues/20)) ([73d9e40](https://github.com/usebraid/braid/commit/73d9e403e5478013d21b2e33c224f0009a7bed7b))
+
 ## [0.5.1](https://github.com/usebraid/braid/compare/v0.5.0...v0.5.1) (2026-11-18)
 
 
