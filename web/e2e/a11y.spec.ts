@@ -18,7 +18,7 @@ const pages = [
   '/settings',
   '/sessions/g1',
   '/sessions/bg1',
-  '/sessions/bg1?view=canvas&bg=1',
+  '/sessions/bg1?view=canvas',
   '/sessions/big1',
   '/sessions/big1?view=canvas',
   '/sessions/big1?view=list',

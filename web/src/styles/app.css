@@ -1800,20 +1800,9 @@ td.empty {
   font-size: var(--t-xs);
 }
 
-/* Background agents and commands, dot types */
-.gcell .gdotted {
-  stroke-dasharray: 1 4;
-  stroke-linecap: round;
-}
+/* Background commands, dot types */
 .gtag--bg {
   color: var(--text);
-}
-.gtag--badge {
-  font-weight: 500;
-  color: var(--muted);
-  border: 1px dotted var(--faint);
-  border-radius: 6px;
-  padding: 0 5px;
 }
 .g-compact {
   text-align: center;
@@ -1885,18 +1874,6 @@ td.empty {
 }
 .legend svg :is(line, path) {
   stroke-width: 2;
-}
-.legend svg .gdotted {
-  stroke-dasharray: 1 4;
-  stroke-linecap: round;
-}
-.agent-node.bg {
-  border-style: dashed;
-}
-.agent-node .bgtag {
-  font-size: var(--t-xs);
-  color: var(--muted);
-  margin-left: 6px;
 }
 .canvas-wrap,
 .graph-wrap {

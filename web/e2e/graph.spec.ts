@@ -47,17 +47,16 @@ test.describe('graph views as alice', () => {
     await expect(target).toBeFocused()
   })
 
-  test('background session: dotted agent lane, reported-back merge, background command, dot types, legend', async ({
+  test('background session: solid agent lanes, reported-back merge, background command, dot types, legend', async ({
     page,
   }) => {
     await page.goto(`/sessions/bg1?${RANGE}`)
     const chat = page.getByRole('region', { name: 'Session chat' })
     await expect(chat.getByText('researching in background')).toBeVisible()
-    // the background agent's branch says so, the foreground agent's does not
-    await expect(chat.locator('.g-branch', { hasText: 'background agent' })).toHaveCount(1)
+    // a background agent is an agent: same solid lane, no badge
     await expect(chat.locator('.g-branch')).toHaveCount(2)
-    const inside = chat.locator('li', { hasText: 'researching in background' })
-    await expect(inside.locator('svg.gcell line.gdotted').first()).toBeAttached()
+    await expect(chat.locator('.g-branch .gtag--badge')).toHaveCount(0)
+    await expect(chat.locator('svg.gcell .gdotted')).toHaveCount(0)
     await expect(chat.locator('.g-merge', { hasText: 'reported back after' })).toHaveCount(1)
     await expect(chat.locator('.g-merge', { hasText: 'back after' })).toHaveCount(2)
     // the hand-back or notification is never a user prompt
@@ -80,7 +79,6 @@ test.describe('graph views as alice', () => {
       'Interrupted by user',
       'Compaction',
       'Subagent',
-      'Background agent',
     ])
       await expect(legend.getByText(name, { exact: true })).toBeVisible()
     await legend.getByRole('button', { name: /Legend/ }).click()

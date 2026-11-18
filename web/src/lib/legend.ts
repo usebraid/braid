@@ -3,9 +3,8 @@
 
 import type { SessionDetail } from '../api/types'
 import type { Dot, Row } from './chatRows'
-import { isBackground } from './lanes'
 
-export type Shape = 'dot' | 'ring' | 'square' | 'diamond' | 'line' | 'dotted' | 'dashed' | 'box' | 'boxDashed' | 'bar'
+export type Shape = 'dot' | 'ring' | 'square' | 'diamond' | 'line' | 'dashed' | 'box' | 'bar'
 export type LegendItem = { key: string; label: string; shape: Shape; color: string }
 
 const DOTS: [Dot, LegendItem][] = [
@@ -23,25 +22,18 @@ const DOTS: [Dot, LegendItem][] = [
 // Only what the loaded rows show: a legend that lists absent types is noise.
 export function graphLegend(rows: Row[]): LegendItem[] {
   const dots = new Set(rows.flatMap((r) => (r.kind === 'entry' ? [r.dot] : [])))
-  const sub = rows.some((r) => r.kind === 'branch' && !r.background)
-  const bg = rows.some((r) => r.kind === 'branch' && r.background)
+  const sub = rows.some((r) => r.kind === 'branch')
   return [
     ...DOTS.filter(([d]) => dots.has(d)).map(([, i]) => i),
     ...(sub ? [{ key: 'sub', label: 'Subagent', shape: 'line' as const, color: 'var(--p4)' }] : []),
-    ...(bg ? [{ key: 'bg', label: 'Background agent', shape: 'dotted' as const, color: 'var(--p4)' }] : []),
   ]
 }
 
-export function canvasLegend(d: SessionDetail, showBackground: boolean): LegendItem[] {
+export function canvasLegend(d: SessionDetail): LegendItem[] {
   const subs = d.agents.filter((a) => a.agent_id !== 'main')
   return [
     { key: 'main', label: 'Main session', shape: 'box', color: 'var(--line2)' },
-    ...(subs.some((a) => !isBackground(a))
-      ? [{ key: 'sub', label: 'Subagent', shape: 'box' as const, color: 'var(--line2)' }]
-      : []),
-    ...(showBackground && subs.some(isBackground)
-      ? [{ key: 'bg', label: 'Background agent', shape: 'boxDashed' as const, color: 'var(--line2)' }]
-      : []),
+    ...(subs.length ? [{ key: 'sub', label: 'Subagent', shape: 'box' as const, color: 'var(--line2)' }] : []),
     ...(d.skill_phases.length
       ? [{ key: 'phases', label: 'Skill phases', shape: 'bar' as const, color: 'var(--p7)' }]
       : []),

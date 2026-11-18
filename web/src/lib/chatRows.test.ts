@@ -224,7 +224,7 @@ describe('buildRows', () => {
       expect(r[2]).toMatchObject({ skill: 'superpowers:brainstorming' })
       expect(dots([asst(1, 'Bash', { command: 'x', run_in_background: false })])).toEqual(['ring'])
     })
-    it('marks the rows of a background agent so the graph draws its lane dotted', () => {
+    it('marks the branch and merge rows of a background agent (merge reads "reported back")', () => {
       const bg = { ...sub('x'), background: true } as AgentItem
       const r = buildRows(
         [

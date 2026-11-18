@@ -20,7 +20,7 @@ Braid is a self-hosted daemon and server that syncs Claude Code transcripts from
 
 - Syncs Claude Code transcripts from every device to your own server, resuming after offline periods.
 - Shows sessions, costs and tokens on a board, per project, model and device.
-- Replays a session as a chat with a git-style graph of its subagents (background agents dotted, background commands and failed calls marked, with a legend), or as a canvas that hides background agents until you ask, live while it runs.
+- Replays a session as a chat with a git-style graph of its subagents (background commands and failed calls marked, with a legend), or as a canvas of its agents, live while it runs.
 - Shows a timeline of when sessions started and were resumed, across devices.
 - Lists failures: what went wrong, how often and how much time it cost.
 - Supports several users on one server, each seeing only their own data; login through your OpenID Connect provider.
