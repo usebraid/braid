@@ -257,6 +257,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
       const at = Math.max(i, lastEntry.get(r.agentId) ?? i)
       ends.set(at, [...(ends.get(at) ?? []), r.agentId])
     })
+    const mergedHere = new Set(rows.flatMap((r) => (r.kind === 'merge' ? [r.agentId] : [])))
     const running = new Map<string, number>()
     const t0 = prev !== null && lines[0]?.ts ? Date.parse(lines[0].ts) : Number.NaN
     for (const a of agents) {
@@ -267,8 +268,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
       running.set(a.agent_id, lanes.get(a.agent_id) ?? 0)
       // an agent from above without a merge row here ends at its last loaded row, or at once when none is loaded
       const end = lastEntry.get(a.agent_id) ?? 0
-      if (!rows.some((r) => r.kind === 'merge' && r.agentId === a.agent_id))
-        ends.set(end, [...(ends.get(end) ?? []), a.agent_id])
+      if (!mergedHere.has(a.agent_id)) ends.set(end, [...(ends.get(end) ?? []), a.agent_id])
     }
     let lastDot = -1
     rows.forEach((r, i) => {

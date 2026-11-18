@@ -104,37 +104,42 @@ export function buildRows(
   // A background agent returns with its notification; its tool result is only the launch ack.
   const returns = (e: Entry, a: AgentItem | undefined) =>
     a !== undefined && e.kind === (isBackground(a) ? 'notification' : 'tool_result')
-  // An agent runs until its last hand-back; one resumed by SendMessage hands back more than once. A hand-back counts once
-  // (its queue line and its user line say the same) unless the agent did something since the one before.
-  const accepted = new Set<string>() // entry keys of counted hand-backs
-  const finalOf = new Map<string, string>() // agent id -> entry key of its last hand-back: the merge
-  {
-    const active = new Map<string, boolean>()
-    for (const { l, entries } of perLine)
-      for (const e of entries) {
-        if (shown(e) && active.has(l.agent_id)) active.set(l.agent_id, true)
-        const a = e.kind === 'notification' ? agentOf(e) : e.tool ? bySpawn.get(e.tool.id) : undefined
-        if (!a) continue
-        const parentId = a.parent_agent_id ?? 'main'
-        const first = !active.has(a.agent_id)
-        const candidate =
-          e.kind === 'notification' ? isBackground(a) || !first : returns(e, a) && l.agent_id === parentId && first // a foreground agent's tool result returns it once
-        if (!candidate || !(first || active.get(a.agent_id))) continue
-        accepted.add(e.key)
-        finalOf.set(a.agent_id, e.key)
-        active.set(a.agent_id, false)
-      }
-  }
-  const resolved = new Set(finalOf.keys())
-  // SendMessage names its agent by id (or a unique prefix of it)
+  // SendMessage names its agent by id (or a unique prefix of it); memoised, a session can hold thousands of agents
+  const byTo = new Map<string, AgentItem | undefined>()
   const target = (e: Entry) => {
     const to = (e.tool?.input as { to?: unknown } | undefined)?.to
     if (e.tool?.name !== 'SendMessage' || typeof to !== 'string' || !to) return undefined
+    if (byTo.has(to)) return byTo.get(to)
     const exact = byId.get(to)
-    if (exact || to.length < 6) return exact
-    const hits = agents.filter((a) => a.agent_id.startsWith(to))
-    return hits.length === 1 ? hits[0] : undefined
+    const hits = exact || to.length < 6 ? [] : agents.filter((a) => a.agent_id.startsWith(to))
+    const hit = exact ?? (hits.length === 1 ? hits[0] : undefined)
+    byTo.set(to, hit)
+    return hit
   }
+  // An agent runs until its last hand-back; one resumed by SendMessage hands back again. A hand-back counts once (its
+  // queue line and its user line say the same, and may be stamped before the agent's last lines) unless a SendMessage
+  // resumed the agent since the one before.
+  const accepted = new Set<string>() // entry keys of counted hand-backs
+  const finalOf = new Map<string, string>() // agent id -> entry key of its last hand-back: the merge
+  {
+    const resumed = new Map<string, boolean>() // agent id -> resumed since its last counted hand-back
+    for (const { l, entries } of perLine)
+      for (const e of entries) {
+        const to = target(e)
+        if (to && resumed.has(to.agent_id)) resumed.set(to.agent_id, true)
+        const a = e.kind === 'notification' ? agentOf(e) : e.tool ? bySpawn.get(e.tool.id) : undefined
+        if (!a) continue
+        const parentId = a.parent_agent_id ?? 'main'
+        const first = !resumed.has(a.agent_id)
+        const candidate =
+          e.kind === 'notification' ? isBackground(a) || !first : returns(e, a) && l.agent_id === parentId && first // a foreground agent's tool result returns it once
+        if (!candidate || !(first || resumed.get(a.agent_id))) continue
+        accepted.add(e.key)
+        finalOf.set(a.agent_id, e.key)
+        resumed.set(a.agent_id, false)
+      }
+  }
+  const resolved = new Set(finalOf.keys())
   const stepsOf = (id: string) => {
     const n = steps.get(id) ?? 0
     return `${n} ${n === 1 ? 'step' : 'steps'}`
@@ -173,7 +178,7 @@ export function buildRows(
             summary,
             background: isBackground(agent),
           })
-        else
+        else if (!collapsed.has(parentId))
           rows.push({
             kind: 'entry',
             key: entry.key,
@@ -181,7 +186,7 @@ export function buildRows(
             agentId: parentId,
             entry,
             dot: 'notice',
-            arrow: { lane: lane(agent.agent_id), dir: 'in' },
+            ...(collapsed.has(agent.agent_id) ? {} : { arrow: { lane: lane(agent.agent_id), dir: 'in' as const } }),
           })
       } else if (agent && (entry.kind === 'notification' || (returns(entry, agent) && l.agent_id === parentId))) {
         // a repeat of a counted hand-back, or a foreground agent's notification: adds nothing
@@ -199,7 +204,9 @@ export function buildRows(
           entry,
           dot: dotOf(entry, bgCmds),
           skill: skillOf(entry),
-          ...(to && to.agent_id !== l.agent_id ? { arrow: { lane: lane(to.agent_id), dir: 'out' as const } } : {}),
+          ...(to && to.agent_id !== l.agent_id && !collapsed.has(to.agent_id)
+            ? { arrow: { lane: lane(to.agent_id), dir: 'out' as const } }
+            : {}),
         })
       }
     }

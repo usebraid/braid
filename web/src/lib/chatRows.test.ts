@@ -202,6 +202,75 @@ describe('buildRows', () => {
         'merge:1', // the last hand-back ends the lane
       ])
     })
+    it('counts a queue line stamped before the last lines of the agent as the same hand-back', () => {
+      // regression (review): any agent line after a hand-back counted as a resume, so the queue line became a false arrow
+      const r = buildRows([...ls.slice(0, 3), queued(6), say(7, 'a'), handBack(8)], [agent], lanes, new Set())
+      expect(r.some((x) => x.kind === 'entry' && x.arrow)).toBe(false)
+      expect(r.filter((x) => x.kind === 'merge')).toHaveLength(1)
+    })
+    it('counts a second hand-back after a SendMessage even when the agent wrote nothing in between', () => {
+      const msg = at(
+        7,
+        'main',
+        {
+          type: 'assistant',
+          message: { content: [{ type: 'tool_use', id: 'm', name: 'SendMessage', input: { to: 'a' } }] },
+        },
+        '2026-11-01T00:00:30Z',
+      )
+      const r = buildRows([...ls.slice(0, 3), handBack(5), msg, handBack(9)], [agent], lanes, new Set())
+      expect(r.map((x) => (x.kind === 'entry' && x.arrow ? x.arrow.dir : x.kind)).slice(-3)).toEqual([
+        'in',
+        'out',
+        'merge',
+      ])
+    })
+    it('draws no arrows into a collapsed agent and no hand-back rows inside a collapsed parent', () => {
+      const msg = at(
+        7,
+        'main',
+        {
+          type: 'assistant',
+          message: { content: [{ type: 'tool_use', id: 'm', name: 'SendMessage', input: { to: 'a' } }] },
+        },
+        '2026-11-01T00:00:30Z',
+      )
+      const r = buildRows([...ls, msg, handBack(9)], [agent], lanes, new Set(['a']))
+      expect(r.some((x) => x.kind === 'entry' && x.arrow)).toBe(false)
+      const nested = { ...agent, agent_id: 'b', parent_agent_id: 'p', spawn_tool_use_id: 'tb' } as AgentItem
+      const parent = { ...sub('x'), agent_id: 'p', spawn_tool_use_id: 'tp' } as AgentItem
+      const peer = (id: number) =>
+        at(
+          id,
+          'main',
+          {
+            type: 'user',
+            message: { content: 'framed' },
+            origin: { kind: 'peer', senderTaskId: 'b', handback: true, handbackReportText: 'r' },
+          },
+          '2026-11-01T00:00:40Z',
+        )
+      const bmsg = at(
+        11,
+        'main',
+        {
+          type: 'assistant',
+          message: { content: [{ type: 'tool_use', id: 'm2', name: 'SendMessage', input: { to: 'b' } }] },
+        },
+        '2026-11-01T00:00:41Z',
+      )
+      const rr = buildRows(
+        [peer(10), bmsg, peer(12)],
+        [parent, nested],
+        new Map([
+          ['main', 0],
+          ['p', 1],
+          ['b', 2],
+        ]),
+        new Set(['p']),
+      )
+      expect(rr.some((x) => x.kind === 'entry' && x.agentId === 'p')).toBe(false)
+    })
     it('draws no arrow for a SendMessage to an unknown or ambiguous agent', () => {
       const msg = (to: string) =>
         at(
