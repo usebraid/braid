@@ -6,18 +6,18 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { Legend } from './Legend'
 
-const items = [{ key: 'bg', label: 'Background agent', shape: 'dotted' as const, color: 'red' }]
+const items = [{ key: 'bgcmd', label: 'Background command', shape: 'diamond' as const, color: 'red' }]
 beforeEach(() => localStorage.clear())
 
 it('lists its items, collapses, and remembers the choice per browser', async () => {
   const first = render(<Legend items={items} />)
-  expect(screen.getByText('Background agent')).toBeInTheDocument()
+  expect(screen.getByText('Background command')).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: /Legend/ }))
-  expect(screen.queryByText('Background agent')).toBeNull()
+  expect(screen.queryByText('Background command')).toBeNull()
   expect(screen.getByRole('button', { name: /Legend/ })).toHaveAttribute('aria-expanded', 'false')
   first.unmount()
   render(<Legend items={items} />)
-  expect(screen.queryByText('Background agent')).toBeNull()
+  expect(screen.queryByText('Background command')).toBeNull()
 })
 
 it('renders nothing without items and survives blocked storage', async () => {
@@ -31,6 +31,6 @@ it('renders nothing without items and survives blocked storage', async () => {
   })
   render(<Legend items={items} />)
   await userEvent.click(screen.getByRole('button', { name: /Legend/ }))
-  expect(screen.queryByText('Background agent')).toBeNull()
+  expect(screen.queryByText('Background command')).toBeNull()
   vi.restoreAllMocks()
 })

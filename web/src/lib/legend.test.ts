@@ -15,13 +15,13 @@ describe('graphLegend', () => {
     expect(graphLegend([entry('reply'), entry('prompt')]).map((i) => i.key)).toEqual(['prompt', 'reply'])
     expect(graphLegend([]).length).toBe(0)
   })
-  it('names subagent and background lanes separately', () => {
+  it('treats background agents as subagents; only background commands get their own type', () => {
     expect(graphLegend([branch(false)]).map((i) => i.key)).toEqual(['sub'])
     expect(graphLegend([branch(true), entry('bgcmd'), entry('fail'), entry('compaction')]).map((i) => i.key)).toEqual([
       'fail',
       'bgcmd',
       'compaction',
-      'bg',
+      'sub',
     ])
   })
 })
@@ -29,10 +29,8 @@ describe('graphLegend', () => {
 describe('canvasLegend', () => {
   const ag = (id: string, background = false) => ({ agent_id: id, background }) as AgentItem
   const d = (agents: AgentItem[]) => ({ agents, skill_phases: [], failures: [] }) as unknown as SessionDetail
-  it('lists background agents only while they are shown', () => {
-    const detail = d([ag('main'), ag('a'), ag('b', true)])
-    expect(canvasLegend(detail, false).map((i) => i.key)).toEqual(['main', 'sub'])
-    expect(canvasLegend(detail, true).map((i) => i.key)).toEqual(['main', 'sub', 'bg'])
-    expect(canvasLegend(d([ag('main')]), true).map((i) => i.key)).toEqual(['main'])
+  it('lists background agents as subagents', () => {
+    expect(canvasLegend(d([ag('main'), ag('b', true)])).map((i) => i.key)).toEqual(['main', 'sub'])
+    expect(canvasLegend(d([ag('main')])).map((i) => i.key)).toEqual(['main'])
   })
 })

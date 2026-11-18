@@ -28,15 +28,11 @@ function Swatch({ shape, color }: { shape: Shape; color: string }) {
         <polygon points="8,0.5 13.5,6 8,11.5 2.5,6" style={{ stroke: color, fill: color }} />
       ) : null}
       {shape === 'line' ? <line x1="2" x2="14" y1="6" y2="6" style={c} /> : null}
-      {shape === 'dotted' ? <line className="gdotted" x1="2" x2="14" y1="6" y2="6" style={c} /> : null}
       {shape === 'dashed' ? (
         <line x1="1" x2="15" y1="6" y2="6" style={{ ...c, strokeWidth: 1, strokeDasharray: '3 2' }} />
       ) : null}
       {shape === 'box' ? (
         <rect x="1.5" y="2.5" width="13" height="7" rx="2" style={{ ...c, strokeWidth: 1.5 }} />
-      ) : null}
-      {shape === 'boxDashed' ? (
-        <rect x="1.5" y="2.5" width="13" height="7" rx="2" style={{ ...c, strokeWidth: 1.5, strokeDasharray: '3 2' }} />
       ) : null}
       {shape === 'bar' ? (
         <rect x="2" y="4.5" width="12" height="3" rx="1.5" style={{ stroke: color, fill: color }} />

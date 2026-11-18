@@ -338,7 +338,7 @@ it('labels a subagent run once and keeps the label for screen readers on its oth
   expect(second.querySelector('.sr-only')).toHaveTextContent('Explore')
 })
 
-it('draws a background agent lane dotted, says so on the branch row and merges at its notification', async () => {
+it('draws a background agent like any subagent (solid lane, no badge) and merges it at its notification', async () => {
   const d = detail()
   d.agents = [
     ag('main'),
@@ -363,14 +363,15 @@ it('draws a background agent lane dotted, says so on the branch row and merges a
   })
   renderApp(<SessionGraph detail={d} />)
   await screen.findByText('working in background')
-  expect(document.querySelector('.g-branch')).toHaveTextContent('background agent')
+  expect(document.querySelector('.g-branch')).not.toHaveTextContent('background')
   expect(document.querySelector('.g-merge')).toHaveTextContent('Explore reported back after 2m 0s: pdfkit found')
   const inside = (screen.getByText('working in background').closest('li') as HTMLElement).querySelector('.gcell')
-  expect(inside?.querySelector('line.gdotted')).not.toBeNull()
-  expect(screen.getByRole('region', { name: 'Legend' })).toHaveTextContent('Background agent')
+  expect(inside?.querySelector('line')).not.toBeNull()
+  expect(inside?.querySelector('.gdotted')).toBeNull()
+  expect(screen.getByRole('region', { name: 'Legend' })).not.toHaveTextContent('Background agent')
 })
 
-it('words a background command notification and its branch badge readably, with no raw tag names', async () => {
+it('words a background command notification readably, with no raw tag names', async () => {
   const d = detail()
   d.agents = [ag('main'), ag('a1', { spawn_tool_use_id: 't1', spawned_at: '2026-11-01T10:02:00Z', background: true })]
   const bgCall = asst([
@@ -391,7 +392,4 @@ it('words a background command notification and its branch badge readably, with 
   await screen.findByText('sleep 9')
   expect(screen.getByText('Background command finished')).toBeInTheDocument()
   expect(document.body.textContent).not.toMatch(/task notification|notification notification/)
-  const branch = document.querySelector('.g-branch') as HTMLElement
-  expect(branch.querySelectorAll('.gtag--badge')).toHaveLength(1)
-  expect(branch.textContent?.match(/background/g)).toHaveLength(1) // the badge only; the description is Explore's d-a1
 })

@@ -19,18 +19,9 @@ const curve = (x0: number, y0: number, x1: number, y1: number) =>
 
 // Decoration only: every row reads without it, so it is hidden from assistive tech. The svg spans its row's full
 // height (positioned by CSS), so lanes drawn from 0 to 100% join the rows above and below without a gap.
-export function GraphCell(p: {
-  row: Row
-  through: number[]
-  stubs: number[]
-  dotted: number[] // lanes of background agents, drawn dotted (dashed already means "open")
-  last: boolean
-  pulse: boolean
-}) {
+export function GraphCell(p: { row: Row; through: number[]; stubs: number[]; last: boolean; pulse: boolean }) {
   const { row } = p
   const stroke = (lane: number): CSSProperties => ({ stroke: color(lane) })
-  const dotted = new Set(p.dotted)
-  const cls = (lane: number) => (dotted.has(lane) ? 'gdotted' : undefined)
   const stubs = new Set(p.stubs)
   const lanes = new Set(p.through)
   lanes.add(0)
@@ -56,51 +47,23 @@ export function GraphCell(p: {
     <svg className="gcell" data-dot={dot} width={GRAPH_W} height="100%" aria-hidden="true" focusable="false">
       {[...lanes].map((l) =>
         stubs.has(l) ? (
-          [
-            <line key={l} className={cls(l)} x1={x(l)} x2={x(l)} y1={0} y2={DOT_Y} style={stroke(l)} />,
-            stub(l, DOT_Y + 6),
-          ]
+          [<line key={l} x1={x(l)} x2={x(l)} y1={0} y2={DOT_Y} style={stroke(l)} />, stub(l, DOT_Y + 6)]
         ) : (
-          <line
-            key={l}
-            className={cls(l)}
-            x1={x(l)}
-            x2={x(l)}
-            y1={0}
-            y2={l === 0 && p.last ? DOT_Y : '100%'}
-            style={stroke(l)}
-          />
+          <line key={l} x1={x(l)} x2={x(l)} y1={0} y2={l === 0 && p.last ? DOT_Y : '100%'} style={stroke(l)} />
         ),
       )}
       {row.kind === 'branch' ? (
         <>
-          <path
-            className={row.background ? 'gdotted' : undefined}
-            d={curve(x(row.from), DOT_Y, x(row.lane), DOT_Y + 10)}
-            fill="none"
-            style={stroke(row.lane)}
-          />
+          <path d={curve(x(row.from), DOT_Y, x(row.lane), DOT_Y + 10)} fill="none" style={stroke(row.lane)} />
           {stubs.has(row.lane) ? (
             stub(row.lane, DOT_Y + 10)
           ) : (
-            <line
-              className={row.background ? 'gdotted' : undefined}
-              x1={x(row.lane)}
-              x2={x(row.lane)}
-              y1={DOT_Y + 10}
-              y2="100%"
-              style={stroke(row.lane)}
-            />
+            <line x1={x(row.lane)} x2={x(row.lane)} y1={DOT_Y + 10} y2="100%" style={stroke(row.lane)} />
           )}
         </>
       ) : null}
       {row.kind === 'merge' ? (
-        <path
-          className={row.background ? 'gdotted' : undefined}
-          d={curve(x(row.lane), 0, x(row.into), DOT_Y)}
-          fill="none"
-          style={stroke(row.lane)}
-        />
+        <path d={curve(x(row.lane), 0, x(row.into), DOT_Y)} fill="none" style={stroke(row.lane)} />
       ) : null}
       {dot === 'compaction' ? null : dot === 'interrupt' ? (
         <rect

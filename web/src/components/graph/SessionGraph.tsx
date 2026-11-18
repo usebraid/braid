@@ -7,7 +7,7 @@ import { statsSessionChat } from '../../api/stats'
 import type { ChatLine, SessionDetail } from '../../api/types'
 import { buildRows, type Row } from '../../lib/chatRows'
 import { fmtDateTime, fmtDuration } from '../../lib/format'
-import { assignLanes, isBackground } from '../../lib/lanes'
+import { assignLanes } from '../../lib/lanes'
 import { graphLegend } from '../../lib/legend'
 import { Legend } from '../Legend'
 import { ErrorNote } from '../ui'
@@ -273,9 +273,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     rows.forEach((r, i) => {
       if (r.kind === 'entry') lastDot = i
     })
-    const bg = new Set(agents.filter(isBackground).map((a) => a.agent_id))
     return rows.map((r, i) => {
-      const dotted = [...running].filter(([a]) => bg.has(a)).map(([, l]) => l)
       const through = [...running].filter(([a]) => r.kind !== 'merge' || a !== r.agentId).map(([, l]) => l)
       if (r.kind === 'branch') running.set(r.agentId, r.lane)
       if (r.kind === 'merge') running.delete(r.agentId)
@@ -284,7 +282,6 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
       const still = new Set(running.values())
       return {
         through,
-        dotted,
         stubs: ended.filter((l) => !still.has(l)),
         last: i === rows.length - 1 && running.size === 0,
         pulse: session.is_live && next === null && i === lastDot,
@@ -328,13 +325,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
           >
             {collapsed.has(r.agentId) ? '▸' : '▾'}
           </button>
-          <span className="gtag">{a?.agent_type ?? r.agentId}</span>{' '}
-          {r.background ? (
-            <span className="gtag gtag--badge">
-              background<span className="sr-only"> agent</span>
-            </span>
-          ) : null}
-          {r.label}
+          <span className="gtag">{a?.agent_type ?? r.agentId}</span> {r.label}
           {r.open ? <span className="g-peek"> still open</span> : null}
         </div>
       )
@@ -393,7 +384,6 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
                   row={r}
                   through={c?.through ?? []}
                   stubs={c?.stubs ?? []}
-                  dotted={c?.dotted ?? []}
                   last={c?.last ?? false}
                   pulse={c?.pulse ?? false}
                 />
