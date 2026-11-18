@@ -65,6 +65,7 @@ export function GraphCell(p: { row: Row; through: number[]; stubs: number[]; las
       {row.kind === 'merge' ? (
         <path d={curve(x(row.lane), 0, x(row.into), DOT_Y)} fill="none" style={stroke(row.lane)} />
       ) : null}
+      {row.kind === 'entry' && row.arrow ? <Arrow from={row.lane} to={row.arrow.lane} dir={row.arrow.dir} /> : null}
       {dot === 'compaction' ? null : dot === 'interrupt' ? (
         <rect
           className="gdot"
@@ -91,5 +92,17 @@ export function GraphCell(p: { row: Row; through: number[]; stubs: number[]; las
         />
       )}
     </svg>
+  )
+}
+
+// A message between a lane and a running agent: a short line with its head at the receiver ('out': to the agent).
+function Arrow({ from, to, dir }: { from: number; to: number; dir: 'in' | 'out' }) {
+  const [a, b] = dir === 'out' ? [x(from), x(to)] : [x(to), x(from)]
+  const s = Math.sign(b - a) || 1
+  return (
+    <g className="garrow" style={{ stroke: color(to), fill: color(to) }}>
+      <line x1={a + s * 5} x2={b - s * 4} y1={DOT_Y} y2={DOT_Y} />
+      <path d={`M${b - s * 1} ${DOT_Y} L${b - s * 6} ${DOT_Y - 3.5} L${b - s * 6} ${DOT_Y + 3.5} Z`} />
+    </g>
   )
 }

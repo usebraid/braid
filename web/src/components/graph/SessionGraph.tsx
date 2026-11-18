@@ -310,6 +310,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
           tag={r.agentId === 'main' ? undefined : (a?.agent_type ?? r.agentId)}
           quiet={same}
           bgCmd={r.dot === 'bgcmd'}
+          handback={r.arrow?.dir === 'in'}
         />
       )
     }

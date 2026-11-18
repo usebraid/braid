@@ -9,7 +9,17 @@ import { type Entry, entriesOf } from './transcript'
 export type Dot = 'prompt' | 'reply' | 'ring' | 'fail' | 'skill' | 'bgcmd' | 'notice' | 'interrupt' | 'compaction'
 
 export type Row =
-  | { kind: 'entry'; key: string; lane: number; agentId: string; entry: Entry; dot: Dot; skill?: string }
+  | {
+      kind: 'entry'
+      key: string
+      lane: number
+      agentId: string
+      entry: Entry
+      dot: Dot
+      skill?: string
+      // an exchange with a running agent: a message to it ('out') or a hand-back from it that is not its last ('in')
+      arrow?: { lane: number; dir: 'in' | 'out' }
+    }
   | {
       kind: 'branch'
       key: string
@@ -94,19 +104,43 @@ export function buildRows(
   // A background agent returns with its notification; its tool result is only the launch ack.
   const returns = (e: Entry, a: AgentItem | undefined) =>
     a !== undefined && e.kind === (isBackground(a) ? 'notification' : 'tool_result')
-  const resolved = new Set<string>()
-  for (const { entries } of perLine)
-    for (const e of entries) {
-      const a = e.kind === 'notification' ? agentOf(e) : e.tool ? bySpawn.get(e.tool.id) : undefined
-      if (a && returns(e, a)) resolved.add(a.agent_id)
-    }
+  // An agent runs until its last hand-back; one resumed by SendMessage hands back more than once. A hand-back counts once
+  // (its queue line and its user line say the same) unless the agent did something since the one before.
+  const accepted = new Set<string>() // entry keys of counted hand-backs
+  const finalOf = new Map<string, string>() // agent id -> entry key of its last hand-back: the merge
+  {
+    const active = new Map<string, boolean>()
+    for (const { l, entries } of perLine)
+      for (const e of entries) {
+        if (shown(e) && active.has(l.agent_id)) active.set(l.agent_id, true)
+        const a = e.kind === 'notification' ? agentOf(e) : e.tool ? bySpawn.get(e.tool.id) : undefined
+        if (!a) continue
+        const parentId = a.parent_agent_id ?? 'main'
+        const first = !active.has(a.agent_id)
+        const candidate =
+          e.kind === 'notification' ? isBackground(a) || !first : returns(e, a) && l.agent_id === parentId && first // a foreground agent's tool result returns it once
+        if (!candidate || !(first || active.get(a.agent_id))) continue
+        accepted.add(e.key)
+        finalOf.set(a.agent_id, e.key)
+        active.set(a.agent_id, false)
+      }
+  }
+  const resolved = new Set(finalOf.keys())
+  // SendMessage names its agent by id (or a unique prefix of it)
+  const target = (e: Entry) => {
+    const to = (e.tool?.input as { to?: unknown } | undefined)?.to
+    if (e.tool?.name !== 'SendMessage' || typeof to !== 'string' || !to) return undefined
+    const exact = byId.get(to)
+    if (exact || to.length < 6) return exact
+    const hits = agents.filter((a) => a.agent_id.startsWith(to))
+    return hits.length === 1 ? hits[0] : undefined
+  }
   const stepsOf = (id: string) => {
     const n = steps.get(id) ?? 0
     return `${n} ${n === 1 ? 'step' : 'steps'}`
   }
 
   const rows: Row[] = []
-  const merged = new Set<string>()
   const noted = new Set<string>() // notified tool ids of background commands: the queue line and the user line say it once
   for (const { l, entries } of perLine) {
     if (collapsed.has(l.agent_id)) continue
@@ -126,37 +160,37 @@ export function buildRows(
           open: !agent.merged_at && !resolved.has(agent.agent_id),
           background: isBackground(agent),
         })
-      } else if (agent && entry.kind === 'notification') {
-        // the first notification of an agent that returns by one is its merge, whichever lane its line sits in (queue lines
-        // are in the main file, also for a background agent spawned by a subagent); a repeat, or one of a foreground agent, adds nothing
-        if (!returns(entry, agent) || merged.has(agent.agent_id)) continue
-        merged.add(agent.agent_id)
-        rows.push({
-          kind: 'merge',
-          key: `merge:${entry.key}`,
-          lane: lane(agent.agent_id),
-          into: lane(parentId),
-          agentId: agent.agent_id,
-          at: entry.at ?? l.ts,
-          summary: collapsed.has(agent.agent_id) ? stepsOf(agent.agent_id) : entry.text.slice(0, SUMMARY_MAX),
-          background: isBackground(agent),
-        })
-      } else if (agent && returns(entry, agent) && l.agent_id === parentId) {
-        rows.push({
-          kind: 'merge',
-          key: `merge:${entry.key}`,
-          lane: lane(agent.agent_id),
-          into: lane(parentId),
-          agentId: agent.agent_id,
-          at: entry.at ?? l.ts,
-          summary: collapsed.has(agent.agent_id) ? stepsOf(agent.agent_id) : entry.text.slice(0, SUMMARY_MAX),
-          background: isBackground(agent),
-        })
+      } else if (agent && accepted.has(entry.key)) {
+        const summary = collapsed.has(agent.agent_id) ? stepsOf(agent.agent_id) : entry.text.slice(0, SUMMARY_MAX)
+        if (finalOf.get(agent.agent_id) === entry.key)
+          rows.push({
+            kind: 'merge',
+            key: `merge:${entry.key}`,
+            lane: lane(agent.agent_id),
+            into: lane(parentId),
+            agentId: agent.agent_id,
+            at: entry.at ?? l.ts,
+            summary,
+            background: isBackground(agent),
+          })
+        else
+          rows.push({
+            kind: 'entry',
+            key: entry.key,
+            lane: lane(parentId),
+            agentId: parentId,
+            entry,
+            dot: 'notice',
+            arrow: { lane: lane(agent.agent_id), dir: 'in' },
+          })
+      } else if (agent && (entry.kind === 'notification' || (returns(entry, agent) && l.agent_id === parentId))) {
+        // a repeat of a counted hand-back, or a foreground agent's notification: adds nothing
       } else if (shown(entry)) {
         if (entry.kind === 'notification' && entry.tool?.id) {
           if (noted.has(entry.tool.id)) continue
           noted.add(entry.tool.id)
         }
+        const to = target(entry)
         rows.push({
           kind: 'entry',
           key: entry.key,
@@ -165,6 +199,7 @@ export function buildRows(
           entry,
           dot: dotOf(entry, bgCmds),
           skill: skillOf(entry),
+          ...(to && to.agent_id !== l.agent_id ? { arrow: { lane: lane(to.agent_id), dir: 'out' as const } } : {}),
         })
       }
     }

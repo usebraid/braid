@@ -28,6 +28,12 @@ function Swatch({ shape, color }: { shape: Shape; color: string }) {
         <polygon points="8,0.5 13.5,6 8,11.5 2.5,6" style={{ stroke: color, fill: color }} />
       ) : null}
       {shape === 'line' ? <line x1="2" x2="14" y1="6" y2="6" style={c} /> : null}
+      {shape === 'arrow' ? (
+        <>
+          <line x1="2" x2="10" y1="6" y2="6" style={c} />
+          <path d="M14 6 L9 2.5 L9 9.5 Z" style={{ stroke: color, fill: color }} />
+        </>
+      ) : null}
       {shape === 'dashed' ? (
         <line x1="1" x2="15" y1="6" y2="6" style={{ ...c, strokeWidth: 1, strokeDasharray: '3 2' }} />
       ) : null}

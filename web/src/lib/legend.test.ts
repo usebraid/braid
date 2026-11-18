@@ -34,3 +34,11 @@ describe('canvasLegend', () => {
     expect(canvasLegend(d([ag('main')])).map((i) => i.key)).toEqual(['main'])
   })
 })
+
+describe('graphLegend arrows', () => {
+  it('lists the message arrow only when a row has one', () => {
+    const msg = { ...entry('notice'), arrow: { lane: 1, dir: 'in' } } as Row
+    expect(graphLegend([msg]).map((i) => i.key)).toContain('msg')
+    expect(graphLegend([entry('notice')]).map((i) => i.key)).not.toContain('msg')
+  })
+})
