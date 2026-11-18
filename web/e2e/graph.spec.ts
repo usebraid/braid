@@ -65,6 +65,8 @@ test.describe('graph views as alice', () => {
     // the background command: tag on its row, own dot on the call and on its notification
     await expect(chat.locator('li', { hasText: 'sleep 300' }).locator('.gtag--bg')).toHaveText('background')
     await expect(chat.locator('svg[data-dot="bgcmd"]')).toHaveCount(2)
+    await expect(chat.getByText('Background command finished')).toBeVisible()
+    await expect(chat.getByText(/task notification/)).toHaveCount(0)
     await expect(chat.locator('svg[data-dot="fail"]')).toHaveCount(1)
     await expect(chat.locator('svg[data-dot="skill"]')).toHaveCount(1)
     await expect(chat.locator('svg[data-dot="interrupt"]')).toHaveCount(1)

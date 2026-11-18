@@ -369,3 +369,29 @@ it('draws a background agent lane dotted, says so on the branch row and merges a
   expect(inside?.querySelector('line.gdotted')).not.toBeNull()
   expect(screen.getByRole('region', { name: 'Legend' })).toHaveTextContent('Background agent')
 })
+
+it('words a background command notification and its branch badge readably, with no raw tag names', async () => {
+  const d = detail()
+  d.agents = [ag('main'), ag('a1', { spawn_tool_use_id: 't1', spawned_at: '2026-11-01T10:02:00Z', background: true })]
+  const bgCall = asst([
+    { type: 'tool_use', id: 'c1', name: 'Bash', input: { command: 'sleep 9', run_in_background: true } },
+  ])
+  const bare = '<task-notification><tool-use-id>c1</tool-use-id></task-notification>'
+  get.mockResolvedValueOnce({
+    lines: [
+      LINES[0],
+      LINES[1],
+      L(3, 'main', 3, bgCall),
+      L(4, 'main', 4, { type: 'queue-operation', operation: 'enqueue', content: bare }),
+    ],
+    next: null,
+    prev: null,
+  })
+  renderApp(<SessionGraph detail={d} />)
+  await screen.findByText('sleep 9')
+  expect(screen.getByText('Background command finished')).toBeInTheDocument()
+  expect(document.body.textContent).not.toMatch(/task notification|notification notification/)
+  const branch = document.querySelector('.g-branch') as HTMLElement
+  expect(branch.querySelectorAll('.gtag--badge')).toHaveLength(1)
+  expect(branch.textContent?.match(/background/g)).toHaveLength(1) // the badge only; the description is Explore's d-a1
+})

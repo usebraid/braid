@@ -107,6 +107,7 @@ export function buildRows(
 
   const rows: Row[] = []
   const merged = new Set<string>()
+  const noted = new Set<string>() // notified tool ids of background commands: the queue line and the user line say it once
   for (const { l, entries } of perLine) {
     if (collapsed.has(l.agent_id)) continue
     for (const entry of entries) {
@@ -126,8 +127,9 @@ export function buildRows(
           background: isBackground(agent),
         })
       } else if (agent && entry.kind === 'notification') {
-        // the first notification of an agent that returns by one is its merge; a repeat, or one of a foreground agent, adds nothing
-        if (!returns(entry, agent) || merged.has(agent.agent_id) || l.agent_id !== parentId) continue
+        // the first notification of an agent that returns by one is its merge, whichever lane its line sits in (queue lines
+        // are in the main file, also for a background agent spawned by a subagent); a repeat, or one of a foreground agent, adds nothing
+        if (!returns(entry, agent) || merged.has(agent.agent_id)) continue
         merged.add(agent.agent_id)
         rows.push({
           kind: 'merge',
@@ -151,6 +153,10 @@ export function buildRows(
           background: isBackground(agent),
         })
       } else if (shown(entry)) {
+        if (entry.kind === 'notification' && entry.tool?.id) {
+          if (noted.has(entry.tool.id)) continue
+          noted.add(entry.tool.id)
+        }
         rows.push({
           kind: 'entry',
           key: entry.key,
@@ -172,8 +178,11 @@ export function buildRows(
   const out: Row[] = []
   rows.forEach((r, i) => {
     const to = r.kind === 'merge' ? (last.get(r.agentId) ?? -1) : -1
-    if (to > i) later.set(to, [...(later.get(to) ?? []), r])
-    else out.push(r)
+    if (to > i) {
+      const q = later.get(to) ?? []
+      q.push(r)
+      later.set(to, q)
+    } else out.push(r)
     out.push(...(later.get(i) ?? []))
   })
   return out

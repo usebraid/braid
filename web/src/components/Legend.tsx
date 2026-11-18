@@ -24,6 +24,9 @@ function Swatch({ shape, color }: { shape: Shape; color: string }) {
       {shape === 'square' ? (
         <rect x="4" y="2" width="8" height="8" rx="1" style={{ stroke: color, fill: color }} />
       ) : null}
+      {shape === 'diamond' ? (
+        <polygon points="8,0.5 13.5,6 8,11.5 2.5,6" style={{ stroke: color, fill: color }} />
+      ) : null}
       {shape === 'line' ? <line x1="2" x2="14" y1="6" y2="6" style={c} /> : null}
       {shape === 'dotted' ? <line className="gdotted" x1="2" x2="14" y1="6" y2="6" style={c} /> : null}
       {shape === 'dashed' ? (

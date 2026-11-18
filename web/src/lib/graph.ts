@@ -132,17 +132,19 @@ export function buildGraph(
   return { nodes, edges }
 }
 
+// Background agents and everything they spawned.
+export function backgroundIds(d: SessionDetail): Set<string> {
+  const kids = new Map<string, string[]>()
+  for (const a of d.agents)
+    if (a.parent_agent_id) kids.set(a.parent_agent_id, [...(kids.get(a.parent_agent_id) ?? []), a.agent_id])
+  const hidden = new Set(d.agents.filter(isBackground).map((a) => a.agent_id))
+  for (const id of hidden) for (const k of kids.get(id) ?? []) hidden.add(k) // a Set iterates what is added meanwhile
+  return hidden
+}
+
 // The session without its background agents and, with them, everything they spawned.
 export function withoutBackground(d: SessionDetail): SessionDetail {
-  const hidden = new Set(d.agents.filter(isBackground).map((a) => a.agent_id))
-  for (let grew = true; grew; ) {
-    grew = false
-    for (const a of d.agents)
-      if (a.parent_agent_id && hidden.has(a.parent_agent_id) && !hidden.has(a.agent_id)) {
-        hidden.add(a.agent_id)
-        grew = true
-      }
-  }
+  const hidden = backgroundIds(d)
   return hidden.size === 0
     ? d
     : {

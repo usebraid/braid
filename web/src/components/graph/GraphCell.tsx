@@ -112,6 +112,12 @@ export function GraphCell(p: {
           rx={1}
           style={{ fill: 'var(--warn)', stroke: 'var(--warn)' }}
         />
+      ) : dot === 'bgcmd' ? (
+        <polygon
+          className="gdot"
+          points={`${x(dotLane)},${DOT_Y - 5.5} ${x(dotLane) + 5.5},${DOT_Y} ${x(dotLane)},${DOT_Y + 5.5} ${x(dotLane) - 5.5},${DOT_Y}`}
+          style={{ fill: dotColor, stroke: dotColor }}
+        />
       ) : (
         <circle
           className={p.pulse ? 'gdot pulse' : 'gdot'}

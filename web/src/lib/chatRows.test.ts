@@ -249,4 +249,65 @@ describe('buildRows', () => {
       })
     })
   })
+  describe('review fixes', () => {
+    const at = (id: number, agent: string, line: unknown): ChatLine => ({
+      id,
+      agent_id: agent,
+      ts: null,
+      offset: id,
+      line: L(line),
+    })
+    const queue = (id: number, tool: string) =>
+      at(id, 'main', {
+        type: 'queue-operation',
+        operation: 'enqueue',
+        content: `<task-notification><tool-use-id>${tool}</tool-use-id><summary>s</summary></task-notification>`,
+      })
+    it('merges a background agent spawned by a subagent at its notification in the main file', () => {
+      const a = { ...sub('x'), agent_id: 'a', spawn_tool_use_id: 't1' } as AgentItem
+      const b = {
+        ...sub('x'),
+        agent_id: 'b',
+        parent_agent_id: 'a',
+        spawn_tool_use_id: 't2',
+        background: true,
+      } as AgentItem
+      const lanes3 = new Map([
+        ['main', 0],
+        ['a', 1],
+        ['b', 2],
+      ])
+      const r = buildRows(
+        [use(1, 'main', 't1'), say(2, 'a'), use(3, 'a', 't2'), say(4, 'b'), queue(5, 't2'), say(6, 'a')],
+        [a, b],
+        lanes3,
+        new Set(),
+      )
+      const m = r.find((x) => x.kind === 'merge' && x.agentId === 'b')
+      expect(m).toMatchObject({ lane: 2, into: 1 })
+    })
+    it('shows the notification of a background command once, whichever line carries it', () => {
+      const userNote = at(6, 'main', {
+        type: 'user',
+        origin: { kind: 'task-notification' },
+        message: { content: '<task-notification><tool-use-id>bg</tool-use-id></task-notification>' },
+      })
+      const r = buildRows(
+        [
+          at(1, 'main', {
+            type: 'assistant',
+            message: {
+              content: [{ type: 'tool_use', id: 'bg', name: 'Bash', input: { command: 'x', run_in_background: true } }],
+            },
+          }),
+          queue(5, 'bg'),
+          userNote,
+        ],
+        [],
+        lanes,
+        new Set(),
+      )
+      expect(r.filter((x) => x.kind === 'entry' && x.dot === 'bgcmd')).toHaveLength(2)
+    })
+  })
 })

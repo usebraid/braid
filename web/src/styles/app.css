@@ -1806,7 +1806,14 @@ td.empty {
   stroke-linecap: round;
 }
 .gtag--bg {
-  color: var(--bgcmd);
+  color: var(--text);
+}
+.gtag--badge {
+  font-weight: 500;
+  color: var(--muted);
+  border: 1px dotted var(--faint);
+  border-radius: 6px;
+  padding: 0 5px;
 }
 .g-compact {
   text-align: center;

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import type { AgentItem, SessionDetail } from '../api/types'
 import {
   type AgentNodeData,
+  backgroundIds,
   buildGraph,
   MAX_CHILDREN,
   NODE_HEIGHT,
@@ -129,5 +130,6 @@ describe('withoutBackground', () => {
     expect(out.agents.map((a) => a.agent_id)).toEqual(['main', 'fg'])
     expect(out.failures).toEqual([])
     expect(withoutBackground(detail)).toBe(detail)
+    expect([...backgroundIds(d)].sort()).toEqual(['bg', 'kid'])
   })
 })

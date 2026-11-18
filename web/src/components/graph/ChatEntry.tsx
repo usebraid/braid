@@ -9,7 +9,7 @@ import { color } from './GraphCell'
 import { Markdown } from './Markdown'
 
 // Text only, never markup; same rule as the transcript panel.
-type Props = { e: Entry; tag?: string; lane?: number; quiet?: boolean }
+type Props = { e: Entry; tag?: string; lane?: number; quiet?: boolean; bgCmd?: boolean }
 
 // buildRows makes new Entry objects on every page load; an entry's content never changes, so compare by value and
 // skip re-parsing the markdown of every row already shown.
@@ -19,6 +19,7 @@ export const ChatEntry = memo(ChatEntryView, (a: Props, b: Props) => {
   return (
     a.tag === b.tag &&
     a.quiet === b.quiet &&
+    a.bgCmd === b.bgCmd &&
     a.lane === b.lane &&
     x.lineId === y.lineId &&
     x.kind === y.kind &&
@@ -28,7 +29,7 @@ export const ChatEntry = memo(ChatEntryView, (a: Props, b: Props) => {
   )
 })
 
-function ChatEntryView({ e, tag, lane = 0, quiet }: Props) {
+function ChatEntryView({ e, tag, lane = 0, quiet, bgCmd }: Props) {
   const lead = tag ? quiet ? <span className="sr-only">{tag}: </span> : <span className="gtag">{tag}</span> : null
   const more = e.truncated ? '\n… truncated' : ''
   const text = (
@@ -90,7 +91,10 @@ function ChatEntryView({ e, tag, lane = 0, quiet }: Props) {
       return (
         <div className="g-note">
           {lead}
-          <span className="g-peek">notification</span> {e.text.split('\n')[0]}
+          <span className="g-peek">
+            {bgCmd ? 'Background command finished' : e.from ? 'Subagent reported back' : 'Notification'}
+          </span>
+          {e.text.trim() ? `: ${e.text.trim().split('\n')[0]}` : ''}
         </div>
       )
     default:

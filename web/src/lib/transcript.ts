@@ -40,7 +40,14 @@ function resultText(c: unknown): string {
   return c.map((b) => (isObj(b) && b.type === 'text' ? str(b.text) : '')).join('')
 }
 
-const tagOf = (s: string, tag: string) => new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(s)?.[1] ?? ''
+// Lazy, so a value may hold `<`; the input is capped first so unclosed tags cannot make the scan quadratic.
+const TAG_SCAN = 64 << 10
+const tagOf = (s: string, tag: string) =>
+  new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(s.slice(0, TAG_SCAN))?.[1]?.trim() ?? ''
+// Only a text that is one task-notification element counts; a prompt that merely quotes the tag stays a prompt.
+const NOTIFICATION = /^\s*<task-notification>[\s\S]*<\/task-notification>\s*$/
+// What a notification says, never its tag names.
+const noteText = (s: string) => tagOf(s, 'summary') || tagOf(s, 'status')
 
 function toolText(input: unknown): string {
   if (!isObj(input)) return ''
@@ -75,8 +82,10 @@ export function entriesOf(item: LineItem): Entry[] {
     case 'user': {
       // Claude Code injects task notifications and subagent hand-backs as user-role lines; they are not the user speaking.
       const o = isObj(l.origin) ? l.origin : {}
-      if (typeof content === 'string' && o.kind === 'peer' && o.handback === true) {
-        const body = typeof o.handbackReportText === 'string' ? o.handbackReportText : content
+      const asText =
+        typeof content === 'string' ? content : blocks.map((b) => (b.type === 'text' ? str(b.text) : '')).join('')
+      if ((typeof content === 'string' || blocks.length > 0) && o.kind === 'peer' && o.handback === true) {
+        const body = typeof o.handbackReportText === 'string' ? o.handbackReportText : asText
         add('notification', body, { from: str(o.senderTaskId) })
         break
       }
@@ -84,8 +93,8 @@ export function entriesOf(item: LineItem): Entry[] {
         add('event', 'compact summary') // the summary the harness feeds back after a compaction is not the user speaking
         break
       }
-      if (typeof content === 'string' && (o.kind === 'task-notification' || content.includes('<task-notification>'))) {
-        add('notification', tagOf(content, 'summary') || 'task notification', {
+      if (typeof content === 'string' && (o.kind === 'task-notification' || NOTIFICATION.test(content))) {
+        add('notification', noteText(content), {
           tool: { id: tagOf(content, 'tool-use-id'), name: '' },
         })
         break
@@ -122,8 +131,8 @@ export function entriesOf(item: LineItem): Entry[] {
     case 'queue-operation': {
       // a background agent reports back here; the id ties it to the spawning tool call
       const id = tagOf(str(l.content), 'tool-use-id')
-      if (l.operation === 'enqueue' && id && str(l.content).includes('<task-notification>'))
-        add('notification', tagOf(str(l.content), 'summary') || 'task notification', { tool: { id, name: '' } })
+      if (l.operation === 'enqueue' && id && NOTIFICATION.test(str(l.content)))
+        add('notification', noteText(str(l.content)), { tool: { id, name: '' } })
       else add('event', 'queue-operation')
       break
     }

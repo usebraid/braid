@@ -106,4 +106,45 @@ describe('entriesOf', () => {
     expect(call('Bash', { command: 'ls' })?.background).toBeUndefined()
     expect(call('Read', { run_in_background: true })?.background).toBeUndefined()
   })
+  describe('notification hardening', () => {
+    const user = (content: unknown, extra = {}) =>
+      li(30, { type: 'user', message: { role: 'user', content }, ...extra })
+    const note = (inner: string) => `<task-notification>${inner}</task-notification>`
+    it('keeps a prompt that merely quotes the tag a prompt', () => {
+      expect(entriesOf(user('why does <task-notification> show up?'))[0]).toMatchObject({ kind: 'prompt' })
+      expect(entriesOf(user(`look: ${note('<tool-use-id>t1</tool-use-id>')} and more`))[0]).toMatchObject({
+        kind: 'prompt',
+      })
+      expect(
+        entriesOf(
+          li(31, {
+            type: 'queue-operation',
+            operation: 'enqueue',
+            content: `x ${note('<tool-use-id>t1</tool-use-id>')}`,
+          }),
+        )[0],
+      ).toMatchObject({ kind: 'event' })
+      expect(
+        entriesOf(user(note('<summary>ok</summary>'), { origin: { kind: 'task-notification' } }))[0],
+      ).toMatchObject({ kind: 'notification' })
+    })
+    it('reads a summary that contains < and never shows tag names as text', () => {
+      expect(entriesOf(user(note('<tool-use-id>t</tool-use-id><summary>Fix Array<T> typing</summary>')))[0]?.text).toBe(
+        'Fix Array<T> typing',
+      )
+      expect(entriesOf(user(note('<tool-use-id>t</tool-use-id>')))[0]).toMatchObject({ kind: 'notification', text: '' })
+      expect(entriesOf(user(note('<tool-use-id>t</tool-use-id><status>completed</status>')))[0]?.text).toBe('completed')
+    })
+    it('treats a hand-back with array content as a notification', () => {
+      const e = entriesOf(
+        user([{ type: 'text', text: 'the report' }], { origin: { kind: 'peer', handback: true, senderTaskId: 'a1' } }),
+      )
+      expect(e).toMatchObject([{ kind: 'notification', text: 'the report', from: 'a1' }])
+    })
+    it('scans a huge unclosed tag run in bounded time', () => {
+      const t0 = performance.now()
+      entriesOf(user(note('<summary>'.repeat(400_000))))
+      expect(performance.now() - t0).toBeLessThan(500)
+    })
+  })
 })

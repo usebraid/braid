@@ -6,7 +6,14 @@ import '@xyflow/react/dist/style.css'
 import { useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { SessionDetail } from '../../api/types'
-import { type AgentNodeData, agentTree, buildGraph, skillColor, withoutBackground } from '../../lib/graph'
+import {
+  type AgentNodeData,
+  agentTree,
+  backgroundIds,
+  buildGraph,
+  skillColor,
+  withoutBackground,
+} from '../../lib/graph'
 import { isBackground } from '../../lib/lanes'
 import { canvasLegend } from '../../lib/legend'
 import { useAgentParam } from '../../lib/useAgentParam'
@@ -20,7 +27,9 @@ export function SessionCanvas({ detail: full, liveAgentIds }: { detail: SessionD
   const theme = useTheme()
   // Background agents are many and run one after another, so they stay out unless asked for (`?bg=1`).
   const [sp, setSp] = useSearchParams()
-  const showBg = sp.get('bg') === '1'
+  const [selected] = useAgentParam()
+  // a link to a background agent (or one of its children) shows them, so the selection is never invisible
+  const showBg = sp.get('bg') === '1' || (selected !== null && backgroundIds(full).has(selected))
   const nBg = useMemo(() => full.agents.filter(isBackground).length, [full])
   const detail = useMemo(() => (showBg ? full : withoutBackground(full)), [full, showBg])
   const toggleBg = () =>
@@ -33,7 +42,6 @@ export function SessionCanvas({ detail: full, liveAgentIds }: { detail: SessionD
       },
       { replace: true },
     )
-  const [selected] = useAgentParam()
   const [opened, setOpened] = useState<Set<string>>(() => new Set())
   // a selected agent inside a collapsed group (from a link or the list) opens its ancestors' groups
   const expanded = useMemo(() => {

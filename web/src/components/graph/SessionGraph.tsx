@@ -311,6 +311,7 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
           lane={r.lane}
           tag={r.agentId === 'main' ? undefined : (a?.agent_type ?? r.agentId)}
           quiet={same}
+          bgCmd={r.dot === 'bgcmd'}
         />
       )
     }
@@ -327,8 +328,13 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
           >
             {collapsed.has(r.agentId) ? '▸' : '▾'}
           </button>
-          <span className="gtag">{a?.agent_type ?? r.agentId}</span> {r.label}
-          {r.background ? <span className="g-peek"> background agent</span> : null}
+          <span className="gtag">{a?.agent_type ?? r.agentId}</span>{' '}
+          {r.background ? (
+            <span className="gtag gtag--badge">
+              background<span className="sr-only"> agent</span>
+            </span>
+          ) : null}
+          {r.label}
           {r.open ? <span className="g-peek"> still open</span> : null}
         </div>
       )
@@ -336,7 +342,8 @@ export function SessionGraph(p: { detail: SessionDetail; focusLine?: number }) {
     return (
       <div className="g-merge">
         ↩ <span className="gtag">{a?.agent_type ?? r.agentId}</span> {r.background ? 'reported back' : 'back'}
-        {Number.isFinite(took) && took >= 0 ? ` after ${fmtDuration(took)}` : ''}: {r.summary.split('\n')[0]}
+        {Number.isFinite(took) && took >= 0 ? ` after ${fmtDuration(took)}` : ''}
+        {r.summary.trim() ? `: ${r.summary.split('\n')[0]}` : ''}
       </div>
     )
   }

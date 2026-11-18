@@ -65,6 +65,9 @@ test('canvas hides background agents by default; the toggle and ?bg=1 show them'
   await page.goto(`/sessions/bg1?${RANGE}&view=canvas&bg=1`)
   await expect(page.getByTestId('agent-node-bga')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Background agents (1)' })).toHaveAttribute('aria-pressed', 'true')
+  // a link that selects a hidden background agent shows it
+  await page.goto(`/sessions/bg1?${RANGE}&view=canvas&agent=bga`)
+  await expect(page.getByTestId('agent-node-bga')).toBeVisible()
   // a session without background agents has no toggle
   await page.goto(`/sessions/b1?${RANGE}&view=canvas`)
   await expect(page.getByTestId('agent-node-main')).toBeVisible()

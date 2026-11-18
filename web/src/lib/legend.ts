@@ -5,7 +5,7 @@ import type { SessionDetail } from '../api/types'
 import type { Dot, Row } from './chatRows'
 import { isBackground } from './lanes'
 
-export type Shape = 'dot' | 'ring' | 'square' | 'line' | 'dotted' | 'dashed' | 'box' | 'boxDashed' | 'bar'
+export type Shape = 'dot' | 'ring' | 'square' | 'diamond' | 'line' | 'dotted' | 'dashed' | 'box' | 'boxDashed' | 'bar'
 export type LegendItem = { key: string; label: string; shape: Shape; color: string }
 
 const DOTS: [Dot, LegendItem][] = [
@@ -14,7 +14,7 @@ const DOTS: [Dot, LegendItem][] = [
   ['ring', { key: 'ring', label: 'Tool call, result or thinking', shape: 'ring', color: 'var(--p1)' }],
   ['fail', { key: 'fail', label: 'Failed tool call', shape: 'ring', color: 'var(--bad)' }],
   ['skill', { key: 'skill', label: 'Skill', shape: 'dot', color: 'var(--p7)' }],
-  ['bgcmd', { key: 'bgcmd', label: 'Background command', shape: 'dot', color: 'var(--bgcmd)' }],
+  ['bgcmd', { key: 'bgcmd', label: 'Background command', shape: 'diamond', color: 'var(--bgcmd)' }],
   ['notice', { key: 'notice', label: 'Notification', shape: 'ring', color: 'var(--faint)' }],
   ['interrupt', { key: 'interrupt', label: 'Interrupted by user', shape: 'square', color: 'var(--warn)' }],
   ['compaction', { key: 'compaction', label: 'Compaction', shape: 'dashed', color: 'var(--faint)' }],
