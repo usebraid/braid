@@ -4,7 +4,15 @@
 // web/src/lib/graph.test.ts
 import { describe, expect, it } from 'vitest'
 import type { AgentItem, SessionDetail } from '../api/types'
-import { type AgentNodeData, buildGraph, MAX_CHILDREN, NODE_HEIGHT, NODE_WIDTH, skillColor } from './graph'
+import {
+  type AgentNodeData,
+  buildGraph,
+  MAX_CHILDREN,
+  NODE_HEIGHT,
+  NODE_WIDTH,
+  skillColor,
+  withoutBackground,
+} from './graph'
 
 const usage = { cost_usd: 0, tokens: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, messages: 0 }
 const agent = (id: string, parent: string | null, over: Partial<AgentItem> = {}): AgentItem => ({
@@ -107,5 +115,19 @@ describe('buildGraph', () => {
   it('colours skills stably', () => {
     expect(skillColor('superpowers:brainstorming')).toBe(skillColor('superpowers:brainstorming'))
     expect(skillColor('a')).toMatch(/^#[0-9a-f]{6}$/)
+  })
+})
+
+describe('withoutBackground', () => {
+  it('drops background agents with everything they spawned and leaves the rest', () => {
+    const d = {
+      ...detail,
+      agents: [agent('main', null), agent('fg', 'main'), agent('bg', 'main', { background: true }), agent('kid', 'bg')],
+      failures: [{ ...(detail.failures[0] as object), agent_id: 'kid' }],
+    } as SessionDetail
+    const out = withoutBackground(d)
+    expect(out.agents.map((a) => a.agent_id)).toEqual(['main', 'fg'])
+    expect(out.failures).toEqual([])
+    expect(withoutBackground(detail)).toBe(detail)
   })
 })

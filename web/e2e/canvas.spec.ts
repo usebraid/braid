@@ -6,8 +6,10 @@ import { loginAs, RANGE } from './helpers'
 
 test('canvas shows main and the nested subagents; node click opens the transcript', async ({ page, request }) => {
   await loginAs(page, request, 'alice')
+  // a2 is a background agent (run_in_background): hidden until `bg=1`
   await page.goto(`/sessions/g1?${RANGE}&view=canvas`)
-  for (const id of ['main', 'a1', 'a2', 'a3']) await expect(page.getByTestId(`agent-node-${id}`)).toBeVisible()
+  for (const id of ['main', 'a1', 'a3']) await expect(page.getByTestId(`agent-node-${id}`)).toBeVisible()
+  await expect(page.getByTestId('agent-node-a2')).toHaveCount(0)
   await expect(page.getByTestId('agent-node-main')).toHaveAttribute('title', /brainstorming/)
   await expect(page.locator('.react-flow__minimap')).toBeVisible()
   const x = async (id: string) => (await page.getByTestId(`agent-node-${id}`).boundingBox())?.x ?? Number.NaN
@@ -43,4 +45,28 @@ test('a session with 102 subagents opens readable, groups wide fan-outs and has 
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/agent=b\d{3}/)
   await expect(page.getByRole('complementary', { name: 'Transcript' })).toBeVisible()
+})
+
+test('canvas hides background agents by default; the toggle and ?bg=1 show them', async ({ page, request }) => {
+  await loginAs(page, request, 'alice')
+  await page.goto(`/sessions/bg1?${RANGE}&view=canvas`)
+  await expect(page.getByTestId('agent-node-fga')).toBeVisible()
+  await expect(page.getByTestId('agent-node-bga')).toHaveCount(0)
+  const toggle = page.getByRole('button', { name: 'Background agents (1)' })
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  const legend = page.getByRole('region', { name: 'Legend' })
+  await expect(legend.getByText('Main session')).toBeVisible()
+  await expect(legend.getByText('Background agent')).toHaveCount(0)
+  await toggle.click()
+  await expect(page).toHaveURL(/bg=1/)
+  await expect(page.getByTestId('agent-node-bga')).toBeVisible()
+  await expect(page.getByTestId('agent-node-bga')).toContainText('background')
+  await expect(legend.getByText('Background agent')).toBeVisible()
+  await page.goto(`/sessions/bg1?${RANGE}&view=canvas&bg=1`)
+  await expect(page.getByTestId('agent-node-bga')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Background agents (1)' })).toHaveAttribute('aria-pressed', 'true')
+  // a session without background agents has no toggle
+  await page.goto(`/sessions/b1?${RANGE}&view=canvas`)
+  await expect(page.getByTestId('agent-node-main')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Background agents/ })).toHaveCount(0)
 })

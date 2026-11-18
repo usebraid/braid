@@ -26,3 +26,7 @@ export function assignLanes(agents: LaneAgent[]): Map<string, number> {
   }
   return lanes
 }
+
+// The API's `background` (run_in_background, or an async_launched result) and `merged_at` (the task notification for
+// such an agent) are the whole truth; no guessing from the lines.
+export const isBackground = (a: { background: boolean }) => a.background

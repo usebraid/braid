@@ -4,16 +4,35 @@
 import { Background, Controls, MiniMap, ReactFlow, type ReactFlowInstance } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { SessionDetail } from '../../api/types'
-import { type AgentNodeData, agentTree, buildGraph, skillColor } from '../../lib/graph'
+import { type AgentNodeData, agentTree, buildGraph, skillColor, withoutBackground } from '../../lib/graph'
+import { isBackground } from '../../lib/lanes'
+import { canvasLegend } from '../../lib/legend'
 import { useAgentParam } from '../../lib/useAgentParam'
 import { useTheme } from '../../theme/useTheme'
+import { Legend } from '../Legend'
 import { AgentNode, MoreNode } from './AgentNode'
 
 const nodeTypes = { agent: AgentNode, more: MoreNode }
 
-export function SessionCanvas({ detail, liveAgentIds }: { detail: SessionDetail; liveAgentIds: Set<string> }) {
+export function SessionCanvas({ detail: full, liveAgentIds }: { detail: SessionDetail; liveAgentIds: Set<string> }) {
   const theme = useTheme()
+  // Background agents are many and run one after another, so they stay out unless asked for (`?bg=1`).
+  const [sp, setSp] = useSearchParams()
+  const showBg = sp.get('bg') === '1'
+  const nBg = useMemo(() => full.agents.filter(isBackground).length, [full])
+  const detail = useMemo(() => (showBg ? full : withoutBackground(full)), [full, showBg])
+  const toggleBg = () =>
+    setSp(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        if (showBg) n.delete('bg')
+        else n.set('bg', '1')
+        return n
+      },
+      { replace: true },
+    )
   const [selected] = useAgentParam()
   const [opened, setOpened] = useState<Set<string>>(() => new Set())
   // a selected agent inside a collapsed group (from a link or the list) opens its ancestors' groups
@@ -48,31 +67,41 @@ export function SessionCanvas({ detail, liveAgentIds }: { detail: SessionDetail;
     void rf.setViewport({ x: at(left, right, w), y: at(top, bottom, h), zoom: 1 })
   }
   return (
-    <div className="card canvas" ref={box}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        nodesFocusable={false}
-        elementsSelectable
-        onInit={onInit}
-        minZoom={0.2}
-        colorMode={theme}
-        aria-label="Agent graph"
-      >
-        <Background gap={24} size={1} />
-        <Controls showInteractive={false} />
-        <MiniMap
-          pannable
-          zoomable
-          nodeBorderRadius={4}
-          nodeColor={(n) =>
-            n.type === 'agent' ? skillColor((n.data as AgentNodeData).agent.agent_type) : 'var(--faint)'
-          }
-        />
-      </ReactFlow>
+    <div className="canvas-wrap">
+      <div className="canvas-tools">
+        <Legend items={canvasLegend(full, showBg)} />
+        {nBg > 0 ? (
+          <button type="button" className="chip" aria-pressed={showBg} onClick={toggleBg}>
+            {`Background agents (${nBg})`}
+          </button>
+        ) : null}
+      </div>
+      <div className="card canvas" ref={box}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          nodesFocusable={false}
+          elementsSelectable
+          onInit={onInit}
+          minZoom={0.2}
+          colorMode={theme}
+          aria-label="Agent graph"
+        >
+          <Background gap={24} size={1} />
+          <Controls showInteractive={false} />
+          <MiniMap
+            pannable
+            zoomable
+            nodeBorderRadius={4}
+            nodeColor={(n) =>
+              n.type === 'agent' ? skillColor((n.data as AgentNodeData).agent.agent_type) : 'var(--faint)'
+            }
+          />
+        </ReactFlow>
+      </div>
     </div>
   )
 }

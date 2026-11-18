@@ -123,4 +123,130 @@ describe('buildRows', () => {
       ['system', 'API error: rate_limit'],
     ])
   })
+  describe('background agent whose launch ack is only a tool result and whose hand-back is a user-role line', () => {
+    // regression: the API reports the launch ack as merged_at (background=false); the hand-back is a user-role peer line
+    const at = (id: number, agent: string, line: unknown, ts: string): ChatLine => ({
+      id,
+      agent_id: agent,
+      ts,
+      offset: id,
+      line: L(line),
+    })
+    const handBack = (id: number) =>
+      at(
+        id,
+        'main',
+        {
+          type: 'user',
+          message: { content: 'framed' },
+          origin: { kind: 'peer', senderTaskId: 'a', handback: true, handbackReportText: 'report' },
+        },
+        '2026-11-01T00:00:20Z',
+      )
+    const queued = (id: number) =>
+      at(
+        id,
+        'main',
+        {
+          type: 'queue-operation',
+          operation: 'enqueue',
+          content: '<task-notification><tool-use-id>t1</tool-use-id><summary>done</summary></task-notification>',
+        },
+        '2026-11-01T00:00:21Z',
+      )
+    const agent = { ...sub('2026-11-01T00:00:20Z'), background: true } as AgentItem
+    const ls = [use(1, 'main', 't1'), res(2, 'main', 't1'), say(3, 'a'), say(4, 'a'), handBack(5), queued(6)]
+    it('merges once, at the hand-back, and shows no prompt bubble', () => {
+      const r = buildRows(ls, [agent], lanes, new Set())
+      expect(r.map((x) => x.kind)).toEqual(['branch', 'entry', 'entry', 'entry', 'merge'])
+      expect(r[1]).toMatchObject({ entry: { kind: 'tool_result' } })
+      expect(r[4]).toMatchObject({ lane: 1, into: 0, summary: 'report' })
+      expect(r[0]).toMatchObject({ open: false })
+      expect(r.some((x) => x.kind === 'entry' && x.entry.kind === 'prompt')).toBe(false)
+    })
+    it('puts the merge row after the last row of the agent when its lines are stamped after the hand-back', () => {
+      // regression: those last rows came after the merge, outside the lane line
+      const r = buildRows([...ls.slice(0, 3), handBack(5), say(6, 'a'), say(7, 'a')], [agent], lanes, new Set())
+      expect(r.map((x) => `${x.kind}:${x.lane}`)).toEqual([
+        'branch:1',
+        'entry:0',
+        'entry:1',
+        'entry:1',
+        'entry:1',
+        'merge:1',
+      ])
+    })
+    it('stays open until the hand-back is there', () => {
+      const r = buildRows(ls.slice(0, 4), [{ ...agent, merged_at: null }], lanes, new Set())
+      expect(r.map((x) => x.kind)).toEqual(['branch', 'entry', 'entry', 'entry'])
+      expect(r[0]).toMatchObject({ open: true })
+    })
+  })
+  describe('dot types', () => {
+    const one = (id: number, line: unknown): ChatLine => ({ id, agent_id: 'main', ts: null, offset: id, line: L(line) })
+    const asst = (id: number, name: string, input: unknown, tid = `x${id}`) =>
+      one(id, { type: 'assistant', message: { content: [{ type: 'tool_use', id: tid, name, input }] } })
+    const dots = (ls: ChatLine[]) =>
+      buildRows(ls, [], lanes, new Set()).map((r) => (r.kind === 'entry' ? r.dot : r.kind))
+    it('tells failed calls, skills, background commands and their notification, compaction and interrupts apart', () => {
+      const note =
+        '<task-notification><tool-use-id>bg1</tool-use-id><summary>build finished</summary></task-notification>'
+      const r = buildRows(
+        [
+          asst(1, 'Bash', { command: 'go test' }),
+          one(2, {
+            type: 'user',
+            message: { content: [{ type: 'tool_result', tool_use_id: 'x1', content: 'no', is_error: true }] },
+          }),
+          asst(3, 'Skill', { skill: 'superpowers:brainstorming' }),
+          asst(4, 'Bash', { command: 'sleep 9', run_in_background: true }, 'bg1'),
+          one(5, { type: 'system', subtype: 'compact_boundary' }),
+          one(6, { type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user]' }] } }),
+          one(7, { type: 'queue-operation', operation: 'enqueue', content: note }),
+          one(8, { type: 'queue-operation', operation: 'enqueue', content: note.replace('bg1', 'other') }),
+          say(9, 'main'),
+        ],
+        [],
+        lanes,
+        new Set(),
+      )
+      expect(r.map((x) => (x.kind === 'entry' ? x.dot : x.kind))).toEqual([
+        'ring',
+        'fail',
+        'skill',
+        'bgcmd',
+        'compaction',
+        'interrupt',
+        'bgcmd', // the notification of the background command shares its dot
+        'notice',
+        'reply',
+      ])
+      expect(r[2]).toMatchObject({ skill: 'superpowers:brainstorming' })
+      expect(dots([asst(1, 'Bash', { command: 'x', run_in_background: false })])).toEqual(['ring'])
+    })
+    it('marks the rows of a background agent so the graph draws its lane dotted', () => {
+      const bg = { ...sub('x'), background: true } as AgentItem
+      const r = buildRows(
+        [
+          ...lines.slice(0, 3),
+          res(4, 'main', 't1'),
+          one(5, {
+            type: 'queue-operation',
+            operation: 'enqueue',
+            content: '<task-notification><tool-use-id>t1</tool-use-id><summary>s</summary></task-notification>',
+          }),
+        ],
+        [bg],
+        lanes,
+        new Set(),
+      )
+      expect(r.filter((x) => x.kind === 'branch' || x.kind === 'merge')).toMatchObject([
+        { kind: 'branch', background: true },
+        { kind: 'merge', background: true, summary: 's' },
+      ])
+      expect(buildRows(lines, [{ ...sub('x'), background: false } as AgentItem], lanes, new Set())[0]).toMatchObject({
+        background: false,
+      })
+    })
+  })
 })
