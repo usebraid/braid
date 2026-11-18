@@ -4,7 +4,7 @@
 import type { SessionDetail } from '../api/types'
 import type { Dot, Row } from './chatRows'
 
-export type Shape = 'dot' | 'ring' | 'square' | 'diamond' | 'line' | 'dashed' | 'box' | 'bar'
+export type Shape = 'dot' | 'ring' | 'square' | 'diamond' | 'line' | 'arrow' | 'dashed' | 'box' | 'bar'
 export type LegendItem = { key: string; label: string; shape: Shape; color: string }
 
 const DOTS: [Dot, LegendItem][] = [
@@ -26,6 +26,9 @@ export function graphLegend(rows: Row[]): LegendItem[] {
   return [
     ...DOTS.filter(([d]) => dots.has(d)).map(([, i]) => i),
     ...(sub ? [{ key: 'sub', label: 'Subagent', shape: 'line' as const, color: 'var(--p4)' }] : []),
+    ...(rows.some((r) => r.kind === 'entry' && r.arrow)
+      ? [{ key: 'msg', label: 'Message to or from a running agent', shape: 'arrow' as const, color: 'var(--p4)' }]
+      : []),
   ]
 }
 

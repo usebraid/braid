@@ -58,6 +58,9 @@ test.describe('graph views as alice', () => {
     await expect(chat.locator('.g-branch .gtag--badge')).toHaveCount(0)
     await expect(chat.locator('svg.gcell .gdotted')).toHaveCount(0)
     await expect(chat.locator('.g-merge', { hasText: 'reported back after' })).toHaveCount(1)
+    // the first hand-back and the follow-up SendMessage are arrows; the lane ends at the last hand-back
+    await expect(chat.locator('svg.gcell .garrow')).toHaveCount(2)
+    await expect(chat.getByText('Subagent reported back')).toHaveCount(1)
     await expect(chat.locator('.g-merge', { hasText: 'back after' })).toHaveCount(2)
     // the hand-back or notification is never a user prompt
     await expect(chat.locator('.g-prompt')).toHaveCount(1)
@@ -79,6 +82,7 @@ test.describe('graph views as alice', () => {
       'Interrupted by user',
       'Compaction',
       'Subagent',
+      'Message to or from a running agent',
     ])
       await expect(legend.getByText(name, { exact: true })).toBeVisible()
     await legend.getByRole('button', { name: /Legend/ }).click()

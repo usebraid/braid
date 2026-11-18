@@ -176,6 +176,115 @@ describe('buildRows', () => {
         'merge:1',
       ])
     })
+    it('runs a resumed agent to its last hand-back, with arrows for the exchange in between', () => {
+      // regression: an agent continued by SendMessage merged at its first hand-back; its later rows had no lane
+      const msg = (id: number, to: string) =>
+        at(
+          id,
+          'main',
+          {
+            type: 'assistant',
+            message: { content: [{ type: 'tool_use', id: `m${id}`, name: 'SendMessage', input: { to } }] },
+          },
+          '2026-11-01T00:00:30Z',
+        )
+      const r = buildRows([...ls, msg(7, 'a'), say(8, 'a'), handBack(9), queued(10)], [agent], lanes, new Set())
+      expect(
+        r.map((x) => `${x.kind}:${x.lane}${x.kind === 'entry' && x.arrow ? `:${x.arrow.dir}${x.arrow.lane}` : ''}`),
+      ).toEqual([
+        'branch:1',
+        'entry:0', // launch ack
+        'entry:1',
+        'entry:1',
+        'entry:0:in1', // first hand-back (its queue line is a repeat): an arrow back, the lane runs on
+        'entry:0:out1', // SendMessage to the agent
+        'entry:1',
+        'merge:1', // the last hand-back ends the lane
+      ])
+    })
+    it('counts a queue line stamped before the last lines of the agent as the same hand-back', () => {
+      // regression (review): any agent line after a hand-back counted as a resume, so the queue line became a false arrow
+      const r = buildRows([...ls.slice(0, 3), queued(6), say(7, 'a'), handBack(8)], [agent], lanes, new Set())
+      expect(r.some((x) => x.kind === 'entry' && x.arrow)).toBe(false)
+      expect(r.filter((x) => x.kind === 'merge')).toHaveLength(1)
+    })
+    it('counts a second hand-back after a SendMessage even when the agent wrote nothing in between', () => {
+      const msg = at(
+        7,
+        'main',
+        {
+          type: 'assistant',
+          message: { content: [{ type: 'tool_use', id: 'm', name: 'SendMessage', input: { to: 'a' } }] },
+        },
+        '2026-11-01T00:00:30Z',
+      )
+      const r = buildRows([...ls.slice(0, 3), handBack(5), msg, handBack(9)], [agent], lanes, new Set())
+      expect(r.map((x) => (x.kind === 'entry' && x.arrow ? x.arrow.dir : x.kind)).slice(-3)).toEqual([
+        'in',
+        'out',
+        'merge',
+      ])
+    })
+    it('draws no arrows into a collapsed agent and no hand-back rows inside a collapsed parent', () => {
+      const msg = at(
+        7,
+        'main',
+        {
+          type: 'assistant',
+          message: { content: [{ type: 'tool_use', id: 'm', name: 'SendMessage', input: { to: 'a' } }] },
+        },
+        '2026-11-01T00:00:30Z',
+      )
+      const r = buildRows([...ls, msg, handBack(9)], [agent], lanes, new Set(['a']))
+      expect(r.some((x) => x.kind === 'entry' && x.arrow)).toBe(false)
+      const nested = { ...agent, agent_id: 'b', parent_agent_id: 'p', spawn_tool_use_id: 'tb' } as AgentItem
+      const parent = { ...sub('x'), agent_id: 'p', spawn_tool_use_id: 'tp' } as AgentItem
+      const peer = (id: number) =>
+        at(
+          id,
+          'main',
+          {
+            type: 'user',
+            message: { content: 'framed' },
+            origin: { kind: 'peer', senderTaskId: 'b', handback: true, handbackReportText: 'r' },
+          },
+          '2026-11-01T00:00:40Z',
+        )
+      const bmsg = at(
+        11,
+        'main',
+        {
+          type: 'assistant',
+          message: { content: [{ type: 'tool_use', id: 'm2', name: 'SendMessage', input: { to: 'b' } }] },
+        },
+        '2026-11-01T00:00:41Z',
+      )
+      const rr = buildRows(
+        [peer(10), bmsg, peer(12)],
+        [parent, nested],
+        new Map([
+          ['main', 0],
+          ['p', 1],
+          ['b', 2],
+        ]),
+        new Set(['p']),
+      )
+      expect(rr.some((x) => x.kind === 'entry' && x.agentId === 'p')).toBe(false)
+    })
+    it('draws no arrow for a SendMessage to an unknown or ambiguous agent', () => {
+      const msg = (to: string) =>
+        at(
+          7,
+          'main',
+          {
+            type: 'assistant',
+            message: { content: [{ type: 'tool_use', id: 'm', name: 'SendMessage', input: { to } }] },
+          },
+          '2026-11-01T00:00:30Z',
+        )
+      for (const to of ['zzzzzzzz', 'b', ''])
+        expect(buildRows([msg(to)], [agent], lanes, new Set())[0]).not.toHaveProperty('arrow')
+    })
     it('stays open until the hand-back is there', () => {
       const r = buildRows(ls.slice(0, 4), [{ ...agent, merged_at: null }], lanes, new Set())
       expect(r.map((x) => x.kind)).toEqual(['branch', 'entry', 'entry', 'entry'])

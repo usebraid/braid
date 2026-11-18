@@ -393,3 +393,27 @@ it('words a background command notification readably, with no raw tag names', as
   expect(screen.getByText('Background command finished')).toBeInTheDocument()
   expect(document.body.textContent).not.toMatch(/task notification|notification notification/)
 })
+
+it('draws the lane of an agent from above that was resumed after it reported back', async () => {
+  // regression: merged_at is the first hand-back; a SendMessage resume works on, so its rows had dots but no lane
+  const d = detail(true)
+  d.agents = [
+    ag('main'),
+    ag('a1', {
+      spawn_tool_use_id: 't1',
+      spawned_at: '2026-11-01T10:02:00Z',
+      merged_at: '2026-11-01T10:03:00Z',
+      ended_at: '2026-11-01T10:06:00Z',
+    }),
+  ]
+  renderLive(d, () => ({
+    lines: [L(6, 'main', 5, asst('resume it')), L(7, 'a1', 6, asst('resumed work')), L(8, 'main', 7, asst('after'))],
+    next: null,
+    prev: 'p1',
+  }))
+  const row = (t: string) => (screen.getByText(t).closest('li') as HTMLElement).querySelectorAll('svg.gcell line')
+  await screen.findByText('resumed work')
+  expect(row('resume it').length).toBe(2) // main and the resumed agent's lane
+  expect(row('resumed work').length).toBeGreaterThanOrEqual(2)
+  expect(row('after').length).toBe(1) // ends at its last row, never a lane to the bottom
+})

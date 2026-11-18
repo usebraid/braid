@@ -32,6 +32,10 @@ func bgSession() []dt.File {
 			delta(dt.Result(at(52), "tfail", true, nil)),
 			delta(dt.Reply(at(60), "bg-m3", opus, u, dt.Tool("tskill", "Skill", map[string]any{"skill": "superpowers:brainstorming"}))),
 			delta(dt.Result(at(61), "tskill", false, nil)),
+			// bga reports back, gets a follow-up by SendMessage and reports back again at 240: one lane, two arrows
+			delta(dt.Notify(at(90), "bgA", 82000)),
+			delta(dt.Reply(at(95), "bg-m5", opus, u, dt.Tool("msgA", "SendMessage", map[string]any{"to": "bga", "message": "one more check"}))),
+			delta(dt.Result(at(96), "msgA", false, map[string]any{"success": true})),
 			delta(dt.Line("system", at(100), "subtype", "compact_boundary")),
 			delta(dt.Line("user", at(120), "message", map[string]any{"role": "user",
 				"content": []any{map[string]any{"type": "text", "text": "[Request interrupted by user]"}}})),
