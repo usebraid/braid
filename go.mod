@@ -10,7 +10,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/gofrs/flock v0.13.2
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/oauth2 v0.38.0
 	modernc.org/sqlite v1.62.0
