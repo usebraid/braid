@@ -19,7 +19,7 @@
     "marked": "18.2.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.7",
+    "@biomejs/biome": "2.6.9",
     "knip": "6.45.1"
   }
 }
