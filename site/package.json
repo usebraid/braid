@@ -16,7 +16,7 @@
     "check": "npm run lint && npm run knip && npm run build && npm run linkcheck && npm test"
   },
   "dependencies": {
-    "marked": "18.2.0"
+    "marked": "18.3.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.7",
